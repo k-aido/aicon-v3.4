@@ -1,0 +1,73 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Connection line animations */
+@keyframes flow {
+  0% {
+    stroke-dashoffset: 8;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.connection-line {
+  stroke-dasharray: 5 3;
+  animation: flow 0.5s linear infinite;
+}
+
+.connection-dot {
+  animation: pulse 2s ease-in-out infinite;
+}
+
+/* Show delete button on connection hover */
+.connection-group:hover .delete-button {
+  opacity: 1;
+}
+
+/* Global cursor styles for dragging */
+body.dragging {
+  cursor: grabbing !important;
+}
+
+body.dragging * {
+  cursor: grabbing !important;
+}
+
+/* Resize handle styles */
+.resize-handle {
+  pointer-events: auto !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  touch-action: none !important;
+  z-index: 9999 !important;
+}
+
+/* Remove focus outlines from toolbar and sidebar buttons */
+[data-toolbar] button:focus,
+[data-sidebar] button:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Ensure no blue outline appears on any toolbar/sidebar interactive elements */
+[data-toolbar] *:focus,
+[data-sidebar] *:focus {
+  outline: none !important;
+}
+
+/* Also ensure content element buttons don't show focus outlines */
+[data-no-drag] button:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}

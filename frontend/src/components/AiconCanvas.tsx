@@ -1,0 +1,178 @@
+import React, { useState, useEffect } from 'react';
+import { Canvas } from './Canvas/Canvas';
+import { CanvasNavigation } from './Canvas/CanvasNavigation';
+import { CanvasSidebar } from './Canvas/CanvasSidebar';
+import { AnalysisPanel } from './Canvas/AnalysisPanel';
+import { useCanvasStore } from '@/store/canvasStore';
+import { CanvasElement, Connection } from '@/types';
+import { ContentElement } from '@/types';
+
+const AiconCanvasApp = () => {
+  const [selectedElement, setSelectedElement] = useState<CanvasElement | null>(null);
+  const [connecting, setConnecting] = useState<number | null>(null);
+  const [analysisPanel, setAnalysisPanel] = useState<{ isOpen: boolean; content: ContentElement | null }>({
+    isOpen: false,
+    content: null
+  });
+  const { elements, connections, addElement, updateElement, deleteElement, addConnection, deleteConnection } = useCanvasStore();
+
+  // Auto-analyze content when added to canvas
+  useEffect(() => {
+    elements.forEach(element => {
+      if (element.type === 'content' && !(element as any).metadata?.isAnalyzed && !(element as any).metadata?.isAnalyzing) {
+        // Mark as analyzing
+        updateElement(element.id, {
+          metadata: { ...(element as any).metadata, isAnalyzing: true }
+        });
+
+        // Simulate analysis after a delay
+        setTimeout(() => {
+          // Randomly fail 20% of analyses for testing error states
+          const shouldFail = Math.random() < 0.2;
+          
+          if (shouldFail) {
+            // Simulate analysis failure
+            updateElement(element.id, {
+              metadata: { 
+                ...(element as any).metadata, 
+                isAnalyzing: false, 
+                isAnalyzed: false,
+                analysisError: 'Failed to analyze content. Network error or content unavailable.'
+              }
+            });
+          } else {
+            // Successful analysis
+            const mockAnalysis = {
+              id: `analysis-${Date.now()}`,
+              contentId: element.id.toString(),
+              summary: `This ${(element as any).platform || 'content'} piece provides valuable insights with strong engagement potential and clear messaging.`,
+              keyPoints: [
+                'Compelling hook that captures attention immediately',
+                'Well-structured content with clear value proposition',
+                'Strong call-to-action encouraging engagement',
+                'Optimized for target audience engagement'
+              ],
+              sentiment: 'positive' as const,
+              topics: [
+                { name: (element as any).platform || 'Content', confidence: 0.95 },
+                { name: 'Engagement', confidence: 0.8 },
+                { name: 'Marketing', confidence: 0.7 }
+              ],
+              entities: [],
+              language: 'en',
+              complexity: 'moderate' as const,
+              analyzedAt: new Date()
+            };
+
+            updateElement(element.id, {
+              analysis: mockAnalysis,
+              metadata: { 
+                ...(element as any).metadata, 
+                isAnalyzing: false, 
+                isAnalyzed: true,
+                analysisError: undefined // Clear any previous error
+              }
+            });
+          }
+        }, 2000 + Math.random() * 3000); // Random delay between 2-5 seconds
+      }
+    });
+  }, [elements, updateElement]);
+
+  // Convert store elements format to match Canvas component expectations
+  const canvasElements = elements.map(el => ({
+    ...el,
+    conversations: el.type === 'chat' ? (el as any).conversations || [] : undefined,
+    messages: el.type === 'chat' ? (el as any).messages || [] : undefined
+  }));
+
+  const handleSetElements = (newElements: CanvasElement[] | ((prev: CanvasElement[]) => CanvasElement[])) => {
+    if (typeof newElements === 'function') {
+      // Handle functional updates
+      const currentElements = elements;
+      const updated = newElements(currentElements);
+      // Clear and re-add all elements
+      updated.forEach((el, index) => {
+        if (index < elements.length) {
+          updateElement(el.id, el);
+        } else {
+          addElement(el);
+        }
+      });
+      // Remove extra elements if needed
+      if (elements.length > updated.length) {
+        for (let i = updated.length; i < elements.length; i++) {
+          deleteElement(elements[i].id);
+        }
+      }
+    } else {
+      // Handle direct array updates
+      newElements.forEach((el, index) => {
+        if (index < elements.length) {
+          updateElement(el.id, el);
+        } else {
+          addElement(el);
+        }
+      });
+      // Remove extra elements if needed
+      if (elements.length > newElements.length) {
+        for (let i = newElements.length; i < elements.length; i++) {
+          deleteElement(elements[i].id);
+        }
+      }
+    }
+  };
+
+  const handleSetConnections = (newConnections: Connection[] | ((prev: Connection[]) => Connection[])) => {
+    if (typeof newConnections === 'function') {
+      const currentConnections = connections;
+      const updated = newConnections(currentConnections);
+      // Clear and re-add all connections
+      connections.forEach(conn => deleteConnection(conn.id));
+      updated.forEach(conn => addConnection(conn));
+    } else {
+      // Clear and re-add all connections
+      connections.forEach(conn => deleteConnection(conn.id));
+      newConnections.forEach(conn => addConnection(conn));
+    }
+  };
+
+  const handleOpenAnalysisPanel = (content: ContentElement) => {
+    setAnalysisPanel({ isOpen: true, content });
+  };
+
+  const handleCloseAnalysisPanel = () => {
+    setAnalysisPanel({ isOpen: false, content: null });
+  };
+
+  return (
+    <div className="h-screen flex flex-col bg-gray-50">
+      <CanvasNavigation />
+      
+      <div className="flex-1 flex relative" style={{ marginTop: '64px' }}>
+        <CanvasSidebar />
+        
+        <Canvas
+          elements={canvasElements}
+          setElements={handleSetElements}
+          selectedElement={selectedElement}
+          setSelectedElement={setSelectedElement}
+          connections={connections}
+          setConnections={handleSetConnections}
+          connecting={connecting}
+          setConnecting={setConnecting}
+          onOpenAnalysisPanel={handleOpenAnalysisPanel}
+        />
+      </div>
+
+      {/* Analysis Panel */}
+      <AnalysisPanel
+        isOpen={analysisPanel.isOpen}
+        content={analysisPanel.content}
+        onClose={handleCloseAnalysisPanel}
+      />
+    </div>
+  );
+};
+
+export default AiconCanvasApp;

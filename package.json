@@ -1,0 +1,18 @@
+{
+  "name": "aicon-v3.4",
+  "version": "1.0.0",
+  "description": "AI-powered content creation platform with working canvas",
+  "private": true,
+  "scripts": {
+    "dev": "cd frontend && npm run dev",
+    "build": "cd frontend && npm run build",
+    "start": "cd frontend && npm run start",
+    "setup": "bash scripts/setup.sh",
+    "test": "cd frontend && npm run test"
+  },
+  "keywords": ["ai", "content", "canvas", "next.js"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/aicon-v3.4.git"
+  }
+}

@@ -1,61 +1,18 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState } from 'react';
-import { createClient } from '@supabase/supabase-js';
 import { User, Session } from '@supabase/supabase-js';
 import { useRouter } from 'next/navigation';
+import { createBrowserClient } from '../../../lib/supabase/client';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  {
-    auth: {
-      storage: {
-        getItem: (key: string) => {
-          if (typeof window !== 'undefined') {
-            return window.localStorage.getItem(key);
-          }
-          return null;
-        },
-        setItem: (key: string, value: string) => {
-          if (typeof window !== 'undefined') {
-            window.localStorage.setItem(key, value);
-            // Also set as HTTP cookie for server-side access
-            document.cookie = `${key}=${value}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
-          }
-        },
-        removeItem: (key: string) => {
-          if (typeof window !== 'undefined') {
-            window.localStorage.removeItem(key);
-            // Remove HTTP cookie
-            document.cookie = `${key}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
-          }
-        },
-      },
-    },
-  }
-);
+const supabase = createBrowserClient();
 
-interface SocialHandles {
-  instagram?: string;
-  facebook?: string;
-  tiktok?: string;
-  twitter?: string;
-  youtube?: string;
-  linkedin?: string;
-}
-
-interface ProfileData {
-  firstName: string;
-  lastName: string;
-  socialHandles: SocialHandles;
-}
 
 interface AuthContextType {
   user: User | null;
   session: Session | null;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signUp: (email: string, password: string, profileData?: ProfileData) => Promise<{ error: Error | null }>;
+  signUp: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   loading: boolean;
 }
@@ -99,47 +56,81 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(data.session);
       setUser(data.user);
       
-      // Force a full page navigation instead of client-side routing
+      // Check if user profile is complete before redirecting
+      try {
+        const { data: profile } = await supabase
+          .from('user_profiles')
+          .select('first_name, last_name, social_media_handles')
+          .eq('user_id', data.user.id)
+          .single();
+        
+        // Check if profile is incomplete
+        const hasName = profile?.first_name && profile?.last_name;
+        const hasSocialMedia = profile?.social_media_handles && 
+          Object.values(profile.social_media_handles).some(handle => handle && handle.trim() !== '');
+        
+        if (!hasName || !hasSocialMedia) {
+          console.log('Profile incomplete, redirecting to onboarding');
+          window.location.href = '/onboarding';
+          return { error };
+        }
+      } catch (profileError) {
+        console.log('Error checking profile, redirecting to onboarding:', profileError);
+        window.location.href = '/onboarding';
+        return { error };
+      }
+      
+      // Profile is complete, redirect to canvas
       window.location.href = '/canvas';
     }
     
     return { error };
   };
 
-  const signUp = async (email: string, password: string, profileData?: ProfileData) => {
+  const signUp = async (email: string, password: string) => {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
     });
     
     if (!error && data.user) {
+      // DEV ONLY: Auto-confirm email for localhost development
+      if (process.env.NODE_ENV === 'development' && window.location.hostname === 'localhost') {
+        console.warn('DEV ONLY: Auto-confirming email for localhost development');
+        try {
+          // Call our API route to confirm the email server-side
+          await fetch('/api/dev/confirm-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: data.user.id })
+          });
+          
+          // Force refresh the session after email confirmation
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          const { data: refreshedSession } = await supabase.auth.getSession();
+          if (refreshedSession.session) {
+            setSession(refreshedSession.session);
+            setUser(refreshedSession.session.user);
+          }
+        } catch (confirmError) {
+          console.error('Dev email confirmation failed:', confirmError);
+        }
+      }
+      
       // Update auth state immediately
       setSession(data.session);
       setUser(data.user);
       
-      if (profileData) {
-        // Wait a moment for the trigger to create the profile
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        // Update the user profile with additional data
-        const { error: profileError } = await supabase
-          .from('user_profiles')
-          .update({
-            first_name: profileData.firstName,
-            last_name: profileData.lastName,
-            social_media_handles: profileData.socialHandles,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('user_id', data.user.id);
-
-        if (profileError) {
-          console.error('Error updating profile:', profileError);
-          // Don't return this as an error since the user was created successfully
-        }
+      // Force set cookies manually for middleware access
+      if (data.session?.access_token) {
+        const cookieName = `sb-${process.env.NEXT_PUBLIC_SUPABASE_URL?.split('//')[1]?.split('.')[0]}-auth-token`;
+        const cookieValue = JSON.stringify(data.session);
+        document.cookie = `${cookieName}=${cookieValue}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
+        console.log('Manually set auth cookie:', cookieName);
       }
       
-      // Force a full page navigation instead of client-side routing
-      window.location.href = '/canvas';
+      // Redirect new signups to onboarding to complete their profile
+      window.location.href = '/onboarding';
     }
     
     return { error };

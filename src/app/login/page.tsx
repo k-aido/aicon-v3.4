@@ -4,22 +4,11 @@ import { useState } from 'react';
 import { useAuth } from '@/components/providers/auth-provider';
 import { Loader2 } from 'lucide-react';
 
-interface SocialHandles {
-  instagram?: string;
-  facebook?: string;
-  tiktok?: string;
-  twitter?: string;
-  youtube?: string;
-  linkedin?: string;
-}
 
 export default function LoginPage() {
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [socialHandles, setSocialHandles] = useState<SocialHandles>({});
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   
@@ -32,12 +21,7 @@ export default function LoginPage() {
 
     try {
       if (isSignUp) {
-        // Pass additional data for signup
-        const { error } = await signUp(email, password, {
-          firstName,
-          lastName,
-          socialHandles
-        });
+        const { error } = await signUp(email, password);
         if (error) {
           setError(error.message);
         }
@@ -54,12 +38,6 @@ export default function LoginPage() {
     }
   };
 
-  const handleSocialChange = (platform: keyof SocialHandles, value: string) => {
-    setSocialHandles(prev => ({
-      ...prev,
-      [platform]: value
-    }));
-  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
@@ -84,45 +62,7 @@ export default function LoginPage() {
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="space-y-4">
-            {/* Basic Information */}
             <div className="space-y-4">
-              {isSignUp && (
-                <>
-                  <div>
-                    <label htmlFor="first-name" className="block text-sm font-medium text-gray-700">
-                      First name
-                    </label>
-                    <input
-                      id="first-name"
-                      name="firstName"
-                      type="text"
-                      autoComplete="given-name"
-                      required
-                      value={firstName}
-                      onChange={(e) => setFirstName(e.target.value)}
-                      className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                      placeholder="First name"
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="last-name" className="block text-sm font-medium text-gray-700">
-                      Last name
-                    </label>
-                    <input
-                      id="last-name"
-                      name="lastName"
-                      type="text"
-                      autoComplete="family-name"
-                      required
-                      value={lastName}
-                      onChange={(e) => setLastName(e.target.value)}
-                      className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                      placeholder="Last name"
-                    />
-                  </div>
-                </>
-              )}
-              
               <div>
                 <label htmlFor="email-address" className="block text-sm font-medium text-gray-700">
                   Email address
@@ -156,107 +96,6 @@ export default function LoginPage() {
                   placeholder="Password"
                 />
               </div>
-
-              {isSignUp && (
-                <>
-                  {/* Social Media Handles */}
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-medium text-gray-700">Social Media Handles (optional)</h3>
-                    
-                    <div className="grid grid-cols-1 gap-3">
-                      <div>
-                        <label htmlFor="instagram" className="block text-sm text-gray-600">
-                          Instagram
-                        </label>
-                        <input
-                          id="instagram"
-                          name="instagram"
-                          type="text"
-                          value={socialHandles.instagram || ''}
-                          onChange={(e) => handleSocialChange('instagram', e.target.value)}
-                          className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                          placeholder="@username"
-                        />
-                      </div>
-
-                      <div>
-                        <label htmlFor="tiktok" className="block text-sm text-gray-600">
-                          TikTok
-                        </label>
-                        <input
-                          id="tiktok"
-                          name="tiktok"
-                          type="text"
-                          value={socialHandles.tiktok || ''}
-                          onChange={(e) => handleSocialChange('tiktok', e.target.value)}
-                          className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                          placeholder="@username"
-                        />
-                      </div>
-
-                      <div>
-                        <label htmlFor="youtube" className="block text-sm text-gray-600">
-                          YouTube
-                        </label>
-                        <input
-                          id="youtube"
-                          name="youtube"
-                          type="text"
-                          value={socialHandles.youtube || ''}
-                          onChange={(e) => handleSocialChange('youtube', e.target.value)}
-                          className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                          placeholder="@channelname"
-                        />
-                      </div>
-
-                      <div>
-                        <label htmlFor="twitter" className="block text-sm text-gray-600">
-                          X (Twitter)
-                        </label>
-                        <input
-                          id="twitter"
-                          name="twitter"
-                          type="text"
-                          value={socialHandles.twitter || ''}
-                          onChange={(e) => handleSocialChange('twitter', e.target.value)}
-                          className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                          placeholder="@username"
-                        />
-                      </div>
-
-                      <div>
-                        <label htmlFor="facebook" className="block text-sm text-gray-600">
-                          Facebook
-                        </label>
-                        <input
-                          id="facebook"
-                          name="facebook"
-                          type="text"
-                          value={socialHandles.facebook || ''}
-                          onChange={(e) => handleSocialChange('facebook', e.target.value)}
-                          className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                          placeholder="facebook.com/username"
-                        />
-                      </div>
-
-                      <div>
-                        <label htmlFor="linkedin" className="block text-sm text-gray-600">
-                          LinkedIn
-                        </label>
-                        <input
-                          id="linkedin"
-                          name="linkedin"
-                          type="text"
-                          value={socialHandles.linkedin || ''}
-                          onChange={(e) => handleSocialChange('linkedin', e.target.value)}
-                          className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                          placeholder="linkedin.com/in/username"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </>
-              )}
             </div>
           </div>
 

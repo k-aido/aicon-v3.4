@@ -59,13 +59,31 @@ export async function middleware(request: NextRequest) {
   
   console.log('Session check:', { path: request.nextUrl.pathname, hasSession: !!session, userId: session?.user?.id })
   
+  // DEV ONLY: Bypass auth checks for localhost development
+  const isDev = process.env.NODE_ENV === 'development';
+  const isLocalhost = request.nextUrl.hostname === 'localhost';
+  
+  if (isDev && isLocalhost) {
+    console.log('DEV MODE: Bypassing auth checks for localhost');
+  } else {
+    // Protected routes (only in production or non-localhost)
+    if (request.nextUrl.pathname.startsWith('/canvas')) {
+      if (!session) {
+        console.log('No session for /canvas, redirecting to login')
+        return NextResponse.redirect(new URL('/login', request.url))
+      }
+    }
 
-  // Protected routes
-  if (request.nextUrl.pathname.startsWith('/canvas')) {
-    if (!session) {
-      return NextResponse.redirect(new URL('/login', request.url))
+    // Settings page needs authentication
+    if (request.nextUrl.pathname.startsWith('/settings')) {
+      if (!session) {
+        console.log('No session for /settings, redirecting to login')
+        return NextResponse.redirect(new URL('/login', request.url))
+      }
     }
   }
+
+  // Note: /onboarding is intentionally NOT protected to allow new users to complete profile
 
   // Redirect logged-in users away from login
   if (request.nextUrl.pathname === '/login' && session) {

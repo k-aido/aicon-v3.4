@@ -4,15 +4,37 @@
   "description": "AI-powered content creation platform with working canvas",
   "private": true,
   "scripts": {
-    "dev": "cd frontend && npm run dev",
-    "build": "cd frontend && npm run build",
-    "start": "cd frontend && npm run start",
-    "setup": "bash scripts/setup.sh",
-    "test": "cd frontend && npm run test"
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "setup": "bash scripts/setup.sh"
   },
   "keywords": ["ai", "content", "canvas", "next.js"],
   "repository": {
     "type": "git",
     "url": "https://github.com/yourusername/aicon-v3.4.git"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.57.0",
+    "@supabase/supabase-js": "^2.52.1",
+    "@tailwindcss/postcss": "^4.1.11",
+    "lucide-react": "^0.525.0",
+    "next": "^15.4.3",
+    "openai": "^5.10.2",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "zustand": "^5.0.6"
+  },
+  "devDependencies": {
+    "@types/node": "^24.1.0",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "autoprefixer": "^10.4.21",
+    "eslint": "^9.31.0",
+    "eslint-config-next": "^15.4.3",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.8.3"
   }
 }

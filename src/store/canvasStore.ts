@@ -13,6 +13,8 @@ interface Element {
   thumbnail?: string;
   messages?: any[];
   conversations?: any[];
+  metadata?: Record<string, any>;
+  analysis?: any;
 }
 
 interface Connection {

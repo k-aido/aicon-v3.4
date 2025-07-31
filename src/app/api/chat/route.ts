@@ -1,14 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
+import { serverConfig, validateServerConfig } from '@/lib/config';
 
-// Initialize AI clients
+// Validate environment variables on startup
+validateServerConfig();
+
+// Initialize AI clients with server config
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: serverConfig.openai.apiKey,
 });
 
 const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
+  apiKey: serverConfig.anthropic.apiKey,
 });
 
 export async function POST(request: NextRequest) {

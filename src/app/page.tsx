@@ -1,12 +1,14 @@
-'use client';
-
-import dynamic from 'next/dynamic';
-
-const AiconCanvasApp = dynamic(() => import('@/components/AiconCanvas'), {
-  ssr: false,
-  loading: () => <div className="h-screen flex items-center justify-center">Loading canvas...</div>
-});
-
-export default function Home() {
-  return <AiconCanvasApp />;
+export default function HomePage() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="text-center">
+        <h1 className="text-4xl font-bold text-gray-900 mb-4">
+          Welcome to Aicon
+        </h1>
+        <p className="text-xl text-gray-600">
+          AI-powered content analysis platform
+        </p>
+      </div>
+    </div>
+  );
 }

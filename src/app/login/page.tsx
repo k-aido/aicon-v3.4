@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/components/providers/auth-provider';
 import { Loader2 } from 'lucide-react';
 
@@ -13,6 +14,14 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   
   const { signIn, signUp } = useAuth();
+  const searchParams = useSearchParams();
+  
+  useEffect(() => {
+    const errorParam = searchParams.get('error');
+    if (errorParam === 'verification_failed') {
+      setError('Email verification failed. Please try signing up again or contact support.');
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

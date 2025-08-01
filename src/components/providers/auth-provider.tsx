@@ -56,6 +56,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(data.session);
       setUser(data.user);
       
+      // Check if email is verified (skip in development)
+      const isDev = process.env.NODE_ENV === 'development' && window.location.hostname === 'localhost';
+      if (!isDev && !data.user.email_confirmed_at) {
+        console.log('Email not verified, redirecting to verification page');
+        localStorage.setItem('pendingVerificationEmail', data.user.email || '');
+        window.location.href = '/verify-email';
+        return { error };
+      }
+      
       // Check if user profile is complete before redirecting
       try {
         const { data: profile, error: profileError } = await supabase
@@ -111,7 +120,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     
     if (!error && data.user) {
       // DEV ONLY: Auto-confirm email for localhost development
-      if (process.env.NODE_ENV === 'development' && window.location.hostname === 'localhost') {
+      const isDev = process.env.NODE_ENV === 'development' && window.location.hostname === 'localhost';
+      if (isDev) {
         console.warn('DEV ONLY: Auto-confirming email for localhost development');
         try {
           // Call our API route to confirm the email server-side
@@ -131,9 +141,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } catch (confirmError) {
           console.error('Dev email confirmation failed:', confirmError);
         }
+        
+        // In dev mode, go directly to onboarding
+        window.location.href = '/onboarding';
+      } else {
+        // Production mode: Store email and redirect to verification page
+        localStorage.setItem('pendingVerificationEmail', email);
+        console.log('Email verification required, redirecting to verification page');
+        window.location.href = `/verify-email?email=${encodeURIComponent(email)}`;
       }
       
-      // Update auth state immediately
+      // Update auth state
       setSession(data.session);
       setUser(data.user);
       
@@ -144,9 +162,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         document.cookie = `${cookieName}=${cookieValue}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
         console.log('Manually set auth cookie:', cookieName);
       }
-      
-      // Redirect new signups to onboarding to complete their profile
-      window.location.href = '/onboarding';
     }
     
     return { error };

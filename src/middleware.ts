@@ -67,18 +67,19 @@ export async function middleware(request: NextRequest) {
     console.log('DEV MODE: Bypassing auth checks for localhost');
   } else {
     // Protected routes (only in production or non-localhost)
-    if (request.nextUrl.pathname.startsWith('/canvas')) {
+    const protectedRoutes = ['/canvas', '/settings', '/onboarding'];
+    const isProtectedRoute = protectedRoutes.some(route => request.nextUrl.pathname.startsWith(route));
+    
+    if (isProtectedRoute) {
       if (!session) {
-        console.log('No session for /canvas, redirecting to login')
+        console.log(`No session for ${request.nextUrl.pathname}, redirecting to login`)
         return NextResponse.redirect(new URL('/login', request.url))
       }
-    }
-
-    // Settings page needs authentication
-    if (request.nextUrl.pathname.startsWith('/settings')) {
-      if (!session) {
-        console.log('No session for /settings, redirecting to login')
-        return NextResponse.redirect(new URL('/login', request.url))
+      
+      // Check email verification for protected routes (except verify-email page)
+      if (!session.user.email_confirmed_at && !request.nextUrl.pathname.startsWith('/verify-email')) {
+        console.log(`Email not verified for ${request.nextUrl.pathname}, redirecting to verification`)
+        return NextResponse.redirect(new URL(`/verify-email?email=${encodeURIComponent(session.user.email || '')}`, request.url))
       }
     }
   }

@@ -51,6 +51,9 @@ export default function SettingsPage() {
       if (process.env.NODE_ENV === 'development' && window.location.hostname === 'localhost') {
         console.log('DEV MODE: No user session found, loading latest user for onboarding');
         loadLatestUserProfile();
+      } else {
+        setLoading(false);
+        setError('No user session found. Please log in.');
       }
     }
   }, [user]);

@@ -58,22 +58,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       // Check if user profile is complete before redirecting
       try {
-        const { data: profile } = await supabase
+        const { data: profile, error: profileError } = await supabase
           .from('user_profiles')
           .select('first_name, last_name, social_media_handles')
           .eq('user_id', data.user.id)
           .single();
         
+        if (profileError) {
+          console.log('Profile query error:', profileError);
+          window.location.href = '/onboarding';
+          return { error };
+        }
+        
+        console.log('Profile check for user:', data.user.email, profile);
+        
         // Check if profile is incomplete
         const hasName = profile?.first_name && profile?.last_name;
         const hasSocialMedia = profile?.social_media_handles && 
-          Object.values(profile.social_media_handles).some(handle => handle && handle.trim() !== '');
+          typeof profile.social_media_handles === 'object' &&
+          profile.social_media_handles !== null &&
+          Object.values(profile.social_media_handles).some(handle => 
+            typeof handle === 'string' && handle.trim() !== ''
+          );
+        
+        console.log('Profile validation:', { hasName, hasSocialMedia, socialHandles: profile?.social_media_handles });
         
         if (!hasName || !hasSocialMedia) {
           console.log('Profile incomplete, redirecting to onboarding');
           window.location.href = '/onboarding';
           return { error };
         }
+        
+        console.log('Profile complete, redirecting to canvas');
       } catch (profileError) {
         console.log('Error checking profile, redirecting to onboarding:', profileError);
         window.location.href = '/onboarding';

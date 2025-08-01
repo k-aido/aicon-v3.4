@@ -37,8 +37,8 @@ export function ResizableWrapper({
   const [isResizing, setIsResizing] = useState(false)
   const [showDimensions, setShowDimensions] = useState(false)
   const [dimensions, setDimensions] = useState({ width, height })
-  const resizeStartRef = useRef<{ x: number; y: number; width: number; height: number }>()
-  const animationFrameRef = useRef<number>()
+  const resizeStartRef = useRef<{ x: number; y: number; width: number; height: number } | null>(null)
+  const animationFrameRef = useRef<number | null>(null)
 
   const snapToGrid = (value: number) => {
     return Math.round(value / SNAP_GRID) * SNAP_GRID

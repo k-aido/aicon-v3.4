@@ -4,11 +4,34 @@ import { CanvasNavigation } from './Canvas/CanvasNavigation';
 import { CanvasSidebar } from './Canvas/CanvasSidebar';
 import { AnalysisPanel } from './Canvas/AnalysisPanel';
 import { useCanvasStore } from '@/store/canvasStore';
-import { CanvasElement, Connection } from '@/types';
-import { ContentElement } from '@/types';
+import { ContentElement, CanvasElement as ImportedCanvasElement, Connection as ImportedConnection } from '@/types';
+
+// Use store's Element type instead of imported CanvasElement
+type Element = {
+  id: number;
+  type: 'content' | 'chat';
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  title?: string;
+  url?: string;
+  platform?: string;
+  thumbnail?: string;
+  messages?: any[];
+  conversations?: any[];
+  metadata?: Record<string, any>;
+  analysis?: any;
+};
+
+type Connection = {
+  id: number;
+  from: number;
+  to: number;
+};
 
 const AiconCanvasApp = () => {
-  const [selectedElement, setSelectedElement] = useState<CanvasElement | null>(null);
+  const [selectedElement, setSelectedElement] = useState<Element | null>(null);
   const [connecting, setConnecting] = useState<number | null>(null);
   const [analysisPanel, setAnalysisPanel] = useState<{ isOpen: boolean; content: ContentElement | null }>({
     isOpen: false,
@@ -84,19 +107,19 @@ const AiconCanvasApp = () => {
     ...el,
     conversations: el.type === 'chat' ? (el as any).conversations || [] : undefined,
     messages: el.type === 'chat' ? (el as any).messages || [] : undefined
-  }));
+  })) as ImportedCanvasElement[];
 
-  const handleSetElements = (newElements: CanvasElement[] | ((prev: CanvasElement[]) => CanvasElement[])) => {
+  const handleSetElements = (newElements: ImportedCanvasElement[] | ((prev: ImportedCanvasElement[]) => ImportedCanvasElement[])) => {
     if (typeof newElements === 'function') {
       // Handle functional updates
       const currentElements = elements;
-      const updated = newElements(currentElements);
+      const updated = newElements(currentElements as ImportedCanvasElement[]);
       // Clear and re-add all elements
       updated.forEach((el, index) => {
         if (index < elements.length) {
-          updateElement(el.id, el);
+          updateElement(el.id, el as any);
         } else {
-          addElement(el);
+          addElement(el as any);
         }
       });
       // Remove extra elements if needed
@@ -109,9 +132,9 @@ const AiconCanvasApp = () => {
       // Handle direct array updates
       newElements.forEach((el, index) => {
         if (index < elements.length) {
-          updateElement(el.id, el);
+          updateElement(el.id, el as any);
         } else {
-          addElement(el);
+          addElement(el as any);
         }
       });
       // Remove extra elements if needed
@@ -123,7 +146,7 @@ const AiconCanvasApp = () => {
     }
   };
 
-  const handleSetConnections = (newConnections: Connection[] | ((prev: Connection[]) => Connection[])) => {
+  const handleSetConnections = (newConnections: ImportedConnection[] | ((prev: ImportedConnection[]) => ImportedConnection[])) => {
     if (typeof newConnections === 'function') {
       const currentConnections = connections;
       const updated = newConnections(currentConnections);
@@ -155,8 +178,8 @@ const AiconCanvasApp = () => {
         <Canvas
           elements={canvasElements}
           setElements={handleSetElements}
-          selectedElement={selectedElement}
-          setSelectedElement={setSelectedElement}
+          selectedElement={selectedElement as ImportedCanvasElement | null}
+          setSelectedElement={setSelectedElement as React.Dispatch<React.SetStateAction<ImportedCanvasElement | null>>}
           connections={connections}
           setConnections={handleSetConnections}
           connecting={connecting}

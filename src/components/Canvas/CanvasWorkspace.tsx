@@ -78,7 +78,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
         connections,
         viewport,
         selection: { elementIds: ids, connectionIds: [] },
-        clipboard
+        clipboard: clipboard || undefined
       };
       onStateChange?.(newState);
     }
@@ -118,7 +118,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
   const handleElementUpdate = useCallback((id: string, updates: Partial<CanvasElement>) => {
     setElements(prev => ({
       ...prev,
-      [id]: { ...prev[id], ...updates, updatedAt: new Date() }
+      [id]: { ...prev[id], ...updates, updatedAt: new Date() } as CanvasElement
     }));
   }, []);
 
@@ -238,7 +238,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
         connections,
         viewport,
         selection: { elementIds: selectedElementIds, connectionIds: [] },
-        clipboard
+        clipboard: clipboard || undefined
       };
       onSave?.(currentState);
     },
@@ -465,7 +465,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
                   selected={isSelected}
                   connecting={connecting}
                   connections={connections}
-                  onSelect={selectElement}
+                  onSelect={() => selectElement(element.id)}
                   onUpdate={handleElementUpdate}
                   onDelete={handleElementDelete}
                   onConnectionStart={handleConnectionStart}
@@ -484,12 +484,12 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
                   selected={isSelected}
                   connecting={connecting}
                   connections={connections}
-                  onSelect={selectElement}
+                  onSelect={() => selectElement(element.id)}
                   onUpdate={handleElementUpdate}
                   onDelete={handleElementDelete}
                   onDeleteWithContents={handleFolderDeleteWithContents}
                   onConnectionStart={handleConnectionStart}
-                  onUpdateChildPosition={handleElementUpdate}
+                  onUpdateChildPosition={(childId, position) => handleElementUpdate(childId, { position })}
                 />
               );
             }
@@ -504,7 +504,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
                   connecting={connecting}
                   connections={connections}
                   connectedContent={connectedContent}
-                  onSelect={selectElement}
+                  onSelect={() => selectElement(element.id)}
                   onUpdate={handleElementUpdate}
                   onDelete={handleElementDelete}
                   onConnectionStart={handleConnectionStart}

@@ -157,7 +157,7 @@ export const ContentDetailsPanel: React.FC<ContentDetailsPanelProps> = ({
                   <h5 className="text-green-400 text-xs font-semibold uppercase mb-2 tracking-wider">🎯 Hook</h5>
                   <div className="bg-gray-800 rounded-lg p-3 border-l-4 border-green-400">
                     <p className="text-gray-300 text-sm">
-                      {analysis.keyPoints[0] || 'Strong opening that captures attention and addresses viewer pain points effectively.'}
+                      {analysis?.keyPoints?.[0] || 'Strong opening that captures attention and addresses viewer pain points effectively.'}
                     </p>
                   </div>
                 </div>
@@ -166,8 +166,8 @@ export const ContentDetailsPanel: React.FC<ContentDetailsPanelProps> = ({
                 <div className="mb-4">
                   <h5 className="text-blue-400 text-xs font-semibold uppercase mb-2 tracking-wider">📝 Body</h5>
                   <div className="bg-gray-800 rounded-lg p-3 border-l-4 border-blue-400">
-                    <p className="text-gray-300 text-sm mb-2">{analysis.summary}</p>
-                    {analysis.keyPoints.slice(1, 3).map((point, index) => (
+                    <p className="text-gray-300 text-sm mb-2">{analysis?.summary}</p>
+                    {analysis?.keyPoints?.slice(1, 3).map((point: string, index: number) => (
                       <p key={index} className="text-gray-400 text-sm mb-1">• {point}</p>
                     ))}
                   </div>
@@ -178,7 +178,7 @@ export const ContentDetailsPanel: React.FC<ContentDetailsPanelProps> = ({
                   <h5 className="text-purple-400 text-xs font-semibold uppercase mb-2 tracking-wider">🚀 Call to Action</h5>
                   <div className="bg-gray-800 rounded-lg p-3 border-l-4 border-purple-400">
                     <p className="text-gray-300 text-sm">
-                      {analysis.keyPoints[analysis.keyPoints.length - 1] || 'Clear call-to-action encouraging engagement and follow-up actions.'}
+                      {analysis?.keyPoints?.[analysis?.keyPoints?.length - 1] || 'Clear call-to-action encouraging engagement and follow-up actions.'}
                     </p>
                   </div>
                 </div>
@@ -225,26 +225,26 @@ export const ContentDetailsPanel: React.FC<ContentDetailsPanelProps> = ({
                 <div className="bg-gray-800 rounded px-2 py-1">
                   <span className="text-gray-400">Sentiment: </span>
                   <span className={`capitalize ${
-                    analysis.sentiment === 'positive' ? 'text-green-400' :
-                    analysis.sentiment === 'negative' ? 'text-red-400' :
-                    analysis.sentiment === 'mixed' ? 'text-yellow-400' :
+                    analysis?.sentiment === 'positive' ? 'text-green-400' :
+                    analysis?.sentiment === 'negative' ? 'text-red-400' :
+                    analysis?.sentiment === 'mixed' ? 'text-yellow-400' :
                     'text-gray-300'
                   }`}>
-                    {analysis.sentiment}
+                    {analysis?.sentiment}
                   </span>
                 </div>
                 <div className="bg-gray-800 rounded px-2 py-1">
                   <span className="text-gray-400">Complexity: </span>
-                  <span className="text-gray-300 capitalize">{analysis.complexity}</span>
+                  <span className="text-gray-300 capitalize">{analysis?.complexity}</span>
                 </div>
               </div>
 
               {/* Topics */}
-              {analysis.topics.length > 0 && (
+              {(analysis?.topics?.length ?? 0) > 0 && (
                 <div className="mt-3">
                   <h5 className="text-gray-400 text-xs font-semibold uppercase mb-2">Topics</h5>
                   <div className="flex flex-wrap gap-2">
-                    {analysis.topics.map((topic, index) => (
+                    {analysis?.topics?.map((topic: any, index: number) => (
                       <span 
                         key={index}
                         className="bg-gray-800 text-gray-300 text-xs px-2 py-1 rounded"

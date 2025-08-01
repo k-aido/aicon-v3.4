@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Youtube, Instagram, Video, ExternalLink, X, Edit, Save } from 'lucide-react';
-import { ContentElement as ContentElementType, Connection } from '@/types';
+import { ContentElement as ContentElementType, Connection, Platform } from '@/types';
 import { ConnectionPoint } from './ConnectionPoint';
 import { useElementDrag } from '@/hooks/useElementDrag';
 import { SimpleResize } from './SimpleResize';
@@ -34,17 +34,17 @@ const PlatformIcon: React.FC<{ platform: string }> = ({ platform }) => {
 // Get status border color based on analysis state
 const getStatusBorderColor = (element: ContentElementType): string => {
   // Check for analysis error first
-  if (element.metadata?.analysisError) {
+  if ((element as any).metadata?.analysisError) {
     return 'border-red-500'; // Error state
   }
   
   // If analyzing, show yellow regardless of platform
-  if (element.metadata?.isAnalyzing) {
+  if ((element as any).metadata?.isAnalyzing) {
     return 'border-yellow-500'; // Analyzing
   }
   
   // If analyzed, show platform-specific colors
-  if (element.metadata?.isAnalyzed) {
+  if ((element as any).metadata?.isAnalyzed) {
     switch (element.platform.toLowerCase()) {
       case 'youtube':
         return 'border-red-500'; // YouTube red
@@ -244,7 +244,7 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
                 <label className="block text-gray-300 text-xs mb-1">Platform:</label>
                 <select
                   value={editPlatform}
-                  onChange={(e) => setEditPlatform(e.target.value)}
+                  onChange={(e) => setEditPlatform(e.target.value as Platform)}
                   className="w-full bg-gray-600 text-white rounded px-2 py-1 text-sm"
                 >
                   <option value="youtube">YouTube</option>
@@ -300,7 +300,7 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
             onClick={handleReanalysis}
             className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm text-gray-700 outline-none focus:outline-none"
           >
-            {element.metadata?.isAnalyzed || element.metadata?.analysisError 
+            {(element as any).metadata?.isAnalyzed || (element as any).metadata?.analysisError 
               ? 'Re-analyze Content' 
               : 'Analyze Content'
             }

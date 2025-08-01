@@ -1,5 +1,5 @@
 import React, { useState, useRef, useMemo, useCallback, useEffect } from 'react';
-import { CanvasElement, Connection, Viewport, Position } from '@/types';
+import { CanvasElement, Connection, Viewport, Position, Platform } from '@/types';
 import { ContentElement as ContentElementType } from '@/types';
 import { useCanvasDrag } from '@/hooks/useCanvasDrag';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
@@ -89,7 +89,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
       y: y - 100,
       width: 300,
       height: 350,
-      platform: platform.toLowerCase(),
+      platform: platform.toLowerCase() as Platform,
       title: `New ${platform} Content`,
       url: url,
       thumbnail: 'https://via.placeholder.com/300x200'
@@ -147,18 +147,25 @@ const CanvasComponent: React.FC<CanvasProps> = ({
       const y = (e.clientY - rect.top - viewport.y) / viewport.zoom;
       
       // Create new element
-      const newElement = {
+      const newElement: CanvasElement = tool.type === 'chat' ? {
         id: Date.now(),
-        type: tool.type as 'chat' | 'content',
-        x: x - (tool.type === 'chat' ? 400 : 150), // Center the element on drop point
-        y: y - (tool.type === 'chat' ? 450 : 100),
-        width: tool.type === 'chat' ? 800 : 300,
-        height: tool.type === 'chat' ? 900 : 350,
-        platform: tool.platform,
-        title: tool.type === 'chat' ? 'AI Chat' : `New ${tool.label} Content`,
-        url: tool.type === 'content' ? 'https://example.com' : undefined,
-        thumbnail: tool.type === 'content' ? 'https://via.placeholder.com/300x200' : undefined,
-        messages: tool.type === 'chat' ? [] : undefined
+        type: 'chat' as const,
+        x: x - 400,
+        y: y - 450,
+        width: 800,
+        height: 900,
+        messages: []
+      } : {
+        id: Date.now(),
+        type: 'content' as const,
+        x: x - 150,
+        y: y - 100,
+        width: 300,
+        height: 350,
+        platform: (tool.platform || 'unknown') as Platform,
+        title: `New ${tool.label} Content`,
+        url: 'https://example.com',
+        thumbnail: 'https://via.placeholder.com/300x200'
       };
       
       setElements(prev => [...prev, newElement]);
@@ -178,7 +185,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
 
   // Handle element updates
   const handleElementUpdate = useCallback((id: number, updates: Partial<CanvasElement>) => {
-    setElements(prev => prev.map(el => el.id === id ? { ...el, ...updates } : el));
+    setElements(prev => prev.map(el => el.id === id ? { ...el, ...updates } as CanvasElement : el));
   }, [setElements]);
 
   // Handle element deletion (single)
@@ -265,7 +272,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
         isAnalyzed: false,
         analysisError: undefined
       }
-    };
+    } as any;
     handleElementUpdate(element.id, updates);
   }, [handleElementUpdate]);
 
@@ -586,4 +593,3 @@ CanvasComponent.displayName = 'Canvas';
 
 export const Canvas = React.memo(CanvasComponent);
 
-const useCallback = React.useCallback;

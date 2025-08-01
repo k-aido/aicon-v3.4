@@ -32,7 +32,7 @@ export const useElementDrag = ({
   });
   
   const elementRef = useRef<HTMLDivElement | null>(null);
-  const animationFrameRef = useRef<number>();
+  const animationFrameRef = useRef<number | null>(null);
 
   // Update local position when element position changes externally
   useEffect(() => {

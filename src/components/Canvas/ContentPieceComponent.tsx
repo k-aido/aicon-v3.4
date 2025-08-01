@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Youtube, Instagram, Video, ExternalLink, MoreVertical, Loader, CheckCircle, AlertCircle, Edit, Save } from 'lucide-react';
 import { ContentPiece } from '@/types/canvas';
+import { Platform } from '@/types';
 import { ConnectionPoint } from './ConnectionPoint';
 import { useElementDrag } from '@/hooks/useElementDrag';
 import { SimpleResize } from './SimpleResize';
@@ -96,9 +97,9 @@ export const ContentPieceComponent: React.FC<ContentPieceComponentProps> = React
   const statusColor = getStatusColor(analysisStatus);
 
   const { isDragging, localPosition, handleMouseDown, setElementRef } = useElementDrag({
-    elementId: element.id,
+    elementId: parseInt(element.id) || 0,
     initialPosition: element.position,
-    onUpdate: (id, updates) => onUpdate(id, { position: updates }),
+    onUpdate: (id, updates) => onUpdate(element.id, { position: updates }),
     onSelect: () => onSelect(element)
   });
 
@@ -302,7 +303,7 @@ export const ContentPieceComponent: React.FC<ContentPieceComponentProps> = React
                       <label className="block text-gray-300 text-xs mb-2">Content Type:</label>
                       <select
                         value={editPlatform}
-                        onChange={(e) => setEditPlatform(e.target.value)}
+                        onChange={(e) => setEditPlatform(e.target.value as Platform)}
                         className="w-full bg-gray-800 text-white rounded px-3 py-2 text-sm border border-gray-600 focus:border-blue-500 focus:outline-none"
                       >
                         <option value="youtube">YouTube</option>

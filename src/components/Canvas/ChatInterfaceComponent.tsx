@@ -98,9 +98,9 @@ export const ChatInterfaceComponent: React.FC<ChatInterfaceComponentProps> = Rea
   };
 
   const { isDragging, localPosition, handleMouseDown, setElementRef } = useElementDrag({
-    elementId: element.id,
+    elementId: parseInt(element.id) || 0,
     initialPosition: element.position,
-    onUpdate: (id, updates) => onUpdate(id, { position: updates }),
+    onUpdate: (id, updates) => onUpdate(element.id, { position: updates }),
     onSelect: () => onSelect(element)
   });
 
@@ -464,7 +464,7 @@ export const ChatInterfaceComponent: React.FC<ChatInterfaceComponentProps> = Rea
 
             {/* Enhanced Messages Area */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-900/20">
-              {messages.map((message) => (
+              {messages.map((message: any) => (
                 <div
                   key={message.id}
                   className={`flex gap-3 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}

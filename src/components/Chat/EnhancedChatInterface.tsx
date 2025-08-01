@@ -308,7 +308,7 @@ export const EnhancedChatInterface: React.FC<ChatInterfaceProps> = ({
             </div>
           )}
           
-          {messages.map((message) => (
+          {messages.map((message: any) => (
             <div
               key={message.id}
               className={`flex gap-3 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}

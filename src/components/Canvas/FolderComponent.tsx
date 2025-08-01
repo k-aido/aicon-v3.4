@@ -88,7 +88,7 @@ export const FolderComponent: React.FC<FolderComponentProps> = React.memo(({
   );
 
   const { isDragging, localPosition, handleMouseDown, setElementRef } = useElementDrag({
-    elementId: folder.id,
+    elementId: parseInt(folder.id) || 0,
     initialPosition: folder.position,
     onUpdate: (id, updates) => {
       // Calculate movement delta
@@ -96,7 +96,7 @@ export const FolderComponent: React.FC<FolderComponentProps> = React.memo(({
       const deltaY = updates.y - previousBounds.current.y;
 
       // Update folder position
-      onUpdate(id, { position: updates });
+      onUpdate(folder.id, { position: updates });
 
       // Move all contained items with the folder
       containedItems.forEach(item => {
@@ -195,11 +195,15 @@ export const FolderComponent: React.FC<FolderComponentProps> = React.memo(({
         className={`rounded-lg shadow-lg ${
           selected ? 'ring-2 ring-blue-500 shadow-xl' : ''
         } ${connecting === folder.id ? 'ring-2 ring-purple-500' : ''}`}
-        style={{
-          backgroundColor: folder.color + '20', // Add transparency to folder color
-          border: `2px solid ${folder.color}`
-        }}
       >
+        <div
+          className="w-full h-full"
+          style={{
+            backgroundColor: folder.color + '20', // Add transparency to folder color
+            border: `2px solid ${folder.color}`,
+            borderRadius: '0.5rem'
+          }}
+        >
         <ConnectionPoint
           position="right"
           isVisible={isHovered || hasConnections}
@@ -269,6 +273,7 @@ export const FolderComponent: React.FC<FolderComponentProps> = React.memo(({
               <p className="text-gray-500 text-sm">Drop items here</p>
             </div>
           )}
+        </div>
         </div>
       </SimpleResize>
     </div>

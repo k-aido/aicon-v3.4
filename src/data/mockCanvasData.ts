@@ -331,7 +331,7 @@ export const mockCanvasState: CanvasState = {
   connections: mockConnections,
   viewport: { x: 0, y: 0, zoom: 1 },
   selection: { elementIds: [], connectionIds: [] },
-  clipboard: null
+  clipboard: undefined
 };
 
 // Mock workspace configuration

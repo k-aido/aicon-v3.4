@@ -50,7 +50,7 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             <h4 className="text-gray-400 text-sm font-semibold uppercase tracking-wide mb-2">Hook</h4>
             <div className="bg-gray-800 rounded-lg p-4">
               <p className="text-gray-300 text-sm">
-                {content.metadata?.hookAnalysis || 'The opening captures attention with compelling visuals and immediately addresses the viewer\'s pain point.'}
+                {(content as any).metadata?.hookAnalysis || 'The opening captures attention with compelling visuals and immediately addresses the viewer\'s pain point.'}
               </p>
             </div>
           </div>
@@ -60,7 +60,7 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             <h4 className="text-gray-400 text-sm font-semibold uppercase tracking-wide mb-2">Body</h4>
             <div className="bg-gray-800 rounded-lg p-4">
               <p className="text-gray-300 text-sm mb-3">
-                {content.metadata?.bodyAnalysis || 'The main content provides valuable information with clear explanations and practical examples.'}
+                {(content as any).metadata?.bodyAnalysis || 'The main content provides valuable information with clear explanations and practical examples.'}
               </p>
               <ul className="text-gray-400 text-sm space-y-1">
                 <li>• Clear structure and flow</li>
@@ -75,7 +75,7 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             <h4 className="text-gray-400 text-sm font-semibold uppercase tracking-wide mb-2">Call to Action</h4>
             <div className="bg-gray-800 rounded-lg p-4">
               <p className="text-gray-300 text-sm">
-                {content.metadata?.ctaAnalysis || 'Strong call-to-action encouraging engagement and follow-up actions.'}
+                {(content as any).metadata?.ctaAnalysis || 'Strong call-to-action encouraging engagement and follow-up actions.'}
               </p>
             </div>
           </div>
@@ -91,11 +91,11 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
               <div className="bg-gray-800 rounded-lg p-3">
                 <p className="text-gray-400 text-xs">Status</p>
                 <p className={`text-sm font-medium ${
-                  content.metadata?.isAnalyzed ? 'text-green-400' : 
-                  content.metadata?.isAnalyzing ? 'text-yellow-400' : 'text-red-400'
+                  (content as any).metadata?.isAnalyzed ? 'text-green-400' : 
+                  (content as any).metadata?.isAnalyzing ? 'text-yellow-400' : 'text-red-400'
                 }`}>
-                  {content.metadata?.isAnalyzed ? 'Analyzed' : 
-                   content.metadata?.isAnalyzing ? 'Analyzing' : 'Not Analyzed'}
+                  {(content as any).metadata?.isAnalyzed ? 'Analyzed' : 
+                   (content as any).metadata?.isAnalyzing ? 'Analyzing' : 'Not Analyzed'}
                 </p>
               </div>
             </div>

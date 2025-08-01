@@ -52,6 +52,16 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   });
   const [dragOver, setDragOver] = useState(false);
   
+  // Get current conversation and messages
+  const activeConversation = conversations.find(conv => conv.id === activeConversationId);
+  const messages = activeConversation?.messages || [];
+  const setMessages = (newMessages: Message[]) => {
+    const updatedConversations = conversations.map(conv =>
+      conv.id === activeConversationId ? { ...conv, messages: newMessages } : conv
+    );
+    setConversations(updatedConversations);
+  };
+  
   const modelDropdownRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -167,7 +177,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         )}
         
         <div className="space-y-4">
-          {messages.map(message => (
+          {messages.map((message: Message) => (
             <div 
               key={message.id} 
               className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
@@ -218,7 +228,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
               onChange={(e) => setSelectedModel(e.target.value)}
               className="px-3 py-1.5 bg-gray-100 rounded-lg text-sm border border-gray-200 outline-none focus:border-purple-500 cursor-pointer"
             >
-              {models.map(model => (
+              {LLM_MODELS.map(model => (
                 <option key={model.id} value={model.id}>
                   {model.name}
                 </option>

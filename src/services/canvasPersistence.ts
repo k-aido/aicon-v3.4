@@ -507,10 +507,25 @@ class CanvasPersistenceService {
    */
   async getUserWorkspaces(userId: string): Promise<CanvasWorkspace[]> {
     try {
-      console.log(`[CanvasPersistence] Fetching projects for user: ${userId}`);
+      console.log(`[CanvasPersistence] ========== FETCHING USER WORKSPACES ==========`);
+      console.log(`[CanvasPersistence] User ID: ${userId}`);
       
-      // For authenticated users, use their user ID as account_id
-      const accountId = userId;
+      // First, get the user's account_id from the users table
+      console.log(`[CanvasPersistence] Looking up account_id for user...`);
+      const { data: userRecord, error: userError } = await this.supabase
+        .from('users')
+        .select('account_id')
+        .eq('id', userId)
+        .single();
+        
+      if (userError || !userRecord) {
+        console.log(`[CanvasPersistence] No user record found for ${userId}, using user ID as account ID`);
+        // Fallback: use user ID as account ID
+        var accountId = userId;
+      } else {
+        console.log(`[CanvasPersistence] Found user record, account_id: ${userRecord.account_id}`);
+        var accountId = userRecord.account_id;
+      }
       
       // First, let's check what projects exist
       const { data: allProjects, error: checkError } = await this.supabase

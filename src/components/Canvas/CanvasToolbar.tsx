@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { MessageSquare, Instagram, Music2, Youtube, Globe, FolderPlus } from 'lucide-react';
+import { Globe } from 'lucide-react';
+import { AIChatIcon, InstagramIcon, TikTokIcon, YouTubeIcon, ProfilesIcon } from '@/components/icons/PngIcons';
 import { ContentPiece, ChatData, FolderData } from '@/types/canvas';
 
 interface Tool {
@@ -12,23 +13,23 @@ interface Tool {
 }
 
 const tools: Tool[] = [
-  { id: 'ai-chat', icon: MessageSquare, label: 'AI Chat', color: '#8B5CF6', type: 'chat' },
-  { id: 'folder', icon: FolderPlus, label: 'Folder', color: '#059669', type: 'folder' },
-  { id: 'youtube', icon: Youtube, label: 'YouTube', color: '#FF0000', type: 'content', platform: 'youtube' },
-  { id: 'instagram', icon: Instagram, label: 'Instagram', color: '#E4405F', type: 'content', platform: 'instagram' },
-  { id: 'tiktok', icon: Music2, label: 'TikTok', color: '#000000', type: 'content', platform: 'tiktok' },
-  { id: 'website', icon: Globe, label: 'Website', color: '#3B82F6', type: 'content', platform: 'unknown' }
+  { id: 'ai-chat', icon: AIChatIcon, label: 'AI Chat', color: '#8B5CF6', type: 'chat' },
+  { id: 'instagram', icon: InstagramIcon, label: 'Instagram', color: '#E4405F', type: 'content', platform: 'instagram' },
+  { id: 'tiktok', icon: TikTokIcon, label: 'TikTok', color: '#000000', type: 'content', platform: 'tiktok' },
+  { id: 'youtube', icon: YouTubeIcon, label: 'YouTube', color: '#FF0000', type: 'content', platform: 'youtube' },
+  { id: 'website', icon: Globe, label: 'Website URL', color: '#3B82F6', type: 'content', platform: 'unknown' }
 ];
 
 interface CanvasToolbarProps {
   onAddElement: (element: ContentPiece | ChatData | FolderData) => void;
   viewport: { x: number; y: number; zoom: number };
+  onOpenSocialMediaModal?: (platform?: string) => void;
 }
 
-export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({ onAddElement, viewport }) => {
-  const [isExpanded, setIsExpanded] = useState(false);
+export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({ onAddElement, viewport, onOpenSocialMediaModal }) => {
   const [draggingTool, setDraggingTool] = useState<Tool | null>(null);
   const [activeTool, setActiveTool] = useState<string | null>(null);
+  const [hoveredTool, setHoveredTool] = useState<string | null>(null);
 
   const handleDragStart = (e: React.DragEvent, tool: Tool) => {
     setDraggingTool(tool);
@@ -66,7 +67,7 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({ onAddElement, view
       return {
         ...baseElement,
         type: 'chat' as const,
-        dimensions: { width: 800, height: 900 },
+        dimensions: { width: 600, height: 700 },
         title: 'New AI Chat',
         model: 'gpt-4',
         messages: [],
@@ -80,7 +81,7 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({ onAddElement, view
         ...baseElement,
         type: 'folder' as const,
         dimensions: { width: 350, height: 250 },
-        name: 'New Folder',
+        name: 'New Profile Collection',
         description: '',
         color: tool.color,
         childIds: [],
@@ -105,14 +106,23 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({ onAddElement, view
   };
 
   const handleToolClick = (tool: Tool) => {
-    // Calculate center position accounting for viewport
-    // Offset by half the element size to center it
-    const halfWidth = tool.type === 'chat' ? 400 : 160;
-    const halfHeight = tool.type === 'chat' ? 450 : 120;
-    const centerX = (window.innerWidth / 2 - viewport.x) / viewport.zoom - halfWidth;
-    const centerY = (window.innerHeight / 2 - viewport.y) / viewport.zoom - halfHeight;
+    console.log('[CanvasToolbar] Tool clicked:', tool.id, tool.type);
+    
+    // Check if it's a social media platform and modal handler is available
+    const socialMediaPlatforms = ['instagram', 'tiktok', 'youtube'];
+    if (socialMediaPlatforms.includes(tool.id) && onOpenSocialMediaModal) {
+      onOpenSocialMediaModal(tool.platform);
+      return;
+    }
+    
+    // Simple fixed position for debugging
+    const x = 100;
+    const y = 100;
 
-    const newElement = createElement(tool, centerX, centerY);
+    const newElement = createElement(tool, x, y);
+    console.log('[CanvasToolbar] Created element:', newElement);
+    console.log('[CanvasToolbar] Element dimensions:', newElement.dimensions);
+    
     onAddElement(newElement);
     
     setActiveTool(tool.id);
@@ -141,67 +151,41 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({ onAddElement, view
 
   return (
     <div
-      className={`fixed left-4 top-1/2 -translate-y-1/2 bg-white rounded-xl shadow-xl transition-all duration-200 ease-out z-30 ${
-        isExpanded ? 'w-60' : 'w-16'
-      }`}
+      className="fixed left-4 top-1/2 -translate-y-1/2 bg-white rounded-lg shadow-lg z-30 p-1"
       data-toolbar
-      onMouseEnter={() => setIsExpanded(true)}
-      onMouseLeave={() => setIsExpanded(false)}
       onDrop={handleDrop}
       onDragOver={(e) => e.preventDefault()}
     >
-      <div className="p-2">
-        <div className="mb-2 px-3">
-          <h3 className={`text-xs font-semibold text-gray-500 uppercase tracking-wide transition-all duration-200 ${
-            isExpanded ? 'opacity-100' : 'opacity-0'
-          }`}>
-            Components
-          </h3>
-        </div>
-        
+      <div className="flex flex-col gap-1">
         {tools.map((tool, index) => {
           const Icon = tool.icon;
           return (
-            <button
-              key={tool.id}
-              draggable
-              onDragStart={(e) => handleDragStart(e, tool)}
-              onDragEnd={handleDragEnd}
-              onClick={() => handleToolClick(tool)}
-              className={`w-full flex items-center gap-3 p-3 rounded-lg transition-all duration-200 cursor-grab active:cursor-grabbing hover:scale-105 hover:shadow-md mb-1 outline-none focus:outline-none ${
-                activeTool === tool.id ? 'scale-95' : ''
-              } ${draggingTool?.id === tool.id ? 'opacity-50' : ''}`}
-              style={{
-                backgroundColor: activeTool === tool.id ? tool.color : 'transparent',
-                color: activeTool === tool.id ? 'white' : '#374151'
-              }}
-              title={`${tool.label} - Click to add or drag to canvas`}
-            >
-              <div 
-                className="flex-shrink-0 transition-colors duration-200"
-                style={{ color: activeTool === tool.id ? 'white' : tool.color }}
+            <div key={tool.id} className="relative">
+              <button
+                draggable
+                onDragStart={(e) => handleDragStart(e, tool)}
+                onDragEnd={handleDragEnd}
+                onClick={() => handleToolClick(tool)}
+                onMouseEnter={() => setHoveredTool(tool.id)}
+                onMouseLeave={() => setHoveredTool(null)}
+                className={`relative p-2 rounded-md transition-all duration-150 cursor-pointer hover:bg-gray-100 active:scale-95 ${
+                  activeTool === tool.id ? 'bg-gray-100' : ''
+                } ${draggingTool?.id === tool.id ? 'opacity-50' : ''}`}
               >
-                <Icon className="w-6 h-6" />
-              </div>
-              <span 
-                className={`text-sm font-medium whitespace-nowrap transition-all duration-200 ${
-                  isExpanded ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-2'
-                }`}
-              >
-                {tool.label}
-              </span>
-            </button>
+                <Icon className="w-5 h-5" size={20} style={{ color: tool.color }} />
+              </button>
+              
+              {/* Tooltip */}
+              {hoveredTool === tool.id && (
+                <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 pointer-events-none z-50">
+                  <div className="bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
+                    {tool.label}
+                  </div>
+                </div>
+              )}
+            </div>
           );
         })}
-      </div>
-      
-      {/* Instructions */}
-      <div className={`px-3 pb-3 transition-all duration-200 ${
-        isExpanded ? 'opacity-100' : 'opacity-0'
-      }`}>
-        <div className="text-xs text-gray-400 border-t border-gray-100 pt-2">
-          Click to add at center or drag to position
-        </div>
       </div>
     </div>
   );

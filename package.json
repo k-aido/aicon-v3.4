@@ -10,7 +10,12 @@
     "lint": "next lint",
     "setup": "bash scripts/setup.sh"
   },
-  "keywords": ["ai", "content", "canvas", "next.js"],
+  "keywords": [
+    "ai",
+    "content",
+    "canvas",
+    "next.js"
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/yourusername/aicon-v3.4.git"
@@ -19,11 +24,14 @@
     "@anthropic-ai/sdk": "^0.57.0",
     "@supabase/supabase-js": "^2.52.1",
     "@tailwindcss/postcss": "^4.1.11",
+    "cheerio": "^1.1.2",
+    "dotenv": "^17.2.1",
     "lucide-react": "^0.525.0",
     "next": "^15.4.3",
     "openai": "^5.10.2",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "youtube-transcript": "^1.2.1",
     "zustand": "^5.0.6"
   },
   "devDependencies": {

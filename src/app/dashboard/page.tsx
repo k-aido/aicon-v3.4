@@ -92,8 +92,9 @@ const CanvasCard: React.FC<{
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [canvases, setCanvases] = useState<CanvasPreview[]>(mockCanvases);
-  const [isLoading, setIsLoading] = useState(false);
+  const [canvases, setCanvases] = useState<CanvasPreview[]>([]);
+  const [isLoading, setIsLoading] = useState(true); // Start with loading true
+  const [isInitializing, setIsInitializing] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'home' | 'starred'>('home');
   
@@ -111,7 +112,7 @@ export default function DashboardPage() {
       // Convert workspaces to CanvasPreview format
       const canvasPreviews: CanvasPreview[] = workspaces.map((workspace, index) => ({
         id: workspace.id,
-        title: workspace.title || workspace.name,
+        title: workspace.title,
         author: 'You', // Show current user as author
         lastModified: new Date(workspace.last_accessed || workspace.updated_at).toLocaleDateString(),
         color: ['bg-purple-200', 'bg-green-200', 'bg-orange-200'][index % 3],
@@ -132,18 +133,34 @@ export default function DashboardPage() {
   useEffect(() => {
     const initialize = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
+        console.log('[Dashboard] Starting initialization...');
+        setIsInitializing(true);
+        
+        const { data: { user }, error } = await supabase.auth.getUser();
+        console.log('[Dashboard] Auth check result:', { user: !!user, userId: user?.id, error });
+        
+        if (error) {
+          console.error('[Dashboard] Auth error:', error);
+          router.push('/login');
+          return;
+        }
         
         if (user) {
+          console.log('[Dashboard] User authenticated, loading canvases...');
           setUserId(user.id);
           // Load the authenticated user's canvases
           await loadCanvases(user.id);
         } else {
+          console.log('[Dashboard] No user found, redirecting to login');
           // If no user, redirect to login
           router.push('/login');
+          return;
         }
       } catch (error) {
         console.error('[Dashboard] Error initializing:', error);
+        router.push('/login');
+      } finally {
+        setIsInitializing(false);
       }
     };
     initialize();
@@ -161,7 +178,7 @@ export default function DashboardPage() {
         return;
       }
 
-      // Show loading state
+      // Show loading state for canvas creation only
       setIsLoading(true);
 
       // Skip connection test for now - let the API handle connection issues
@@ -203,6 +220,18 @@ export default function DashboardPage() {
     }
   };
 
+  // Show loading state while initializing
+  if (isInitializing) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 flex">
       {/* Left Sidebar Navigation */}
@@ -239,42 +268,60 @@ export default function DashboardPage() {
         <div className="max-w-6xl mx-auto">
           {/* Dashboard Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {canvases
-              .filter(canvas => activeTab === 'home' || (activeTab === 'starred' && canvas.isStarred))
-              .map((canvas) => (
-                <CanvasCard
-                  key={canvas.id}
-                  canvas={canvas}
-                  onClick={handleCanvasClick}
-                />
-              ))}
+            {isLoading ? (
+              // Loading skeleton
+              [...Array(3)].map((_, i) => (
+                <div key={i} className="animate-pulse">
+                  <div className="bg-gray-300 rounded-2xl h-64 mb-3"></div>
+                  <div className="h-4 bg-gray-300 rounded w-3/4 mb-2"></div>
+                  <div className="h-3 bg-gray-300 rounded w-1/2"></div>
+                </div>
+              ))
+            ) : (
+              canvases
+                .filter(canvas => activeTab === 'home' || (activeTab === 'starred' && canvas.isStarred))
+                .map((canvas) => (
+                  <CanvasCard
+                    key={canvas.id}
+                    canvas={canvas}
+                    onClick={handleCanvasClick}
+                  />
+                ))
+            )}
             
-            {/* Add new canvas card */}
-            <div 
-              onClick={isLoading ? undefined : createNewCanvas}
-              className={`${isLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer transition-transform hover:scale-105'}`}
-            >
-              <div className={`bg-gray-100 border-2 border-dashed border-gray-300 rounded-2xl h-64 flex items-center justify-center transition-colors ${!isLoading ? 'hover:border-gray-400' : ''}`}>
-                <div className="text-center">
-                  <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-3">
-                    {isLoading ? (
-                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-500"></div>
-                    ) : (
+            {/* Show empty state only if not loading and no canvases */}
+            {!isLoading && canvases.length === 0 && (
+              <div className="col-span-full text-center py-12">
+                <div className="text-gray-400 mb-4">
+                  <svg className="w-16 h-16 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No canvases yet</h3>
+                <p className="text-gray-500 mb-6">Create your first canvas to get started</p>
+              </div>
+            )}
+            
+            {/* Add new canvas card - only show when not loading */}
+            {!isLoading && (
+              <div 
+                onClick={createNewCanvas}
+                className="cursor-pointer transition-transform hover:scale-105"
+              >
+                <div className="bg-gray-100 border-2 border-dashed border-gray-300 rounded-2xl h-64 flex items-center justify-center hover:border-gray-400 transition-colors">
+                  <div className="text-center">
+                    <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-3">
                       <span className="text-2xl text-gray-500">+</span>
-                    )}
+                    </div>
+                    <p className="text-gray-600 font-medium">Create New Canvas</p>
                   </div>
-                  <p className="text-gray-600 font-medium">
-                    {isLoading ? 'Creating...' : 'Create New Canvas'}
-                  </p>
+                </div>
+                <div className="mt-3">
+                  <h3 className="font-medium text-gray-400">New Canvas</h3>
+                  <p className="text-sm text-gray-400">Click to create</p>
                 </div>
               </div>
-              <div className="mt-3">
-                <h3 className="font-medium text-gray-400">New Canvas</h3>
-                <p className="text-sm text-gray-400">
-                  {isLoading ? 'Please wait...' : 'Click to create'}
-                </p>
-              </div>
-            </div>
+            )}
           </div>
         </div>
       </div>

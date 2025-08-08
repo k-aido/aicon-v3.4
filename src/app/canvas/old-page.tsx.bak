@@ -1,0 +1,54 @@
+'use client';
+
+import dynamic from 'next/dynamic';
+import ErrorBoundary from '@/components/ErrorBoundary';
+import { useEffect } from 'react';
+
+const LoadingComponent = () => {
+  useEffect(() => {
+    console.log('Loading component mounted - checking for import issues');
+    
+    // Add timeout to detect if loading is stuck
+    const timer = setTimeout(() => {
+      console.error('Canvas loading timeout - component may have failed to import');
+    }, 5000);
+    
+    return () => clearTimeout(timer);
+  }, []);
+  
+  return <div className="h-screen flex items-center justify-center">Loading canvas...</div>;
+};
+
+const AiconCanvasApp = dynamic(
+  () => import('@/components/AiconCanvas')
+    .then(mod => {
+      console.log('AiconCanvas module loaded successfully:', mod);
+      return mod;
+    })
+    .catch(err => {
+      console.error('Failed to load AiconCanvas:', err);
+      // Return a component that shows the error
+      return {
+        default: () => (
+          <div className="h-screen flex items-center justify-center text-red-600">
+            <div className="text-center">
+              <p className="text-xl font-bold">Error loading canvas</p>
+              <p className="mt-2">Check console for details</p>
+            </div>
+          </div>
+        )
+      };
+    }), 
+  {
+    ssr: false,
+    loading: LoadingComponent
+  }
+);
+
+export default function Home() {
+  return (
+    <ErrorBoundary>
+      <AiconCanvasApp />
+    </ErrorBoundary>
+  );
+}

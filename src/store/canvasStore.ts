@@ -2,7 +2,7 @@ import { create } from 'zustand';
 
 interface Element {
   id: number;
-  type: 'content' | 'chat';
+  type: 'content' | 'chat' | 'folder';
   x: number;
   y: number;
   width: number;
@@ -15,6 +15,12 @@ interface Element {
   conversations?: any[];
   metadata?: Record<string, any>;
   analysis?: any;
+  // Folder-specific fields
+  name?: string;
+  description?: string;
+  color?: string;
+  childIds?: number[];
+  isExpanded?: boolean;
 }
 
 interface Connection {

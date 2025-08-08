@@ -1,0 +1,76 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  
+  .line-clamp-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* Canvas specific styles */
+  .dragging {
+    cursor: grabbing !important;
+  }
+  
+  .canvas-element {
+    transition: transform 0.1s ease-out;
+  }
+  
+  .canvas-element:hover {
+    z-index: 10;
+  }
+  
+  .canvas-element.selected {
+    z-index: 20;
+  }
+  
+  .canvas-element.dragging {
+    z-index: 50;
+  }
+
+  /* Smooth zoom transitions */
+  .canvas-viewport {
+    transition: transform 0.2s ease-out;
+  }
+
+  /* Mobile optimizations */
+  @media (max-width: 768px) {
+    .canvas-element {
+      min-width: 240px;
+      min-height: 180px;
+    }
+    
+    .mobile-safe-area {
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+  }
+}
+
+/* Custom scrollbar for analysis panels */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 2px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 2px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}

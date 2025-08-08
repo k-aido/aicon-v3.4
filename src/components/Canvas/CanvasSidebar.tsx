@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { MessageSquare, Instagram, Music2, Youtube, Globe } from 'lucide-react';
+import { Globe } from 'lucide-react';
+import { AIChatIcon, InstagramIcon, TikTokIcon, YouTubeIcon } from '@/components/icons/PngIcons';
 import { useCanvasStore } from '@/store/canvasStore';
 
 interface Tool {
@@ -12,17 +13,21 @@ interface Tool {
 }
 
 const tools: Tool[] = [
-  { id: 'ai-chat', icon: MessageSquare, label: 'AI Chat', color: '#8B5CF6', type: 'chat' },
-  { id: 'instagram', icon: Instagram, label: 'Instagram', color: '#E4405F', type: 'content', platform: 'instagram' },
-  { id: 'tiktok', icon: Music2, label: 'TikTok', color: '#000000', type: 'content', platform: 'tiktok' },
-  { id: 'youtube', icon: Youtube, label: 'YouTube', color: '#FF0000', type: 'content', platform: 'youtube' },
+  { id: 'ai-chat', icon: AIChatIcon, label: 'AI Chat', color: '#8B5CF6', type: 'chat' },
+  { id: 'instagram', icon: InstagramIcon, label: 'Instagram', color: '#E4405F', type: 'content', platform: 'instagram' },
+  { id: 'tiktok', icon: TikTokIcon, label: 'TikTok', color: '#000000', type: 'content', platform: 'tiktok' },
+  { id: 'youtube', icon: YouTubeIcon, label: 'YouTube', color: '#FF0000', type: 'content', platform: 'youtube' },
   { id: 'website', icon: Globe, label: 'Website URL', color: '#3B82F6', type: 'content', platform: 'website' }
 ];
 
-export const CanvasSidebar: React.FC = () => {
-  const [isExpanded, setIsExpanded] = useState(false);
+interface CanvasSidebarProps {
+  onOpenSocialMediaModal?: (platform?: string) => void;
+}
+
+export const CanvasSidebar: React.FC<CanvasSidebarProps> = ({ onOpenSocialMediaModal }) => {
   const [draggingTool, setDraggingTool] = useState<Tool | null>(null);
   const [activeTool, setActiveTool] = useState<string | null>(null);
+  const [hoveredTool, setHoveredTool] = useState<string | null>(null);
   const { addElement, elements } = useCanvasStore();
 
   const handleDragStart = (e: React.DragEvent, tool: Tool) => {
@@ -46,76 +51,96 @@ export const CanvasSidebar: React.FC = () => {
   };
 
   const handleToolClick = (tool: Tool) => {
+    console.log('[CanvasSidebar] Tool clicked:', tool.id, tool.type);
+    
+    // Check if it's a social media platform and modal handler is available
+    const socialMediaPlatforms = ['instagram', 'tiktok', 'youtube'];
+    if (socialMediaPlatforms.includes(tool.id) && onOpenSocialMediaModal) {
+      onOpenSocialMediaModal(tool.platform);
+      return;
+    }
+    
     // Get canvas center position
     const canvasElement = document.querySelector('.canvas-background');
     if (!canvasElement) return;
-
+    
     const rect = canvasElement.getBoundingClientRect();
-    const centerX = rect.width / 2 - 150; // Subtract half of element width
-    const centerY = rect.height / 2 - 100; // Subtract half of element height
-
-    // Create new element at center
-    const newElement = {
-      id: Date.now(),
-      type: tool.type as 'chat' | 'content',
-      x: centerX,
-      y: centerY,
-      width: tool.type === 'chat' ? 320 : 300,
-      height: tool.type === 'chat' ? 400 : 350,
-      platform: tool.platform,
-      title: tool.type === 'chat' ? 'AI Chat' : `New ${tool.label} Content`,
-      url: tool.type === 'content' ? 'https://example.com' : undefined,
-      thumbnail: tool.type === 'content' ? 'https://via.placeholder.com/300x200' : undefined,
-      messages: tool.type === 'chat' ? [] : undefined
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
+    
+    // Find next available ID
+    const maxId = elements.length > 0 ? Math.max(...elements.map(el => el.id)) : 0;
+    const newId = maxId + 1;
+    
+    // Create element based on type
+    const baseElement = {
+      id: newId,
+      x: centerX - 150,
+      y: centerY - 150,
+      width: tool.type === 'chat' ? 600 : 300,
+      height: tool.type === 'chat' ? 700 : 300,
+      title: tool.label,
     };
-
-    addElement(newElement);
+    
+    if (tool.type === 'chat') {
+      addElement({
+        ...baseElement,
+        type: 'chat',
+        messages: [],
+        conversations: [{
+          id: 'default',
+          title: 'New Conversation',
+          messages: [],
+          createdAt: new Date()
+        }]
+      });
+    } else {
+      addElement({
+        ...baseElement,
+        type: 'content',
+        url: '',
+        platform: tool.platform || 'website',
+        thumbnail: `https://via.placeholder.com/300x200?text=${encodeURIComponent(tool.label)}`,
+      });
+    }
+    
     setActiveTool(tool.id);
     setTimeout(() => setActiveTool(null), 300);
   };
 
   return (
     <div
-      className={`fixed left-4 top-1/2 -translate-y-1/2 bg-white rounded-xl shadow-lg transition-all duration-200 ease-out z-40 ${
-        isExpanded ? 'w-60' : 'w-16'
-      }`}
-      data-sidebar
-      onMouseEnter={() => setIsExpanded(true)}
-      onMouseLeave={() => setIsExpanded(false)}
+      className="fixed left-4 top-1/2 -translate-y-1/2 bg-white rounded-lg shadow-lg z-30 p-1.5"
+      data-toolbar
     >
-      <div className="p-2">
-        {tools.map((tool, index) => {
+      <div className="flex flex-col gap-1.5">
+        {tools.map((tool) => {
           const Icon = tool.icon;
           return (
-            <button
-              key={tool.id}
-              draggable
-              onDragStart={(e) => handleDragStart(e, tool)}
-              onDragEnd={handleDragEnd}
-              onClick={() => handleToolClick(tool)}
-              className={`w-full flex items-center gap-3 p-3 rounded-lg transition-all duration-200 cursor-grab active:cursor-grabbing hover:scale-105 hover:shadow-md outline-none focus:outline-none ${
-                activeTool === tool.id ? 'scale-95' : ''
-              } ${draggingTool?.id === tool.id ? 'opacity-50' : ''}`}
-              style={{
-                backgroundColor: activeTool === tool.id ? tool.color : 'transparent',
-                color: activeTool === tool.id ? 'white' : '#374151'
-              }}
-              title={tool.label}
-            >
-              <div 
-                className={`flex-shrink-0 transition-colors duration-200`}
-                style={{ color: activeTool === tool.id ? 'white' : tool.color }}
+            <div key={tool.id} className="relative">
+              <button
+                draggable
+                onDragStart={(e) => handleDragStart(e, tool)}
+                onDragEnd={handleDragEnd}
+                onClick={() => handleToolClick(tool)}
+                onMouseEnter={() => setHoveredTool(tool.id)}
+                onMouseLeave={() => setHoveredTool(null)}
+                className={`relative p-2.5 rounded-md transition-all duration-150 cursor-pointer hover:bg-gray-100 active:scale-95 ${
+                  activeTool === tool.id ? 'bg-gray-100' : ''
+                } ${draggingTool?.id === tool.id ? 'opacity-50' : ''}`}
               >
-                <Icon className="w-6 h-6" />
-              </div>
-              <span 
-                className={`text-sm font-medium whitespace-nowrap transition-all duration-200 ${
-                  isExpanded ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-2'
-                }`}
-              >
-                {tool.label}
-              </span>
-            </button>
+                <Icon className="w-6 h-6" size={24} style={{ color: tool.color }} />
+              </button>
+              
+              {/* Tooltip */}
+              {hoveredTool === tool.id && (
+                <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 pointer-events-none z-50">
+                  <div className="bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
+                    {tool.label}
+                  </div>
+                </div>
+              )}
+            </div>
           );
         })}
       </div>

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Loader2, MessageSquare, Plus, Send, X, ChevronLeft, ChevronRight, Search, Lightbulb, FileText, Upload, ChevronDown, Bot, User, Link2 } from 'lucide-react';
+import { Loader2, MessageSquare, Plus, Send, X, ChevronLeft, ChevronRight, Lightbulb, FileText, Upload, ChevronDown, Bot, User, Link2 } from 'lucide-react';
 import { ChatElement, Connection, ContentElement, Message, Model } from '@/types';
 
 interface ChatInterfaceProps {

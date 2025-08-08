@@ -28,8 +28,6 @@ interface CanvasWorkspaceProps {
   onSave?: (state: CanvasState) => void;
 }
 
-import { mockElements, mockConnections } from '@/data/mockCanvasData';
-
 export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
   workspaceId,
   initialState,
@@ -38,10 +36,10 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
 }) => {
   // Canvas state
   const [elements, setElements] = useState<Record<string, CanvasElement>>(
-    initialState?.elements || mockElements
+    initialState?.elements || {}
   );
   const [connections, setConnections] = useState<Connection[]>(
-    initialState?.connections || mockConnections
+    initialState?.connections || []
   );
   const [viewport, setViewport] = useState<Viewport>(
     initialState?.viewport || { x: 0, y: 0, zoom: 1 }
@@ -109,11 +107,28 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
 
   // Element handlers
   const handleAddElement = useCallback((element: CanvasElement) => {
-    setElements(prev => ({
-      ...prev,
-      [element.id]: element
-    }));
-  }, []);
+    console.log('[CanvasWorkspace] handleAddElement called with:', element);
+    setElements(prev => {
+      const updated = {
+        ...prev,
+        [element.id]: element
+      };
+      console.log('[CanvasWorkspace] Elements after update:', Object.keys(updated).length, 'elements');
+      return updated;
+    });
+    
+    // Notify parent of state change
+    if (onStateChange) {
+      const newState = {
+        elements: { ...elements, [element.id]: element },
+        connections,
+        viewport,
+        selection: { elementIds: selectedElementIds, connectionIds: [] },
+        clipboard: clipboard || undefined
+      };
+      onStateChange(newState);
+    }
+  }, [elements, connections, viewport, selectedElementIds, clipboard, onStateChange]);
 
   const handleElementUpdate = useCallback((id: string, updates: Partial<CanvasElement>) => {
     setElements(prev => ({
@@ -296,7 +311,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
         newElement = {
           ...baseElement,
           type: 'chat',
-          dimensions: { width: 420, height: 500 },
+          dimensions: { width: 600, height: 700 },
           title: 'New AI Chat',
           model: 'gpt-4',
           messages: [],
@@ -308,7 +323,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
           ...baseElement,
           type: 'folder',
           dimensions: { width: 350, height: 250 },
-          name: 'New Folder',
+          name: 'New Profile Collection',
           description: '',
           color: tool.color || '#3B82F6',
           childIds: [],
@@ -393,7 +408,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
             id: `chat-${Date.now()}`,
             type: 'chat',
             position: { x: 200, y: 200 },
-            dimensions: { width: 400, height: 500 },
+            dimensions: { width: 600, height: 700 },
             zIndex: 2,
             isVisible: true,
             isLocked: false,
@@ -427,9 +442,19 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
         <div 
           className={`absolute inset-0 canvas-background ${isPanning ? 'cursor-grabbing' : 'cursor-grab'}`}
           style={{
-            backgroundImage: 'radial-gradient(circle, #d1d5db 1px, transparent 1px)',
-            backgroundSize: `${20 * viewport.zoom}px ${20 * viewport.zoom}px`,
-            backgroundPosition: `${viewport.x}px ${viewport.y}px`
+            // Keep dots visible until very low zoom levels
+            opacity: viewport.zoom < 0.25 ? 0 : viewport.zoom < 0.4 ? (viewport.zoom - 0.25) * 6.67 : 1,
+            // Use consistent dot appearance
+            backgroundImage: viewport.zoom < 0.25 
+              ? 'none'
+              : `radial-gradient(circle, #d4d4d8 1px, transparent 1px)`,
+            // Scale grid size with zoom, with larger spacing when zoomed out
+            backgroundSize: viewport.zoom < 0.5 
+              ? '40px 40px'  // Fixed larger grid when zoomed out
+              : `${20 * viewport.zoom}px ${20 * viewport.zoom}px`, // Scale with zoom when zoomed in
+            backgroundPosition: `${viewport.x}px ${viewport.y}px`,
+            backgroundColor: '#fafafa',
+            transition: 'opacity 0.15s ease-out'
           }}
         />
         

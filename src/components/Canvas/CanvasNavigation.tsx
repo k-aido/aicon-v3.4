@@ -42,51 +42,50 @@ export const CanvasNavigation: React.FC = () => {
   };
 
   return (
-    <nav className="fixed top-0 left-0 right-0 h-16 bg-white border-b border-gray-200 z-50 flex items-center px-6">
-      {/* Logo Section */}
-      <div className="flex items-center gap-3">
-        <button 
-          className="flex items-center gap-2 hover:bg-gray-100 p-2 rounded-lg transition-colors"
-          onClick={() => window.location.href = '/'}
-          title="Go to Dashboard"
+    <nav className="fixed top-4 left-4 h-12 bg-white rounded-lg shadow-lg z-50 flex items-center px-4" style={{ width: 'auto' }}>
+      {/* Home Button */}
+      <button 
+        className="p-2 hover:bg-gray-100 rounded-md transition-colors"
+        onClick={() => window.location.href = '/dashboard'}
+        title="Go to Dashboard"
+      >
+        <Home className="w-5 h-5 text-gray-700" />
+      </button>
+
+      {/* AICON Logo */}
+      <div className="ml-3">
+        <span className="text-lg font-bold text-gray-900">AICON</span>
+      </div>
+
+      {/* Separator */}
+      <div className="mx-3 h-6 w-px bg-gray-300"></div>
+
+      {/* Canvas Title */}
+      {isEditing ? (
+        <input
+          ref={inputRef}
+          type="text"
+          value={editValue}
+          onChange={(e) => setEditValue(e.target.value)}
+          onBlur={handleSave}
+          onKeyDown={handleKeyDown}
+          maxLength={50}
+          className="text-sm font-medium text-gray-700 bg-transparent border-b-2 border-blue-500 outline-none px-1"
+          style={{ minWidth: '150px' }}
+        />
+      ) : (
+        <div
+          onDoubleClick={handleDoubleClick}
+          className="relative group cursor-text"
         >
-          <Home className="w-5 h-5 text-gray-700" />
-          <span className="text-lg font-semibold text-gray-900">AICON</span>
-        </button>
-      </div>
-
-      {/* Canvas Title - Centered */}
-      <div className="flex-1 flex justify-center">
-        {isEditing ? (
-          <input
-            ref={inputRef}
-            type="text"
-            value={editValue}
-            onChange={(e) => setEditValue(e.target.value)}
-            onBlur={handleSave}
-            onKeyDown={handleKeyDown}
-            maxLength={50}
-            className="text-xl font-semibold text-gray-800 bg-transparent border-b-2 border-blue-500 outline-none px-2 py-1"
-            style={{ minWidth: '200px', maxWidth: '400px' }}
-          />
-        ) : (
-          <div
-            onDoubleClick={handleDoubleClick}
-            className="relative group cursor-text"
-          >
-            <h1 className="text-xl font-semibold text-gray-800 px-2 py-1">
-              {canvasTitle}
-            </h1>
-            <div className="absolute inset-0 border-2 border-transparent group-hover:border-gray-300 rounded-md transition-colors" />
-            <span className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-              Double-click to edit
-            </span>
-          </div>
-        )}
-      </div>
-
-      {/* Right spacer for balance */}
-      <div className="w-[140px]" />
+          <h1 className="text-sm font-medium text-gray-700 pr-4">
+            {canvasTitle}
+          </h1>
+          <span className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+            Double-click to edit
+          </span>
+        </div>
+      )}
     </nav>
   );
 };

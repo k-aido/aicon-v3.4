@@ -17,6 +17,7 @@ interface CanvasProps {
   connecting: number | null;
   setConnecting: React.Dispatch<React.SetStateAction<number | null>>;
   onOpenAnalysisPanel?: (content: ContentElementType) => void;
+  onOpenSocialMediaModal?: (platform?: string) => void;
 }
 
 /**
@@ -31,7 +32,8 @@ const CanvasComponent: React.FC<CanvasProps> = ({
   setConnections,
   connecting,
   setConnecting,
-  onOpenAnalysisPanel
+  onOpenAnalysisPanel,
+  onOpenSocialMediaModal
 }) => {
   const canvasRef = useRef<HTMLDivElement>(null);
   const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, zoom: 1 });
@@ -404,7 +406,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
   return (
     <div 
       ref={canvasRef}
-      className="flex-1 bg-gray-100 relative overflow-hidden"
+      className="flex-1 bg-gray-50 relative overflow-hidden"
       data-canvas="true"
       tabIndex={0}
       onWheel={handleWheel}
@@ -421,9 +423,19 @@ const CanvasComponent: React.FC<CanvasProps> = ({
         className={`absolute inset-0 canvas-background ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
         onMouseDown={handleCanvasClick}
         style={{
-          backgroundImage: 'radial-gradient(circle, #e5e7eb 1px, transparent 1px)',
-          backgroundSize: `${20 * viewport.zoom}px ${20 * viewport.zoom}px`,
-          backgroundPosition: `${viewport.x}px ${viewport.y}px`
+          // Keep dots visible until very low zoom levels
+          opacity: viewport.zoom < 0.25 ? 0 : viewport.zoom < 0.4 ? (viewport.zoom - 0.25) * 6.67 : 1,
+          // Use consistent dot appearance
+          backgroundImage: viewport.zoom < 0.25 
+            ? 'none'
+            : `radial-gradient(circle, #d4d4d8 1px, transparent 1px)`,
+          // Scale grid size with zoom, with larger spacing when zoomed out
+          backgroundSize: viewport.zoom < 0.5 
+            ? '40px 40px'  // Fixed larger grid when zoomed out
+            : `${20 * viewport.zoom}px ${20 * viewport.zoom}px`, // Scale with zoom when zoomed in
+          backgroundPosition: `${viewport.x}px ${viewport.y}px`,
+          backgroundColor: '#fafafa',
+          transition: 'opacity 0.15s ease-out'
         }}
       />
       
@@ -585,6 +597,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
           </button>
         </div>
       </div>
+
     </div>
   );
 };

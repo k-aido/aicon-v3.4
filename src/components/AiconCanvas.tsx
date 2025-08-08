@@ -3,8 +3,11 @@ import { Canvas } from './Canvas/Canvas';
 import { CanvasNavigation } from './Canvas/CanvasNavigation';
 import { CanvasSidebar } from './Canvas/CanvasSidebar';
 import { AnalysisPanel } from './Canvas/AnalysisPanel';
+import { SocialMediaModal } from './Modal/SocialMediaModal';
 import { useCanvasStore } from '@/store/canvasStore';
 import { ContentElement, CanvasElement as ImportedCanvasElement, Connection as ImportedConnection } from '@/types';
+import { canvasPersistence } from '@/services/canvasPersistence';
+import { useRouter } from 'next/navigation';
 
 // Use store's Element type instead of imported CanvasElement
 type Element = {
@@ -30,14 +33,70 @@ type Connection = {
   to: number;
 };
 
-const AiconCanvasApp = () => {
+interface AiconCanvasAppProps {
+  canvasId?: string;
+}
+
+const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
   const [selectedElement, setSelectedElement] = useState<Element | null>(null);
   const [connecting, setConnecting] = useState<number | null>(null);
   const [analysisPanel, setAnalysisPanel] = useState<{ isOpen: boolean; content: ContentElement | null }>({
     isOpen: false,
     content: null
   });
-  const { elements, connections, addElement, updateElement, deleteElement, addConnection, deleteConnection } = useCanvasStore();
+  const [socialMediaModal, setSocialMediaModal] = useState<{ isOpen: boolean; platform?: string }>({
+    isOpen: false,
+    platform: undefined
+  });
+  const [isLoading, setIsLoading] = useState(true);
+  const { elements, connections, addElement, updateElement, deleteElement, addConnection, deleteConnection, setCanvasTitle } = useCanvasStore();
+  const router = useRouter();
+
+  // Load canvas data if canvasId is provided
+  useEffect(() => {
+    const loadCanvas = async () => {
+      if (canvasId && canvasId !== 'new') {
+        try {
+          console.log(`[AiconCanvas] Loading canvas: ${canvasId}`);
+          const { workspace, elements: loadedElements, connections: loadedConnections } = await canvasPersistence.loadCanvas(canvasId);
+          
+          if (workspace) {
+            console.log(`[AiconCanvas] Canvas loaded:`, { 
+              title: workspace.title, 
+              elementsCount: loadedElements.length,
+              connectionsCount: loadedConnections.length 
+            });
+            
+            // Set canvas title
+            setCanvasTitle(workspace.title);
+            
+            // Clear existing elements and connections
+            elements.forEach(el => deleteElement(el.id));
+            connections.forEach(conn => deleteConnection(conn.id));
+            
+            // Load elements
+            loadedElements.forEach(element => {
+              addElement(element);
+            });
+            
+            // Load connections
+            loadedConnections.forEach(connection => {
+              addConnection(connection);
+            });
+          } else {
+            console.error('[AiconCanvas] Canvas not found:', canvasId);
+            // Redirect to dashboard if canvas not found
+            router.push('/dashboard');
+          }
+        } catch (error) {
+          console.error('[AiconCanvas] Error loading canvas:', error);
+        }
+      }
+      setIsLoading(false);
+    };
+
+    loadCanvas();
+  }, [canvasId]); // Only depend on canvasId to avoid re-running on state changes
 
   // Auto-analyze content when added to canvas
   useEffect(() => {
@@ -168,12 +227,31 @@ const AiconCanvasApp = () => {
     setAnalysisPanel({ isOpen: false, content: null });
   };
 
+  const handleOpenSocialMediaModal = (platform?: string) => {
+    setSocialMediaModal({ isOpen: true, platform });
+  };
+
+  const handleCloseSocialMediaModal = () => {
+    setSocialMediaModal({ isOpen: false, platform: undefined });
+  };
+
+  if (isLoading) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading canvas...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="h-screen flex flex-col bg-gray-50">
       <CanvasNavigation />
       
-      <div className="flex-1 flex relative" style={{ marginTop: '64px' }}>
-        <CanvasSidebar />
+      <div className="flex-1 flex relative">
+        <CanvasSidebar onOpenSocialMediaModal={handleOpenSocialMediaModal} />
         
         <Canvas
           elements={canvasElements}
@@ -185,6 +263,7 @@ const AiconCanvasApp = () => {
           connecting={connecting}
           setConnecting={setConnecting}
           onOpenAnalysisPanel={handleOpenAnalysisPanel}
+          onOpenSocialMediaModal={handleOpenSocialMediaModal}
         />
       </div>
 
@@ -193,6 +272,13 @@ const AiconCanvasApp = () => {
         isOpen={analysisPanel.isOpen}
         content={analysisPanel.content}
         onClose={handleCloseAnalysisPanel}
+      />
+
+      {/* Social Media Modal */}
+      <SocialMediaModal
+        isOpen={socialMediaModal.isOpen}
+        onClose={handleCloseSocialMediaModal}
+        platform={socialMediaModal.platform}
       />
     </div>
   );

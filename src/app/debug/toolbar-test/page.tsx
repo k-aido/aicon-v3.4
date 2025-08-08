@@ -23,7 +23,6 @@ export default function ToolbarTestPage() {
     <div className="relative w-screen h-screen bg-gray-50">
       <CanvasToolbar
         onAddElement={handleAddElement}
-        onUpdateElement={handleUpdateElement}
         viewport={viewport}
       />
       

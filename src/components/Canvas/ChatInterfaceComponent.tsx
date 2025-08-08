@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageSquare, Send, ChevronLeft, ChevronRight, Loader2, Link2, Bot, User, MoreVertical, X, Plus, Search, Lightbulb, FileText, Upload, ChevronDown } from 'lucide-react';
+import { MessageSquare, Send, ChevronLeft, ChevronRight, Loader2, Link2, Bot, User, MoreVertical, X, Plus, Lightbulb, FileText, ChevronDown } from 'lucide-react';
 import { ChatData, ContentPiece, ChatMessage, Connection } from '@/types/canvas';
 import { ConnectionPoint } from './ConnectionPoint';
 import { useElementDrag } from '@/hooks/useElementDrag';
@@ -72,7 +72,6 @@ export const ChatInterfaceComponent: React.FC<ChatInterfaceComponentProps> = Rea
     const stored = conversationStorage.get(element.id);
     return stored?.activeConversationId || 'default';
   });
-  const [dragOver, setDragOver] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -191,37 +190,48 @@ export const ChatInterfaceComponent: React.FC<ChatInterfaceComponentProps> = Rea
       if (onSendMessage) {
         await onSendMessage(element.id, newMessage.content, connectedContent);
       } else {
-        // Mock response with connected content context
-        setTimeout(() => {
-          const context = getConnectedContentContext();
-          let responseContent = '';
-          
-          if (isPreset) {
-            if (messageContent.includes('key insights')) {
-              responseContent = `Based on the ${connectedContent.length} connected content pieces, here are the key insights:\n\n${context.map((c, i) => `${i + 1}. ${c.title} (${c.platform}): ${c.analysis?.summary || 'Quality content with strong engagement potential'}`).join('\n\n')}`;
-            } else if (messageContent.includes('summarize')) {
-              responseContent = `Here's a summary of your connected content:\n\n${context.map((c, i) => `${i + 1}. **${c.title}**\n   Platform: ${c.platform}\n   Analysis: ${c.analysis?.keyPoints?.slice(0, 2).join(', ') || 'Engaging content with educational value'}`).join('\n\n')}`;
-            }
-          } else {
-            responseContent = `I understand your question about "${newMessage.content}". ${context.length > 0 ? `Based on the ${context.length} connected content pieces, here's my analysis using ${selectedModel}...` : 'I\'m ready to help you analyze content when you connect some pieces to this chat!'}`;
-          }
+        // Use actual chat API
+        const response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: updatedMessages,
+            model: selectedModel,
+            connectedContent: getConnectedContentContext()
+          })
+        });
 
-          const mockResponse: ChatMessage = {
-            id: (Date.now() + 1).toString(),
-            role: 'assistant',
-            content: responseContent,
-            timestamp: new Date()
-          };
-          
-          updateCurrentConversation({ 
-            messages: [...updatedMessages, mockResponse],
-            lastMessageAt: new Date()
-          });
-          setIsLoading(false);
-        }, 1500);
+        const data = await response.json();
+        
+        if (data.error) {
+          throw new Error(data.error);
+        }
+
+        const aiResponse: ChatMessage = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: data.content,
+          timestamp: new Date()
+        };
+        
+        updateCurrentConversation({ 
+          messages: [...updatedMessages, aiResponse],
+          lastMessageAt: new Date()
+        });
       }
     } catch (error) {
       console.error('Error sending message:', error);
+      const errorMessage: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: 'Sorry, I encountered an error. Please try again.',
+        timestamp: new Date()
+      };
+      updateCurrentConversation({ 
+        messages: [...updatedMessages, errorMessage],
+        lastMessageAt: new Date()
+      });
+    } finally {
       setIsLoading(false);
     }
   };
@@ -237,23 +247,6 @@ export const ChatInterfaceComponent: React.FC<ChatInterfaceComponentProps> = Rea
     sendMessageWithContext('Summarize the connected content pieces', true);
   };
 
-  // File drag and drop handlers
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
-    // Handle file upload logic here
-    console.log('Files dropped:', e.dataTransfer.files);
-  };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -311,7 +304,7 @@ export const ChatInterfaceComponent: React.FC<ChatInterfaceComponentProps> = Rea
             isSidebarCollapsed ? 'w-0' : 'w-64'
           } bg-gradient-to-b from-purple-800/20 to-blue-800/20 rounded-l-lg overflow-hidden border-r border-purple-500/20`}>
             {!isSidebarCollapsed && (
-              <div className="p-4 h-full flex flex-col">
+              <div className="p-4">
                 {/* New Conversation Button */}
                 <button
                   onClick={createNewConversation}
@@ -322,34 +315,30 @@ export const ChatInterfaceComponent: React.FC<ChatInterfaceComponentProps> = Rea
                   New Conversation
                 </button>
 
-                {/* Previous Conversations */}
+                {/* Conversations List */}
                 <div className="mb-4">
-                  <h3 className="text-purple-300 text-sm font-semibold mb-2">Previous Conversations</h3>
-                  <div className="space-y-1 max-h-32 overflow-y-auto">
+                  <div className="space-y-1">
                     {conversations.map((conv) => (
                       <button
                         key={conv.id}
                         onClick={() => switchConversation(conv.id)}
-                        className={`w-full text-left p-2 rounded text-sm transition-colors ${
+                        className={`w-full text-left p-3 rounded-lg text-sm transition-colors ${
                           conv.id === activeConversationId 
-                            ? 'bg-purple-600/30 text-purple-200 border border-purple-500/40' 
-                            : 'text-gray-300 hover:bg-purple-600/10'
+                            ? 'bg-purple-600/30 text-white' 
+                            : 'text-gray-300 hover:bg-purple-600/20'
                         }`}
                         data-no-drag
                       >
-                        <div className="truncate">{conv.title}</div>
-                        <div className="text-xs text-gray-400 mt-1">
-                          {conv.messages.length} messages
-                        </div>
+                        <div className="truncate font-medium">{conv.title}</div>
                       </button>
                     ))}
                   </div>
                 </div>
 
                 {/* Connected Content */}
-                <div className="flex-1">
+                <div>
                   <h3 className="text-blue-300 text-sm font-semibold mb-2">Connected Content</h3>
-                  <div className="flex-1 overflow-y-auto space-y-2">
+                  <div className="space-y-2">
                     {connectedContent.length === 0 ? (
                       <p className="text-gray-400 text-xs">No content connected</p>
                     ) : (
@@ -508,51 +497,26 @@ export const ChatInterfaceComponent: React.FC<ChatInterfaceComponentProps> = Rea
 
             {/* Enhanced Input Area */}
             <div className="p-3 bg-gradient-to-r from-purple-800/40 to-blue-800/40 rounded-br-lg border-t border-purple-500/20" data-no-drag>
-              {/* Bottom Toolbar */}
-              <div className="flex items-center justify-between mb-3 px-2">
-                {/* Left side - File upload */}
-                <div 
-                  className={`flex items-center gap-2 p-2 rounded-lg border-2 border-dashed transition-colors ${
-                    dragOver 
-                      ? 'border-purple-400 bg-purple-500/10' 
-                      : 'border-gray-600 hover:border-purple-500/50'
-                  }`}
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
+              {/* Action buttons */}
+              <div className="flex justify-end gap-2 mb-3">
+                <button
+                  onClick={handleGetInsights}
+                  disabled={isLoading || connectedContent.length === 0}
+                  className="px-3 py-2 bg-purple-600/30 hover:bg-purple-600/50 disabled:bg-gray-600/30 text-purple-300 disabled:text-gray-500 rounded-lg transition-colors text-xs flex items-center gap-1"
+                  title="Get Key Insights"
                 >
-                  <Upload className="w-4 h-4 text-purple-400" />
-                  <span className="text-xs text-purple-300">Drop images here</span>
-                </div>
-
-                {/* Right side - Action buttons */}
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => console.log('Search functionality')}
-                    className="p-2 bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 rounded-lg transition-colors"
-                    title="Search"
-                  >
-                    <Search className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={handleGetInsights}
-                    disabled={isLoading || connectedContent.length === 0}
-                    className="px-3 py-2 bg-purple-600/30 hover:bg-purple-600/50 disabled:bg-gray-600/30 text-purple-300 disabled:text-gray-500 rounded-lg transition-colors text-xs flex items-center gap-1"
-                    title="Get Key Insights"
-                  >
-                    <Lightbulb className="w-3 h-3" />
-                    Insights
-                  </button>
-                  <button
-                    onClick={handleSummarize}
-                    disabled={isLoading || connectedContent.length === 0}
-                    className="px-3 py-2 bg-indigo-600/30 hover:bg-indigo-600/50 disabled:bg-gray-600/30 text-indigo-300 disabled:text-gray-500 rounded-lg transition-colors text-xs flex items-center gap-1"
-                    title="Summarize Content"
-                  >
-                    <FileText className="w-3 h-3" />
-                    Summarize
-                  </button>
-                </div>
+                  <Lightbulb className="w-3 h-3" />
+                  Insights
+                </button>
+                <button
+                  onClick={handleSummarize}
+                  disabled={isLoading || connectedContent.length === 0}
+                  className="px-3 py-2 bg-indigo-600/30 hover:bg-indigo-600/50 disabled:bg-gray-600/30 text-indigo-300 disabled:text-gray-500 rounded-lg transition-colors text-xs flex items-center gap-1"
+                  title="Summarize Content"
+                >
+                  <FileText className="w-3 h-3" />
+                  Summarize
+                </button>
               </div>
 
               {/* Message Input */}

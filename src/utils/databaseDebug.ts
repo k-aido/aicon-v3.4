@@ -304,14 +304,14 @@ export class DatabaseDebugger {
 
       if (policyError) {
         return {
-          enabled: tableInfo?.rls_enabled || false,
+          enabled: (tableInfo as any)?.rls_enabled || false,
           policies: [],
           error: policyError.message
         };
       }
 
       return {
-        enabled: tableInfo?.rls_enabled || false,
+        enabled: (tableInfo as any)?.rls_enabled || false,
         policies: policies || []
       };
     } catch (error) {

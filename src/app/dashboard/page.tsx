@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { User, Sprout, Search, Home, Clock, Star } from 'lucide-react';
+import { User, Sprout, Search, Home, Star } from 'lucide-react';
 import { canvasPersistence } from '@/services/canvasPersistence';
 import { createBrowserClient } from '@/lib/supabase/client';
 

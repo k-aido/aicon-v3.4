@@ -12,13 +12,6 @@ export default function ToolbarTestPage() {
     setElements(prev => [...prev, element]);
   };
 
-  const handleUpdateElement = (id: string, updates: any) => {
-    console.log('Updating element:', id, updates);
-    setElements(prev => prev.map(el => 
-      el.id === id ? { ...el, ...updates } : el
-    ));
-  };
-
   return (
     <div className="relative w-screen h-screen bg-gray-50">
       <CanvasToolbar

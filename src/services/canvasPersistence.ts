@@ -13,7 +13,6 @@
  */
 
 import { createBrowserClient } from '../../lib/supabase/client';
-import type { Database } from '@/types/database';
 
 // Types matching the existing database schema
 export interface Project {
@@ -22,6 +21,7 @@ export interface Project {
   created_by_user_id?: string;
   title: string;
   description?: string;
+  project_type?: string;  // Optional project type field
   canvas_data?: {
     viewport?: {
       x: number;
@@ -283,7 +283,7 @@ class CanvasPersistenceService {
     return {
       ...project,
       user_id: project.created_by_user_id || project.account_id, // For compatibility
-      name: project.title, // For compatibility
+      title: project.title, // Already has title from Project
       last_accessed: project.last_accessed_at || project.updated_at,
       access_count: 0,
       viewport: project.canvas_data?.viewport || { x: 0, y: 0, zoom: 1.0 },
@@ -325,7 +325,7 @@ class CanvasPersistenceService {
       const { data, error, count } = await this.supabase
         .from('projects')
         .select('*', { count: 'exact' })
-        .eq('id', DEMO_PROJECT_ID);
+        .eq('id', DEMO_PROJECT_ID) as { data: Project[] | null; error: any; count: number | null };
 
       console.log('[CanvasPersistence] Demo project query result:', {
         data,
@@ -363,7 +363,7 @@ class CanvasPersistenceService {
       const { data: accountProjects, error: accountError } = await this.supabase
         .from('projects')
         .select('*')
-        .eq('account_id', DEMO_ACCOUNT_ID);
+        .eq('account_id', DEMO_ACCOUNT_ID) as { data: Project[] | null; error: any };
         
       console.log('[CanvasPersistence] Account projects query result:', {
         data: accountProjects,
@@ -455,7 +455,7 @@ class CanvasPersistenceService {
       const { data, error } = await this.supabase
         .from('projects')
         .select('*')
-        .eq('id', workspaceId);
+        .eq('id', workspaceId) as { data: Project[] | null; error: any };
 
       console.log('[CanvasPersistence] Workspace query result:', {
         data,
@@ -524,7 +524,7 @@ class CanvasPersistenceService {
         .from('projects')
         .select('*')
         .eq('account_id', accountId)
-        .order('updated_at', { ascending: false });
+        .order('updated_at', { ascending: false }) as { data: Project[] | null; error: any };
 
       if (error) {
         console.error('[CanvasPersistence] Error fetching user projects:', error);
@@ -617,7 +617,7 @@ class CanvasPersistenceService {
         .from('canvas_elements')
         .select('*')
         .eq('workspace_id', workspaceId)
-        .order('created_at', { ascending: true });
+        .order('created_at', { ascending: true }) as { data: CanvasElementDB[] | null; error: any };
 
       if (error) {
         console.error('[CanvasPersistence] Error loading elements:', error);
@@ -755,9 +755,10 @@ class CanvasPersistenceService {
       const project = projectData[0];
 
       // Update canvas_data in projects table
+      const existingCanvasData = project?.canvas_data || {};
       const updatedCanvasData = {
-        ...project?.canvas_data,
-        viewport: viewport || project?.canvas_data?.viewport || { x: 0, y: 0, zoom: 1.0 },
+        ...existingCanvasData,
+        viewport: viewport || (existingCanvasData as any)?.viewport || { x: 0, y: 0, zoom: 1.0 },
         elements: elements,
         connections: connections,
         last_saved: new Date().toISOString()
@@ -804,7 +805,7 @@ class CanvasPersistenceService {
       const { data: projectData, error } = await this.supabase
         .from('projects')
         .select('*')
-        .eq('id', workspaceId);
+        .eq('id', workspaceId) as { data: Project[] | null; error: any };
 
       console.log('[CanvasPersistence] Load canvas query result:', {
         data: projectData,
@@ -835,11 +836,12 @@ class CanvasPersistenceService {
       const workspace = this.projectToWorkspace(project);
 
       // Try to load from canvas_data first (faster)
-      if (project.canvas_data?.elements && project.canvas_data?.connections) {
+      const canvasData = project.canvas_data as any;
+      if (canvasData?.elements && canvasData?.connections) {
         return {
           workspace,
-          elements: project.canvas_data.elements,
-          connections: project.canvas_data.connections
+          elements: canvasData.elements,
+          connections: canvasData.connections
         };
       }
 
@@ -906,7 +908,7 @@ class CanvasPersistenceService {
         .limit(1)
         .single();
 
-      const nextVersion = (latestVersion?.version_number || 0) + 1;
+      const nextVersion = ((latestVersion as any)?.version_number || 0) + 1;
 
       const { error } = await this.supabase
         .from('canvas_versions')
@@ -941,7 +943,7 @@ class CanvasPersistenceService {
         .select('*')
         .eq('workspace_id', workspaceId)
         .order('version_number', { ascending: false })
-        .limit(limit);
+        .limit(limit) as { data: CanvasVersion[] | null; error: any };
 
       if (error) {
         console.error('Error fetching versions:', error);
@@ -977,9 +979,9 @@ class CanvasPersistenceService {
       }
 
       return {
-        elements: data.elements_snapshot,
-        connections: data.connections_snapshot,
-        viewport: data.viewport_snapshot
+        elements: (data as any).elements_snapshot || [],
+        connections: (data as any).connections_snapshot || [],
+        viewport: (data as any).viewport_snapshot
       };
     } catch (error) {
       console.error('Error in restoreVersion:', error);

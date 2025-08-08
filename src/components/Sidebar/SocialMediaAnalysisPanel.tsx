@@ -6,8 +6,21 @@ import {
   Users, Calendar, BarChart3
 } from 'lucide-react';
 import { formatNumber, formatDuration, formatRelativeTime, calculateEngagementRate } from '@/utils/formatters';
-import { supabase } from '@/lib/supabase/client';
-import type { ExtendedContentAnalysis, SocialMediaContent } from '@/types/social-media';
+import { createBrowserClient } from '@/lib/supabase/client';
+// Define types locally since social-media types file doesn't exist
+interface ExtendedContentAnalysis {
+  id?: string;
+  platform?: string;
+  [key: string]: any;
+}
+
+interface SocialMediaContent {
+  id?: string;
+  platform?: string;
+  [key: string]: any;
+}
+
+const supabase = createBrowserClient();
 
 interface SocialMediaAnalysisPanelProps {
   element: any; // Canvas element with social media data
@@ -389,7 +402,7 @@ export const SocialMediaAnalysisPanel: React.FC<SocialMediaAnalysisPanelProps> =
                       <div>
                         <p className="text-sm font-medium text-gray-700 mb-1">Emotional Triggers</p>
                         <div className="flex flex-wrap gap-2">
-                          {analysis.hook_analysis.emotional_triggers.map((trigger, i) => (
+                          {analysis.hook_analysis.emotional_triggers.map((trigger: any, i: number) => (
                             <span key={i} className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">
                               {trigger}
                             </span>
@@ -405,7 +418,7 @@ export const SocialMediaAnalysisPanel: React.FC<SocialMediaAnalysisPanelProps> =
                           <CopyButton text={analysis.hook_analysis.improvements.join('\n')} />
                         </div>
                         <ul className="space-y-1">
-                          {analysis.hook_analysis.improvements.map((improvement, i) => (
+                          {analysis.hook_analysis.improvements.map((improvement: any, i: number) => (
                             <li key={i} className="text-sm text-gray-600 flex items-start gap-2">
                               <span className="text-gray-400 mt-0.5">•</span>
                               <span>{improvement}</span>
@@ -447,7 +460,7 @@ export const SocialMediaAnalysisPanel: React.FC<SocialMediaAnalysisPanelProps> =
                           <CopyButton text={analysis.body_analysis.key_points.join('\n')} />
                         </div>
                         <ul className="space-y-1">
-                          {analysis.body_analysis.key_points.map((point, i) => (
+                          {analysis.body_analysis.key_points.map((point: any, i: number) => (
                             <li key={i} className="text-sm text-gray-600 flex items-start gap-2">
                               <span className="text-blue-500 mt-0.5">{i + 1}.</span>
                               <span>{point}</span>
@@ -511,7 +524,7 @@ export const SocialMediaAnalysisPanel: React.FC<SocialMediaAnalysisPanelProps> =
                       <div>
                         <p className="text-sm font-medium text-gray-700 mb-1">Secondary CTAs</p>
                         <ul className="space-y-1">
-                          {analysis.cta_analysis.secondary_ctas.map((cta, i) => (
+                          {analysis.cta_analysis.secondary_ctas.map((cta: any, i: number) => (
                             <li key={i} className="text-sm text-gray-600 bg-gray-50 rounded px-2 py-1">
                               {cta}
                             </li>
@@ -524,7 +537,7 @@ export const SocialMediaAnalysisPanel: React.FC<SocialMediaAnalysisPanelProps> =
                       <div>
                         <p className="text-sm font-medium text-gray-700 mb-1">Recommendations</p>
                         <ul className="space-y-1">
-                          {analysis.cta_analysis.recommendations.map((rec, i) => (
+                          {analysis.cta_analysis.recommendations.map((rec: any, i: number) => (
                             <li key={i} className="text-sm text-gray-600 flex items-start gap-2">
                               <span className="text-green-500 mt-0.5">✓</span>
                               <span>{rec}</span>

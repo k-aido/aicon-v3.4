@@ -18,7 +18,7 @@ export const useOptimizedCanvasDrag = ({
 }: UseOptimizedCanvasDragProps) => {
   const [isDragging, setIsDragging] = useState(false);
   const dragStartRef = useRef<Position>({ x: 0, y: 0 });
-  const frameRef = useRef<number>();
+  const frameRef = useRef<number | undefined>(undefined);
   
   // Use requestAnimationFrame for smooth updates
   const rafUpdate = useCallback((position: Position) => {

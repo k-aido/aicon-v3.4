@@ -69,8 +69,7 @@ export class EnhancedContentExtractor {
       console.log(`Attempting transcript extraction for YouTube video: ${videoId}`);
       
       const transcriptData = await YoutubeTranscript.fetchTranscript(videoId, {
-        lang: 'en',
-        country: 'US'
+        lang: 'en'
       });
 
       if (transcriptData && transcriptData.length > 0) {

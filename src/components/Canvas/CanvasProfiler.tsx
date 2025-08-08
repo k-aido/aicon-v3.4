@@ -2,7 +2,7 @@ import React, { Profiler, ProfilerOnRenderCallback, useCallback, useRef } from '
 
 interface PerformanceMetrics {
   id: string;
-  phase: 'mount' | 'update';
+  phase: 'mount' | 'update' | 'nested-update';
   actualDuration: number;
   baseDuration: number;
   startTime: number;
@@ -28,14 +28,15 @@ export const CanvasProfiler: React.FC<CanvasProfilerProps> = ({
   const frameCountRef = useRef(0);
   const lastReportRef = useRef(Date.now());
 
-  const handleRender: ProfilerOnRenderCallback = useCallback((
-    profilerId,
-    phase,
-    actualDuration,
-    baseDuration,
-    startTime,
-    commitTime,
-    interactions
+  const handleRender = useCallback((
+    profilerId: any,
+    phase: any,
+    actualDuration: any,
+    baseDuration: any,
+    startTime: any,
+    commitTime: any,
+    interactions: any,
+    ...rest: any[]
   ) => {
     const metrics: PerformanceMetrics = {
       id: profilerId,
@@ -92,7 +93,7 @@ export const CanvasProfiler: React.FC<CanvasProfilerProps> = ({
   }
 
   return (
-    <Profiler id={id} onRender={handleRender}>
+    <Profiler id={id} onRender={handleRender as ProfilerOnRenderCallback}>
       {children}
     </Profiler>
   );

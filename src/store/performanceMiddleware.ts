@@ -76,7 +76,7 @@ type PerformanceMiddleware = <
 ) => StateCreator<T, Mps, Mcs>;
 
 export const performanceMiddleware: PerformanceMiddleware = (config) => (set, get, api) => {
-  const performanceSet: typeof set = (partial, replace) => {
+  const performanceSet = (partial: any, replace?: any) => {
     const startTime = performance.now();
     const stateBefore = get();
     
@@ -89,7 +89,7 @@ export const performanceMiddleware: PerformanceMiddleware = (config) => (set, ge
     }
     
     // Execute the state update
-    set(partial, replace);
+    (set as any)(partial, replace);
     
     // Record metrics
     const endTime = performance.now();
@@ -110,7 +110,7 @@ export const performanceMiddleware: PerformanceMiddleware = (config) => (set, ge
     }
   };
   
-  return config(performanceSet, get, api);
+  return config(performanceSet as any, get, api);
 };
 
 // Debug utilities

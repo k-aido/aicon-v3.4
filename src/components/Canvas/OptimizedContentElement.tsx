@@ -34,12 +34,10 @@ const ContentElementComponent: React.FC<ContentElementProps> = ({
 
   // Element drag handling
   const { isDragging, handleMouseDown } = useElementDrag({
-    element,
-    onDragMove: debouncedPositionChange,
-    onDragEnd: () => {
-      // Flush any pending position updates
-      debouncedPositionChange.flush();
-    }
+    elementId: element.id,
+    initialPosition: { x: element.x, y: element.y },
+    onUpdate: (id, position) => onPositionChange(position),
+    onSelect: () => onSelect()
   });
 
   // Memoized styles for better performance

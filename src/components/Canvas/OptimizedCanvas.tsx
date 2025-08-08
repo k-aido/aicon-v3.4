@@ -1,5 +1,5 @@
 import React, { useState, useRef, useMemo, useCallback, useEffect, memo } from 'react';
-import { CanvasElement, Connection, Viewport, Position, Platform } from '@/types';
+import { CanvasElement, Connection, Viewport, Position } from '@/types';
 import { ContentElement as ContentElementType } from '@/types';
 import { useCanvasDrag } from '@/hooks/useCanvasDrag';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
@@ -26,40 +26,57 @@ const MemoizedCanvasElement = memo<{
   element: CanvasElement;
   isSelected: boolean;
   isConnecting: boolean;
+  connecting: number | null;
+  connections: Connection[];
+  allElements: CanvasElement[];
   onSelect: (element: CanvasElement) => void;
   onPositionChange: (id: number, position: Position) => void;
   onConnect: (id: number) => void;
   onDelete: (id: number) => void;
+  onUpdate: (id: number, updates: Partial<CanvasElement>) => void;
   onOpenAnalysisPanel?: (content: ContentElementType) => void;
 }>(({
   element,
   isSelected,
   isConnecting,
+  connecting,
+  connections,
+  allElements,
   onSelect,
   onPositionChange,
   onConnect,
   onDelete,
+  onUpdate,
   onOpenAnalysisPanel
 }) => {
-  const elementProps = {
-    element,
-    isSelected,
-    onSelect: () => onSelect(element),
-    onPositionChange: (position: Position) => onPositionChange(element.id, position),
-    onConnect: () => onConnect(element.id),
-    onDelete: () => onDelete(element.id)
-  };
-
   if (element.type === 'content') {
     return (
       <ContentElement
-        {...elementProps}
         element={element as ContentElementType}
-        onAnalyze={onOpenAnalysisPanel}
+        selected={isSelected}
+        connecting={connecting}
+        connections={connections}
+        onSelect={(el) => onSelect(el)}
+        onUpdate={(id, updates) => onUpdate(id, updates)}
+        onDelete={(id) => onDelete(id)}
+        onConnectionStart={(id) => onConnect(id)}
+        onReanalyze={onOpenAnalysisPanel}
       />
     );
   } else if (element.type === 'chat') {
-    return <ChatElement {...elementProps} />;
+    return (
+      <ChatElement
+        element={element}
+        selected={isSelected}
+        connecting={connecting}
+        connections={connections}
+        allElements={allElements}
+        onSelect={(el) => onSelect(el)}
+        onUpdate={(id, updates) => onUpdate(id, updates)}
+        onDelete={(id) => onDelete(id)}
+        onConnectionStart={(id) => onConnect(id)}
+      />
+    );
   }
   
   return null;
@@ -140,8 +157,8 @@ const OptimizedCanvas: React.FC<CanvasProps> = ({
 
   // Debounced viewport update for smooth panning
   const debouncedSetViewport = useMemo(
-    () => debounce((newViewport: Viewport) => {
-      setViewport(newViewport);
+    () => debounce((position: { x: number; y: number }) => {
+      setViewport(prev => ({ ...prev, ...position }));
     }, 16), // ~60fps
     []
   );
@@ -149,7 +166,7 @@ const OptimizedCanvas: React.FC<CanvasProps> = ({
   // Canvas drag handling with debounced updates
   const { isDragging, handleMouseDown } = useCanvasDrag({
     onDragMove: useCallback((position) => {
-      debouncedSetViewport(prev => ({ ...prev, ...position }));
+      debouncedSetViewport(position);
     }, [debouncedSetViewport]),
     onDragEnd: useCallback(() => {
       setSelectedElement(null);
@@ -191,6 +208,12 @@ const OptimizedCanvas: React.FC<CanvasProps> = ({
     }
   }, [setElements, setConnections, selectedElement, setSelectedElement]);
 
+  const handleElementUpdate = useCallback((id: number, updates: Partial<CanvasElement>) => {
+    setElements(prev => prev.map(el => 
+      el.id === id ? { ...el, ...updates } as CanvasElement : el
+    ));
+  }, [setElements]);
+
   // Keyboard shortcuts with memoized actions
   const keyboardActions = useMemo(() => ({
     copy: () => {
@@ -226,8 +249,8 @@ const OptimizedCanvas: React.FC<CanvasProps> = ({
   }), [selectedElement, setElements, elements, handleElementDelete]);
 
   useKeyboardShortcuts({
-    selectedElementIds,
-    elements,
+    selectedElementIds: selectedElementIds.map(id => id.toString()),
+    elements: elementsMap as Record<string, any>,
     onCopy: keyboardActions.copy,
     onPaste: keyboardActions.paste,
     onDelete: keyboardActions.delete,
@@ -319,19 +342,16 @@ const OptimizedCanvas: React.FC<CanvasProps> = ({
       >
         {/* Connection Lines */}
         <svg className="absolute inset-0 pointer-events-none" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
-          {visibleConnections.map(connection => {
-            const fromElement = elementsMap[connection.from.toString()];
-            const toElement = elementsMap[connection.to.toString()];
-            if (!fromElement || !toElement) return null;
-            
-            return (
-              <MemoizedConnectionLine
-                key={connection.id}
-                from={{ x: fromElement.x + fromElement.width / 2, y: fromElement.y + fromElement.height / 2 }}
-                to={{ x: toElement.x + toElement.width / 2, y: toElement.y + toElement.height / 2 }}
-              />
-            );
-          })}
+          {visibleConnections.map(connection => (
+            <MemoizedConnectionLine
+              key={connection.id}
+              connection={connection}
+              elements={elements}
+              onDelete={(connectionId) => {
+                setConnections(prev => prev.filter(conn => conn.id !== connectionId));
+              }}
+            />
+          ))}
         </svg>
 
         {/* Canvas Elements - Only render visible ones */}
@@ -342,10 +362,14 @@ const OptimizedCanvas: React.FC<CanvasProps> = ({
               element={element}
               isSelected={selectedElement?.id === element.id}
               isConnecting={connecting === element.id}
+              connecting={connecting}
+              connections={connections}
+              allElements={elements}
               onSelect={handleElementSelect}
               onPositionChange={handleElementPositionChange}
               onConnect={handleElementConnect}
               onDelete={handleElementDelete}
+              onUpdate={handleElementUpdate}
               onOpenAnalysisPanel={onOpenAnalysisPanel}
             />
           ))}

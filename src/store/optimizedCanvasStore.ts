@@ -106,7 +106,7 @@ export const useOptimizedCanvasStore = create<CanvasState>()(
         } else {
           // Immediate update for other changes
           set((state) => {
-            const element = state.elements.find(el => el.id === id);
+            const element = state.elements.find((el: any) => el.id === id);
             if (element) {
               Object.assign(element, updates);
             }
@@ -117,7 +117,7 @@ export const useOptimizedCanvasStore = create<CanvasState>()(
       // Batch update for multiple elements
       updateElements: (updates) => {
         set((state) => {
-          const elementMap = new Map(state.elements.map(el => [el.id, el]));
+          const elementMap = new Map(state.elements.map((el: any) => [el.id, el]));
           
           updates.forEach(({ id, updates: elementUpdates }) => {
             const element = elementMap.get(id);
@@ -130,9 +130,9 @@ export const useOptimizedCanvasStore = create<CanvasState>()(
       
       deleteElement: (id) => {
         set((state) => {
-          state.elements = state.elements.filter(el => el.id !== id);
+          state.elements = state.elements.filter((el: any) => el.id !== id);
           state.connections = state.connections.filter(
-            conn => conn.from !== id && conn.to !== id
+            (conn: any) => conn.from !== id && conn.to !== id
           );
           if (state.selectedElement?.id === id) {
             state.selectedElement = null;
@@ -144,9 +144,9 @@ export const useOptimizedCanvasStore = create<CanvasState>()(
       deleteElements: (ids) => {
         set((state) => {
           const idSet = new Set(ids);
-          state.elements = state.elements.filter(el => !idSet.has(el.id));
+          state.elements = state.elements.filter((el: any) => !idSet.has(el.id));
           state.connections = state.connections.filter(
-            conn => !idSet.has(conn.from) && !idSet.has(conn.to)
+            (conn: any) => !idSet.has(conn.from) && !idSet.has(conn.to)
           );
           if (state.selectedElement && idSet.has(state.selectedElement.id)) {
             state.selectedElement = null;
@@ -166,7 +166,7 @@ export const useOptimizedCanvasStore = create<CanvasState>()(
         set((state) => {
           state.selectedElementIds = new Set(ids);
           state.selectedElement = ids.length === 1 
-            ? state.elements.find(el => el.id === ids[0]) || null 
+            ? state.elements.find((el: any) => el.id === ids[0]) || null 
             : null;
         });
       },
@@ -179,7 +179,7 @@ export const useOptimizedCanvasStore = create<CanvasState>()(
       
       deleteConnection: (id) => {
         set((state) => {
-          state.connections = state.connections.filter(conn => conn.id !== id);
+          state.connections = state.connections.filter((conn: any) => conn.id !== id);
         });
       },
       

@@ -74,7 +74,7 @@ export const Dashboard: React.FC = () => {
           return {
             id: workspace.id,
             title: workspace.title,
-            thumbnail: workspace.thumbnail_data,
+            thumbnail: null,
             lastModified: workspace.updated_at,
             elementCount: elements.length
           };

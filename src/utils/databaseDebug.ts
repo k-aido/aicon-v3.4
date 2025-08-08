@@ -312,7 +312,7 @@ export class DatabaseDebugger {
 
       return {
         enabled: (tableInfo as any)?.rls_enabled || false,
-        policies: policies || []
+        policies: (policies as any[]) || []
       };
     } catch (error) {
       return {

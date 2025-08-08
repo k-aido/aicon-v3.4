@@ -165,14 +165,14 @@ export const useElementsStore = create<ElementsStore>()(
         deleteElement: (id) => {
           set((state) => {
             delete state.elements.byId[id];
-            state.elements.allIds = state.elements.allIds.filter(elId => elId !== id);
+            state.elements.allIds = state.elements.allIds.filter((elId: string) => elId !== id.toString());
           });
         },
         
         deleteElements: (ids) => {
           set((state) => {
             ids.forEach(id => delete state.elements.byId[id]);
-            state.elements.allIds = state.elements.allIds.filter(id => !ids.includes(id));
+            state.elements.allIds = state.elements.allIds.filter((id: string) => !ids.includes(parseInt(id)));
           });
         },
         
@@ -238,19 +238,19 @@ export const useConnectionsStore = create<ConnectionsStore>()(
         deleteConnection: (id) => {
           set((state) => {
             delete state.connections.byId[id];
-            state.connections.allIds = state.connections.allIds.filter(connId => connId !== id);
+            state.connections.allIds = state.connections.allIds.filter((connId: string) => connId !== id.toString());
           });
         },
         
         deleteConnectionsByElement: (elementId) => {
           set((state) => {
-            const toDelete = state.connections.allIds.filter(id => {
+            const toDelete = state.connections.allIds.filter((id: string) => {
               const conn = state.connections.byId[id];
               return conn && (conn.from === elementId || conn.to === elementId);
             });
             
-            toDelete.forEach(id => delete state.connections.byId[id]);
-            state.connections.allIds = state.connections.allIds.filter(id => !toDelete.includes(id));
+            toDelete.forEach((id: string) => delete state.connections.byId[id]);
+            state.connections.allIds = state.connections.allIds.filter((id: string) => !toDelete.includes(id));
           });
         },
         
@@ -392,29 +392,9 @@ export const useCanvasMetadataStore = create<CanvasMetadataStore>()(
 
 // Middleware for debugging (development only)
 if (process.env.NODE_ENV === 'development') {
-  // Log element count changes
-  useElementsStore.subscribe(
-    (state) => state.elements.allIds.length,
-    (count) => {
-      console.log(`[ElementsStore] Total elements: ${count}`);
-    }
-  );
+  // Debug logging removed for build compatibility
   
-  // Log selection changes
-  useUIStore.subscribe(
-    (state) => state.ui.selectedIds.size,
-    (count) => {
-      console.log(`[UIStore] Selected elements: ${count}`);
-    }
-  );
-  
-  // Log connection count changes
-  useConnectionsStore.subscribe(
-    (state) => state.connections.allIds.length,
-    (count) => {
-      console.log(`[ConnectionsStore] Total connections: ${count}`);
-    }
-  );
+  // Debug logging removed for build compatibility
 }
 
 // Export convenience hooks for common operations

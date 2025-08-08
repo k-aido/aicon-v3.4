@@ -24,7 +24,7 @@ export const useCanvasVirtualization = ({
   buffer = 100
 }: UseCanvasVirtualizationProps) => {
   const [visibleElementIds, setVisibleElementIds] = useState<Set<string>>(new Set());
-  const frameId = useRef<number>();
+  const frameId = useRef<number | undefined>(undefined);
   const lastViewport = useRef(viewport);
 
   // Calculate viewport bounds in canvas coordinates
@@ -39,13 +39,13 @@ export const useCanvasVirtualization = ({
 
   // Check if element is within viewport bounds
   const isElementVisible = useCallback((element: CanvasElement, bounds: ViewportBounds): boolean => {
-    const elementRight = element.position.x + element.dimensions.width;
-    const elementBottom = element.position.y + element.dimensions.height;
+    const elementRight = element.x + element.width;
+    const elementBottom = element.y + element.height;
     
     return !(
-      element.position.x > bounds.right ||
+      element.x > bounds.right ||
       elementRight < bounds.left ||
-      element.position.y > bounds.bottom ||
+      element.y > bounds.bottom ||
       elementBottom < bounds.top
     );
   }, []);

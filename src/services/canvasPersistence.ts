@@ -510,36 +510,37 @@ class CanvasPersistenceService {
       console.log(`[CanvasPersistence] ========== FETCHING USER WORKSPACES ==========`);
       console.log(`[CanvasPersistence] User ID: ${userId}`);
       
-      // First, get the user's account_id from the users table
-      console.log(`[CanvasPersistence] Looking up account_id for user...`);
-      const { data: userRecord, error: userError } = await this.supabase
-        .from('users')
-        .select('account_id')
-        .eq('id', userId)
+      // Check if user exists in user_profiles (our actual user table)
+      console.log(`[CanvasPersistence] Checking user_profiles for user...`);
+      const { data: profileRecord, error: profileError } = await this.supabase
+        .from('user_profiles')
+        .select('user_id')
+        .eq('user_id', userId)
         .single();
         
-      let accountId: string;
-      if (userError || !userRecord) {
-        console.log(`[CanvasPersistence] No user record found for ${userId}, using user ID as account ID`);
-        // Fallback: use user ID as account ID
-        accountId = userId;
-      } else {
-        console.log(`[CanvasPersistence] Found user record, account_id: ${userRecord.account_id}`);
-        accountId = (userRecord as any).account_id;
+      if (profileError || !profileRecord) {
+        console.log(`[CanvasPersistence] No user_profile found for ${userId}, user may need to complete onboarding`);
+        return [];
       }
+      
+      console.log(`[CanvasPersistence] Found user profile for: ${userId}`);
+      
+      // For now, we'll look for projects where the user is the creator
+      // This handles the case where users don't have individual accounts yet
       
       // First, let's check what projects exist
       const { data: allProjects, error: checkError } = await this.supabase
         .from('projects')
-        .select('id, account_id, title, project_type')
+        .select('id, account_id, title, created_by_user_id, user_id')
         .limit(10);
         
       console.log('[CanvasPersistence] All projects in database:', allProjects);
       
+      // Query for projects created by this user OR where user_id matches
       const { data, error } = await this.supabase
         .from('projects')
         .select('*')
-        .eq('account_id', accountId)
+        .or(`created_by_user_id.eq.${userId},user_id.eq.${userId}`)
         .order('updated_at', { ascending: false }) as { data: Project[] | null; error: any };
 
       if (error) {
@@ -549,16 +550,14 @@ class CanvasPersistenceService {
           details: error.details,
           hint: error.hint,
           code: error.code,
-          accountId,
-          query: 'projects table with account_id'
+          userId,
+          query: 'projects table with created_by_user_id or user_id'
         });
-        
-        // Already tried without project_type filter above
         
         return [];
       }
 
-      console.log(`[CanvasPersistence] Found ${data?.length || 0} projects for account ${accountId}`);
+      console.log(`[CanvasPersistence] Found ${data?.length || 0} projects for user ${userId}`);
       console.log('[CanvasPersistence] Projects data:', data);
       return (data || []).map(project => this.projectToWorkspace(project));
     } catch (error) {

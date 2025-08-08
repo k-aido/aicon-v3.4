@@ -100,81 +100,55 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    // First, check if user has an account
-    console.log('[API] Checking for existing user record...');
-    const { data: userRecord, error: userError } = await supabase
-      .from('users')
-      .select('account_id')
-      .eq('id', userId)
+    // First, check if user has a profile (our actual user table)
+    console.log('[API] Checking for existing user_profile...');
+    const { data: profileRecord, error: profileError } = await supabase
+      .from('user_profiles')
+      .select('user_id')
+      .eq('user_id', userId)
       .single();
 
-    if (userError && userError.code !== 'PGRST116') { // PGRST116 = no rows found
-      console.error('[API] Error checking user record:', userError);
+    if (profileError && profileError.code !== 'PGRST116') { // PGRST116 = no rows found
+      console.error('[API] Error checking user profile:', profileError);
     }
 
-    let accountId = userRecord?.account_id;
+    // For simplicity, we'll use the user ID as the account ID for individual users
+    let accountId = userId;
 
-    // If no user record exists, create account and user records
-    if (!userRecord) {
-      console.log('[API] No user record found, creating account and user...');
-      
-      // Get user email from auth
-      const userEmail = session?.user?.email || `user_${userId.substring(0, 8)}@temp.com`;
-      
-      // Use the user ID as the account ID for simplicity (one account per user)
-      accountId = userId;
+    // If no user profile exists, we can still create projects (they will be linked to user_id directly)
+    if (!profileRecord) {
+      console.log('[API] No user_profile found, but proceeding with canvas creation');
+      console.log('[API] User may need to complete onboarding to get full functionality');
+    }
+
+    // Ensure account exists for this user
+    const { data: existingAccount, error: accountCheckError } = await supabase
+      .from('accounts')
+      .select('id')
+      .eq('id', accountId)
+      .single();
+
+    if (!existingAccount && (!accountCheckError || accountCheckError.code === 'PGRST116')) {
+      console.log('[API] Creating account for user...');
       
       // Create account using user ID as account ID
-      const { data: newAccount, error: accountError } = await supabase
+      const { error: accountError } = await supabase
         .from('accounts')
         .insert({
-          id: accountId, // Use user ID as account ID
-          name: `Account for ${userEmail}`,
-          billing_email: userEmail,
-          subscription_status: 'active',
-          plan_type: 'free',
-          creator_limit: 10,
-          user_limit: 1,
-          voice_model_limit: 5,
-          storage_limit_gb: 1
-        })
-        .select()
-        .single();
+          id: accountId,
+          subscription_tier: 'free',
+          monthly_credit_allocation: 1000,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
       
       if (accountError) {
         console.error('[API] Error creating account:', accountError);
-        return NextResponse.json(
-          { error: 'Failed to create account: ' + accountError.message },
-          { status: 500 }
-        );
+        // Continue anyway - we can still create projects
+        console.log('[API] Continuing without account creation...');
+      } else {
+        console.log('[API] Account created successfully');
       }
-      
-      console.log('[API] Created account:', newAccount.id);
-      
-      // Create user record
-      const { error: createUserError } = await supabase
-        .from('users')
-        .insert({
-          id: userId,
-          account_id: accountId,
-          email: userEmail,
-          username: userEmail.split('@')[0],
-          full_name: session?.user?.user_metadata?.full_name || userEmail.split('@')[0],
-          role: 'admin', // First user in account is admin
-          status: 'active'
-        });
-      
-      if (createUserError) {
-        console.error('[API] Error creating user record:', createUserError);
-        // If user creation fails, delete the account
-        await supabase.from('accounts').delete().eq('id', accountId);
-        return NextResponse.json(
-          { error: 'Failed to create user record: ' + createUserError.message },
-          { status: 500 }
-        );
-      }
-      
-      console.log('[API] Created account and user records successfully');
     }
 
     // Generate unique title

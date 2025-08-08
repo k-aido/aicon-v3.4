@@ -119,6 +119,25 @@ class CanvasPersistenceService {
     if (typeof window !== 'undefined') {
       console.log('[CanvasPersistence] Supabase URL configured:', !!process.env.NEXT_PUBLIC_SUPABASE_URL);
       console.log('[CanvasPersistence] Supabase Anon Key configured:', !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+      
+      // Check and restore session from localStorage/cookies
+      this.restoreSession();
+    }
+  }
+  
+  private async restoreSession() {
+    try {
+      const { data: { session }, error } = await this.supabase.auth.getSession();
+      if (session) {
+        console.log('[CanvasPersistence] Session restored:', session.user?.id, session.user?.email);
+      } else {
+        console.log('[CanvasPersistence] No session found to restore');
+        if (error) {
+          console.error('[CanvasPersistence] Session restore error:', error);
+        }
+      }
+    } catch (error) {
+      console.error('[CanvasPersistence] Failed to restore session:', error);
     }
   }
 
@@ -510,6 +529,15 @@ class CanvasPersistenceService {
       console.log(`[CanvasPersistence] ========== FETCHING USER WORKSPACES ==========`);
       console.log(`[CanvasPersistence] User ID: ${userId}`);
       
+      // Check current auth session first
+      const { data: { user } } = await this.supabase.auth.getUser();
+      console.log(`[CanvasPersistence] Current auth user:`, user?.id, user?.email);
+      
+      if (!user) {
+        console.error(`[CanvasPersistence] No authenticated user found`);
+        return [];
+      }
+      
       // Check if user exists in user_profiles (our actual user table)
       console.log(`[CanvasPersistence] Checking user_profiles for user...`);
       const { data: profileRecord, error: profileError } = await this.supabase
@@ -529,18 +557,18 @@ class CanvasPersistenceService {
       // This handles the case where users don't have individual accounts yet
       
       // First, let's check what projects exist
-      const { data: allProjects, error: checkError } = await this.supabase
+      const { data: allProjects } = await this.supabase
         .from('projects')
         .select('id, account_id, title, created_by_user_id, user_id')
         .limit(10);
         
       console.log('[CanvasPersistence] All projects in database:', allProjects);
       
-      // Query for projects created by this user OR where user_id matches
+      // Query for projects created by this user OR where user_id matches OR in user's account
       const { data, error } = await this.supabase
         .from('projects')
         .select('*')
-        .or(`created_by_user_id.eq.${userId},user_id.eq.${userId}`)
+        .or(`created_by_user_id.eq.${userId},user_id.eq.${userId},account_id.eq.${userId}`)
         .order('updated_at', { ascending: false }) as { data: Project[] | null; error: any };
 
       if (error) {
@@ -817,6 +845,85 @@ class CanvasPersistenceService {
     try {
       // Get project with canvas_data
       console.log('[CanvasPersistence] Loading canvas for workspace:', workspaceId);
+      
+      // First try to use the API endpoint which has service role access
+      // This avoids RLS issues when loading canvases
+      try {
+        const response = await fetch(`/api/canvas/${workspaceId}`);
+        
+        if (response.ok) {
+          const { canvas } = await response.json();
+          
+          if (canvas) {
+            console.log('[CanvasPersistence] Canvas loaded via API:', {
+              id: canvas.id,
+              title: canvas.title,
+              hasCanvasData: !!canvas.canvas_data
+            });
+            
+            const workspace = this.projectToWorkspace(canvas);
+            
+            // Extract elements and connections from canvas_data
+            const canvasData = canvas.canvas_data as any;
+            if (canvasData?.elements && canvasData?.connections) {
+              return {
+                workspace,
+                elements: canvasData.elements,
+                connections: canvasData.connections
+              };
+            }
+            
+            // Fall back to loading from dedicated tables
+            const [elements, connections] = await Promise.all([
+              this.loadElements(workspaceId),
+              this.loadConnections(workspaceId)
+            ]);
+            
+            return {
+              workspace,
+              elements,
+              connections
+            };
+          }
+        } else if (response.status === 404) {
+          console.log('[CanvasPersistence] Canvas not found via API');
+          return {
+            workspace: null,
+            elements: [],
+            connections: []
+          };
+        }
+      } catch (apiError) {
+        console.log('[CanvasPersistence] API call failed, falling back to direct query:', apiError);
+      }
+      
+      // Fallback to direct Supabase query if API fails
+      // Ensure we have a session before querying
+      const { data: { session }, error: sessionError } = await this.supabase.auth.getSession();
+      
+      if (sessionError || !session) {
+        console.error('[CanvasPersistence] No session available:', sessionError);
+        console.log('[CanvasPersistence] Attempting to restore session from storage...');
+        
+        // Try to refresh the session
+        const { data: { session: refreshedSession }, error: refreshError } = await this.supabase.auth.refreshSession();
+        
+        if (refreshError || !refreshedSession) {
+          console.error('[CanvasPersistence] Failed to refresh session:', refreshError);
+          return {
+            workspace: null,
+            elements: [],
+            connections: []
+          };
+        }
+        
+        console.log('[CanvasPersistence] Session refreshed successfully:', refreshedSession.user?.id);
+      }
+      
+      // Check current auth session
+      const { data: { user } } = await this.supabase.auth.getUser();
+      console.log('[CanvasPersistence] Current auth user:', user?.id, user?.email);
+      
       const { data: projectData, error } = await this.supabase
         .from('projects')
         .select('*')
@@ -830,6 +937,20 @@ class CanvasPersistenceService {
 
       if (error) {
         console.error('[CanvasPersistence] Error loading project:', error);
+        console.error('[CanvasPersistence] Error details:', {
+          message: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint
+        });
+        
+        // Check if it's an RLS error
+        if (error.code === '42501' || error.message?.includes('row-level security')) {
+          console.error('[CanvasPersistence] RLS Policy Error - User cannot access this project');
+          console.error('[CanvasPersistence] Current user:', user?.id);
+          console.error('[CanvasPersistence] Trying to load project:', workspaceId);
+        }
+        
         return {
           workspace: null,
           elements: [],
@@ -839,6 +960,11 @@ class CanvasPersistenceService {
 
       if (!projectData || projectData.length === 0) {
         console.error('[CanvasPersistence] No project found to load:', workspaceId);
+        console.error('[CanvasPersistence] This could be due to:');
+        console.error('[CanvasPersistence] 1. Project does not exist');
+        console.error('[CanvasPersistence] 2. RLS policies blocking access');
+        console.error('[CanvasPersistence] 3. User not authenticated properly');
+        console.error('[CanvasPersistence] Current auth user:', user?.id, user?.email);
         return {
           workspace: null,
           elements: [],

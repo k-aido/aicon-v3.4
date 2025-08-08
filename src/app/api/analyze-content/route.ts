@@ -2,11 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { aiService, type AnalysisResult } from '@/lib/ai-service';
 import { enhancedContentExtractor, type ExtractionResult } from '@/lib/enhanced-content-extractor';
 import { detectPlatform } from '@/utils/platform';
+import { serverCreditService, CREDIT_COSTS } from '@/services/creditService';
+import { createClient } from '@supabase/supabase-js';
+import { cookies } from 'next/headers';
 
 interface AnalyzeContentRequest {
   url: string;
   elementId?: number;
   forceReanalyze?: boolean;
+  accountId?: string; // Optional, will try to get from session
+  userId?: string;    // Optional, will try to get from session
 }
 
 interface AnalyzeContentResponse {
@@ -40,6 +45,47 @@ export async function POST(request: NextRequest) {
     // Parse request body
     const body: AnalyzeContentRequest = await request.json();
     const { url, elementId, forceReanalyze } = body;
+    let { accountId, userId } = body;
+
+    // Try to get user session if accountId/userId not provided
+    if (!accountId || !userId) {
+      const cookieStore = await cookies();
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+      
+      const authTokenKey = `sb-${supabaseUrl.split('//')[1]?.split('.')[0]}-auth-token`;
+      const authToken = cookieStore.get(authTokenKey);
+      
+      if (authToken?.value) {
+        try {
+          const tokenData = JSON.parse(authToken.value);
+          if (tokenData.user) {
+            userId = userId || tokenData.user.id;
+            accountId = accountId || tokenData.user.id; // Use user ID as account ID
+          }
+        } catch (e) {
+          console.log('[AnalyzeContent] Could not parse auth token');
+        }
+      }
+    }
+
+    // Check credits if we have an account ID
+    if (accountId) {
+      const creditService = serverCreditService();
+      const hasCredits = await creditService.canPerformOperation(accountId, 'CONTENT_ANALYSIS');
+      
+      if (!hasCredits) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Insufficient credits. Content analysis requires ${CREDIT_COSTS.CONTENT_ANALYSIS} credits.`,
+            limitations: ['Insufficient credits']
+          } as AnalyzeContentResponse,
+          { status: 402 } // Payment Required
+        );
+      }
+    } else {
+      console.warn('[AnalyzeContent] No account ID provided, skipping credit check');
+    }
 
     // Validate required fields
     if (!url || typeof url !== 'string') {
@@ -53,9 +99,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate URL format
-    let parsedUrl: URL;
     try {
-      parsedUrl = new URL(url);
+      new URL(url);
     } catch {
       return NextResponse.json(
         {
@@ -138,6 +183,28 @@ export async function POST(request: NextRequest) {
       keyPointsCount: analysis.keyPoints?.length || 0
     });
 
+    // Deduct credits after successful analysis
+    if (accountId && userId) {
+      const creditService = serverCreditService();
+      const deducted = await creditService.deductCredits(
+        accountId,
+        userId,
+        'CONTENT_ANALYSIS',
+        {
+          url,
+          elementId,
+          platform: extractedContent.platform,
+          processingTime
+        }
+      );
+      
+      if (!deducted) {
+        console.warn('[AnalyzeContent] Failed to deduct credits, but analysis completed');
+      } else {
+        console.log(`[AnalyzeContent] Deducted ${CREDIT_COSTS.CONTENT_ANALYSIS} credits from account ${accountId}`);
+      }
+    }
+
     return NextResponse.json({
       success: true,
       analysis,
@@ -201,7 +268,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   // Health check endpoint
   return NextResponse.json({
     status: 'healthy',

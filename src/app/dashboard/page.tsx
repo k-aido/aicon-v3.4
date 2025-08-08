@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { User, Sprout, Search, Home, Clock, Star } from 'lucide-react';
+import { User, Sprout, Search, Home, Star } from 'lucide-react';
 import { canvasPersistence } from '@/services/canvasPersistence';
 import { createBrowserClient } from '@/lib/supabase/client';
 
@@ -111,7 +111,7 @@ export default function DashboardPage() {
       // Convert workspaces to CanvasPreview format
       const canvasPreviews: CanvasPreview[] = workspaces.map((workspace, index) => ({
         id: workspace.id,
-        title: workspace.title || workspace.name,
+        title: workspace.title,
         author: 'You', // Show current user as author
         lastModified: new Date(workspace.last_accessed || workspace.updated_at).toLocaleDateString(),
         color: ['bg-purple-200', 'bg-green-200', 'bg-orange-200'][index % 3],

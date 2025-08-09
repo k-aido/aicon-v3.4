@@ -209,7 +209,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyPress={handleKeyPress}
-              placeholder="Ask AI..."
+              placeholder="Type your message..."
+              disabled={isLoading}
+              data-no-drag
               className="flex-1 px-4 py-3 bg-gray-100 rounded-xl border border-gray-200 outline-none focus:border-purple-500 focus:bg-white transition-all"
             />
             <button

@@ -78,6 +78,8 @@ export const ChatGPTStyleInterface: React.FC<ChatInterfaceProps> = ({
   // Get current conversation and messages
   const currentConversation = conversations.find(c => c.id === activeConversationId);
   const messages = currentConversation?.messages || [];
+  
+  console.log('[ChatGPTStyleInterface] Active conversation:', activeConversationId, 'Messages count:', messages.length);
 
   // Get connected content
   const connectedContent = connections
@@ -203,6 +205,7 @@ export const ChatGPTStyleInterface: React.FC<ChatInterfaceProps> = ({
 
   // Switch conversation
   const switchConversation = (conversationId: string) => {
+    console.log('[ChatGPTStyleInterface] Switching from:', activeConversationId, 'to:', conversationId);
     setActiveConversationId(conversationId);
     // Update last accessed timestamp
     updateConversation(conversationId, { lastMessageAt: new Date() });
@@ -372,8 +375,13 @@ export const ChatGPTStyleInterface: React.FC<ChatInterfaceProps> = ({
                   ? 'bg-gray-200 text-gray-900'
                   : 'text-gray-300 hover:bg-gray-700 hover:text-white'
               }`}
-              onClick={() => switchConversation(conv.id)}
+              onClick={(e) => {
+                e.stopPropagation();
+                console.log('[ChatGPTStyleInterface] Switching to conversation:', conv.id);
+                switchConversation(conv.id);
+              }}
               onContextMenu={(e) => handleContextMenu(e, conv.id)}
+              data-no-drag
             >
               <div className="px-3 py-2">
                 <div className="text-sm font-medium truncate mb-1">
@@ -401,8 +409,13 @@ export const ChatGPTStyleInterface: React.FC<ChatInterfaceProps> = ({
             {/* New Chat Button */}
             <div className="p-3 border-b border-gray-700">
               <button
-                onClick={createNewConversation}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  console.log('[ChatGPTStyleInterface] Creating new conversation');
+                  createNewConversation();
+                }}
                 className="w-full bg-gray-800 hover:bg-gray-700 text-white rounded-md px-3 py-2 flex items-center justify-center gap-2 transition-colors text-sm border border-gray-600"
+                data-no-drag
               >
                 <Plus className="w-4 h-4" />
                 New chat
@@ -420,8 +433,12 @@ export const ChatGPTStyleInterface: React.FC<ChatInterfaceProps> = ({
             {/* Collapse Button */}
             <div className="p-3 border-t border-gray-700">
               <button
-                onClick={() => setIsSidebarCollapsed(true)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsSidebarCollapsed(true);
+                }}
                 className="w-full text-gray-400 hover:text-white p-2 rounded transition-colors flex items-center justify-center"
+                data-no-drag
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
@@ -433,8 +450,12 @@ export const ChatGPTStyleInterface: React.FC<ChatInterfaceProps> = ({
       {/* Expand Sidebar Button */}
       {isSidebarCollapsed && (
         <button
-          onClick={() => setIsSidebarCollapsed(false)}
+          onClick={(e) => {
+            e.stopPropagation();
+            setIsSidebarCollapsed(false);
+          }}
           className="absolute left-0 top-1/2 -translate-y-1/2 bg-gray-800 hover:bg-gray-700 p-2 rounded-r transition-all duration-300 shadow-lg z-10"
+          data-no-drag
         >
           <ChevronRight className="w-4 h-4 text-white" />
         </button>
@@ -554,11 +575,29 @@ export const ChatGPTStyleInterface: React.FC<ChatInterfaceProps> = ({
             <input
               type="text"
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={(e) => {
+                console.log('[ChatGPTStyleInterface] Input onChange fired, value:', e.target.value);
+                setInput(e.target.value);
+              }}
               onKeyPress={handleKeyPress}
-              placeholder="Message ChatGPT..."
+              onFocus={() => console.log('[ChatGPTStyleInterface] Input focused')}
+              onMouseDown={(e) => {
+                console.log('[ChatGPTStyleInterface] Input mouseDown');
+                e.stopPropagation();
+              }}
+              onClick={(e) => {
+                console.log('[ChatGPTStyleInterface] Input clicked');
+                e.stopPropagation();
+              }}
+              placeholder="Type your message..."
+              disabled={false}
+              data-no-drag
               className="flex-1 bg-gray-100 text-gray-900 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 border border-gray-200 focus:bg-white focus:border-purple-500"
-              disabled={isLoading}
+              style={{ 
+                pointerEvents: 'auto',
+                userSelect: 'text',
+                WebkitUserSelect: 'text'
+              }}
             />
             <button
               onClick={sendMessage}

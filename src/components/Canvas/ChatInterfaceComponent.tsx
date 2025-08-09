@@ -56,6 +56,23 @@ export const ChatInterfaceComponent: React.FC<ChatInterfaceComponentProps> = Rea
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  
+  // Force reset loading state on component mount to prevent stuck states
+  useEffect(() => {
+    console.log('[ChatInterface] Component mounted, ensuring loading state is false');
+    setIsLoading(false);
+    
+    // Force focus on mount
+    setTimeout(() => {
+      inputRef.current?.focus();
+      console.log('[ChatInterface] Force focused textarea on mount');
+    }, 100);
+  }, []);
+  
+  // Debug logging for loading state
+  useEffect(() => {
+    console.log('[ChatInterface] Loading state changed:', isLoading);
+  }, [isLoading]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [showModelDropdown, setShowModelDropdown] = useState(false);
   const [selectedModel, setSelectedModel] = useState(element.model || 'claude-sonnet-4');
@@ -170,7 +187,20 @@ export const ChatInterfaceComponent: React.FC<ChatInterfaceComponentProps> = Rea
 
   // Enhanced message sending with context
   const sendMessageWithContext = async (messageContent: string, isPreset = false) => {
-    if (!messageContent.trim() || isLoading) return;
+    console.log('[ChatInterface] sendMessageWithContext called, isLoading:', isLoading);
+    
+    if (!messageContent.trim()) {
+      console.log('[ChatInterface] Empty message, returning');
+      return;
+    }
+    
+    if (isLoading) {
+      console.log('[ChatInterface] Already loading, returning');
+      return;
+    }
+
+    console.log('[ChatInterface] Setting isLoading to true');
+    setIsLoading(true);
 
     const newMessage: ChatMessage = {
       id: Date.now().toString(),
@@ -184,12 +214,13 @@ export const ChatInterfaceComponent: React.FC<ChatInterfaceComponentProps> = Rea
     updateCurrentConversation({ messages: updatedMessages });
 
     if (!isPreset) setInput('');
-    setIsLoading(true);
 
     try {
       if (onSendMessage) {
+        console.log('[ChatInterface] Using onSendMessage prop');
         await onSendMessage(element.id, newMessage.content, connectedContent);
       } else {
+        console.log('[ChatInterface] Using /api/chat endpoint');
         // Use actual chat API
         const response = await fetch('/api/chat', {
           method: 'POST',
@@ -201,7 +232,14 @@ export const ChatInterfaceComponent: React.FC<ChatInterfaceComponentProps> = Rea
           })
         });
 
+        console.log('[ChatInterface] Response status:', response.status);
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
         const data = await response.json();
+        console.log('[ChatInterface] Response data:', data);
         
         if (data.error) {
           throw new Error(data.error);
@@ -210,7 +248,7 @@ export const ChatInterfaceComponent: React.FC<ChatInterfaceComponentProps> = Rea
         const aiResponse: ChatMessage = {
           id: (Date.now() + 1).toString(),
           role: 'assistant',
-          content: data.content,
+          content: data.content || 'No response received',
           timestamp: new Date()
         };
         
@@ -219,12 +257,13 @@ export const ChatInterfaceComponent: React.FC<ChatInterfaceComponentProps> = Rea
           lastMessageAt: new Date()
         });
       }
+      console.log('[ChatInterface] Message sent successfully');
     } catch (error) {
-      console.error('Error sending message:', error);
+      console.error('[ChatInterface] Error sending message:', error);
       const errorMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: 'Sorry, I encountered an error. Please try again.',
+        content: `Sorry, I encountered an error: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`,
         timestamp: new Date()
       };
       updateCurrentConversation({ 
@@ -232,11 +271,26 @@ export const ChatInterfaceComponent: React.FC<ChatInterfaceComponentProps> = Rea
         lastMessageAt: new Date()
       });
     } finally {
+      console.log('[ChatInterface] Setting isLoading to false in finally block');
       setIsLoading(false);
     }
   };
 
-  const handleSendMessage = () => sendMessageWithContext(input);
+  const handleSendMessage = async () => {
+    if (!input.trim() || isLoading) return;
+    
+    console.log('[ChatInterface] handleSendMessage called');
+    
+    try {
+      setIsLoading(true);
+      await sendMessageWithContext(input);
+    } catch (error) {
+      console.error('[ChatInterface] Error in handleSendMessage:', error);
+    } finally {
+      console.log('[ChatInterface] Resetting isLoading to false in handleSendMessage finally');
+      setIsLoading(false);
+    }
+  };
 
   // Preset message handlers
   const handleGetInsights = () => {
@@ -275,9 +329,18 @@ export const ChatInterfaceComponent: React.FC<ChatInterfaceComponentProps> = Rea
         willChange: isDragging ? 'transform' : 'auto'
       }}
       onMouseDown={(e) => {
-        if (!(e.target as HTMLElement).closest('[data-resize-handle]') &&
-            !(e.target as HTMLElement).closest('[data-no-drag]')) {
+        const target = e.target as HTMLElement;
+        const hasResizeHandle = target.closest('[data-resize-handle]');
+        const hasNoDrag = target.closest('[data-no-drag]');
+        
+        console.log('[ChatInterface] Parent mouseDown - target:', target.tagName, 'resizeHandle:', !!hasResizeHandle, 'noDrag:', !!hasNoDrag);
+        
+        if (!hasResizeHandle && !hasNoDrag) {
+          console.log('[ChatInterface] Calling handleMouseDown');
           handleMouseDown(e);
+        } else {
+          console.log('[ChatInterface] Skipping handleMouseDown due to exclusion');
+          e.stopPropagation();
         }
       }}
     >
@@ -520,21 +583,93 @@ export const ChatInterfaceComponent: React.FC<ChatInterfaceComponentProps> = Rea
               </div>
 
               {/* Message Input */}
-              <div className="flex gap-2">
-                <textarea
-                  ref={inputRef}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                  placeholder="Type your message..."
-                  className="flex-1 bg-gray-800/60 text-white rounded-lg p-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-purple-500/50 border border-purple-500/20"
-                  rows={2}
-                  disabled={isLoading}
-                />
+              <div className="flex gap-2" data-no-drag>
+                <div 
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  style={{ pointerEvents: 'auto' }}
+                  data-no-drag
+                  className="flex-1"
+                >
+                  <textarea
+                    ref={inputRef}
+                    value={input}
+                    onChange={(e) => {
+                      console.log('[ChatInterface] Textarea onChange fired, value:', e.target.value);
+                      console.log('Input value:', input);
+                      e.stopPropagation();
+                      setInput(e.target.value);
+                    }}
+                    onKeyPress={(e) => {
+                      e.stopPropagation();
+                      handleKeyPress(e);
+                    }}
+                    onKeyDown={(e) => {
+                      console.log('[ChatInterface] Textarea keyDown');
+                      e.stopPropagation();
+                    }}
+                    onFocus={(e) => {
+                      console.log('[ChatInterface] Textarea focused');
+                      e.stopPropagation();
+                    }}
+                    onBlur={(e) => {
+                      console.log('[ChatInterface] Textarea blurred');
+                      e.stopPropagation();
+                    }}
+                    onMouseDown={(e) => {
+                      console.log('[ChatInterface] Textarea mouseDown');
+                      e.stopPropagation();
+                      e.preventDefault();
+                      inputRef.current?.focus();
+                    }}
+                    onMouseUp={(e) => {
+                      console.log('[ChatInterface] Textarea mouseUp');
+                      e.stopPropagation();
+                    }}
+                    onClick={(e) => {
+                      console.log('[ChatInterface] Textarea clicked');
+                      e.stopPropagation();
+                    }}
+                    onPointerDown={(e) => {
+                      console.log('[ChatInterface] Textarea pointerDown');
+                      e.stopPropagation();
+                      e.preventDefault();
+                    }}
+                    placeholder="Type your message..."
+                    disabled={false}
+                    readOnly={false}
+                    autoComplete="off"
+                    spellCheck={true}
+                    data-no-drag
+                    className="w-full bg-gray-800/60 text-white rounded-lg p-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-purple-500/50 border border-purple-500/20 cursor-text"
+                    rows={2}
+                    style={{ 
+                      pointerEvents: 'auto',
+                      userSelect: 'text',
+                      WebkitUserSelect: 'text',
+                      MozUserSelect: 'text',
+                      msUserSelect: 'text'
+                    }}
+                  />
+                </div>
+                {isLoading && (
+                  <button
+                    onClick={() => {
+                      console.log('[ChatInterface] Manually resetting loading state');
+                      setIsLoading(false);
+                    }}
+                    className="bg-red-600 hover:bg-red-700 text-white rounded-lg px-3 py-2 text-xs transition-colors"
+                    title="Reset if stuck"
+                    data-no-drag
+                  >
+                    Reset
+                  </button>
+                )}
                 <button
                   onClick={handleSendMessage}
                   disabled={!input.trim() || isLoading}
                   className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 disabled:from-gray-600 disabled:to-gray-600 disabled:cursor-not-allowed text-white rounded-lg px-4 py-2 transition-all duration-200 shadow-lg"
+                  data-no-drag
                 >
                   {isLoading ? (
                     <Loader2 className="w-4 h-4 animate-spin" />

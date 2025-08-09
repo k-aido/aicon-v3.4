@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Canvas } from './Canvas/Canvas';
 import { CanvasNavigation } from './Canvas/CanvasNavigation';
 import { CanvasSidebar } from './Canvas/CanvasSidebar';
@@ -8,6 +8,7 @@ import { useCanvasStore } from '@/store/canvasStore';
 import { ContentElement, CanvasElement as ImportedCanvasElement, Connection as ImportedConnection } from '@/types';
 import { canvasPersistence } from '@/services/canvasPersistence';
 import { useRouter } from 'next/navigation';
+import { debounce } from '@/utils/debounce';
 
 // Use store's Element type instead of imported CanvasElement
 type Element = {
@@ -49,7 +50,7 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
     platform: undefined
   });
   const [isLoading, setIsLoading] = useState(true);
-  const { elements, connections, addElement, updateElement, deleteElement, addConnection, deleteConnection, setCanvasTitle } = useCanvasStore();
+  const { elements, connections, addElement, updateElement, deleteElement, addConnection, deleteConnection, setCanvasTitle, setWorkspaceId, setViewport, viewport, canvasTitle, workspaceId } = useCanvasStore();
   const router = useRouter();
 
   // Load canvas data if canvasId is provided
@@ -58,31 +59,40 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
       if (canvasId && canvasId !== 'new') {
         try {
           console.log(`[AiconCanvas] Loading canvas: ${canvasId}`);
-          const { workspace, elements: loadedElements, connections: loadedConnections } = await canvasPersistence.loadCanvas(canvasId);
+          const canvasData = await canvasPersistence.loadCanvas(canvasId);
           
-          if (workspace) {
+          if (canvasData) {
             console.log(`[AiconCanvas] Canvas loaded:`, { 
-              title: workspace.title, 
-              elementsCount: loadedElements.length,
-              connectionsCount: loadedConnections.length 
+              title: canvasData.title, 
+              elementsCount: canvasData.elements?.length || 0,
+              connectionsCount: canvasData.connections?.length || 0,
+              viewport: canvasData.viewport
             });
             
-            // Set canvas title
-            setCanvasTitle(workspace.title);
+            // Set canvas title, workspace ID, and viewport
+            setCanvasTitle(canvasData.title || 'Untitled Canvas');
+            setWorkspaceId(canvasId);
+            if (canvasData.viewport) {
+              setViewport(canvasData.viewport);
+            }
             
             // Clear existing elements and connections
             elements.forEach(el => deleteElement(el.id));
             connections.forEach(conn => deleteConnection(conn.id));
             
             // Load elements
-            loadedElements.forEach(element => {
-              addElement(element);
-            });
+            if (canvasData.elements && Array.isArray(canvasData.elements)) {
+              canvasData.elements.forEach(element => {
+                addElement(element);
+              });
+            }
             
             // Load connections
-            loadedConnections.forEach(connection => {
-              addConnection(connection);
-            });
+            if (canvasData.connections && Array.isArray(canvasData.connections)) {
+              canvasData.connections.forEach(connection => {
+                addConnection(connection);
+              });
+            }
           } else {
             console.error('[AiconCanvas] Canvas not found:', canvasId);
             // Redirect to dashboard if canvas not found
@@ -97,6 +107,43 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
 
     loadCanvas();
   }, [canvasId]); // Only depend on canvasId to avoid re-running on state changes
+
+  // Create a debounced save function (saves after 1 second of no changes)
+  const debouncedSave = useCallback(
+    debounce(async (workspaceId: string, elements: any[], connections: any[], viewport: any, title: string) => {
+      console.log('[AiconCanvas] Auto-saving canvas...');
+      try {
+        const success = await canvasPersistence.saveCanvas(
+          workspaceId,
+          elements,
+          connections,
+          viewport,
+          title
+        );
+        if (success) {
+          console.log('[AiconCanvas] Canvas auto-saved successfully');
+        } else {
+          console.error('[AiconCanvas] Failed to auto-save canvas');
+        }
+      } catch (error) {
+        console.error('[AiconCanvas] Error during auto-save:', error);
+      }
+    }, 1000),
+    []
+  );
+
+  // Watch for changes and trigger auto-save
+  useEffect(() => {
+    if (workspaceId && workspaceId !== 'new' && !isLoading) {
+      console.log('[AiconCanvas] Canvas state changed, scheduling auto-save...', {
+        elementsCount: elements.length,
+        connectionsCount: connections.length,
+        viewport,
+        title: canvasTitle
+      });
+      debouncedSave(workspaceId, elements, connections, viewport, canvasTitle);
+    }
+  }, [elements, connections, viewport, canvasTitle, workspaceId, isLoading, debouncedSave]);
 
   // Auto-analyze content when added to canvas
   useEffect(() => {

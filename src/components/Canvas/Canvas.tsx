@@ -6,6 +6,7 @@ import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { ConnectionLine } from './ConnectionLine';
 import { ContentElement } from './ContentElement';
 import { ChatElement } from './ChatElement';
+import { useCanvasStore } from '@/store/canvasStore';
 
 interface CanvasProps {
   elements: CanvasElement[];
@@ -36,7 +37,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
   onOpenSocialMediaModal
 }) => {
   const canvasRef = useRef<HTMLDivElement>(null);
-  const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, zoom: 1 });
+  const { viewport, setViewport } = useCanvasStore();
   const [mousePos, setMousePos] = useState<Position>({ x: 0, y: 0 });
   const [selectedElementIds, setSelectedElementIds] = useState<number[]>([]);
   const [lastClickedElementId, setLastClickedElementId] = useState<number | null>(null);

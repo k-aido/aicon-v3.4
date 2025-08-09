@@ -4,7 +4,7 @@ import { cookies } from 'next/headers';
 
 export async function POST(request: NextRequest) {
   try {
-    const { title, userId: requestUserId } = await request.json();
+    const { title, userId: requestUserId, accountId: requestAccountId } = await request.json();
 
     if (!title) {
       return NextResponse.json(
@@ -112,10 +112,14 @@ export async function POST(request: NextRequest) {
       console.error('[API] Error checking user record:', userError);
     }
 
-    let accountId = userRecord?.account_id;
+    let accountId = userRecord?.account_id || requestAccountId;
+
+    if (requestAccountId && !userRecord?.account_id) {
+      console.log('[API] Using provided accountId:', requestAccountId);
+    }
 
     // If no user record exists, create account and user records
-    if (!userRecord) {
+    if (!userRecord && !requestAccountId) {
       console.log('[API] No user record found, creating account and user...');
       
       // Get user email from auth

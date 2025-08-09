@@ -35,6 +35,8 @@ interface CanvasState {
   selectedElement: Element | null;
   connecting: number | null;
   canvasTitle: string;
+  workspaceId: string | null;
+  viewport: { x: number; y: number; zoom: number };
   
   // Actions
   addElement: (element: Element) => void;
@@ -46,8 +48,12 @@ interface CanvasState {
   deleteConnection: (id: number) => void;
   setConnecting: (elementId: number | null) => void;
   
-  // Canvas title
+  // Canvas title and workspace
   setCanvasTitle: (title: string) => void;
+  setWorkspaceId: (id: string | null) => void;
+  
+  // Viewport
+  setViewport: (viewport: { x: number; y: number; zoom: number }) => void;
   
   // Get connected content for a chat element
   getConnectedContent: (chatId: number) => Element[];
@@ -59,6 +65,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   selectedElement: null,
   connecting: null,
   canvasTitle: 'Canvas Title',
+  workspaceId: null,
+  viewport: { x: 0, y: 0, zoom: 1.0 },
   
   addElement: (element) => {
     set((state) => ({
@@ -106,6 +114,14 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   
   setCanvasTitle: (title) => {
     set({ canvasTitle: title });
+  },
+  
+  setWorkspaceId: (id) => {
+    set({ workspaceId: id });
+  },
+  
+  setViewport: (viewport) => {
+    set({ viewport });
   },
   
   getConnectedContent: (chatId) => {

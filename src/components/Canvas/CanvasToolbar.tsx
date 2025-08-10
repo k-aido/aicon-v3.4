@@ -3,6 +3,14 @@ import { Globe } from 'lucide-react';
 import { AIChatIcon, InstagramIcon, TikTokIcon, YouTubeIcon, ProfilesIcon } from '@/components/icons/PngIcons';
 import { ContentPiece, ChatData, FolderData } from '@/types/canvas';
 
+// Generate truly unique string IDs for canvas elements
+let toolIdCounter = 0;
+const generateUniqueToolId = () => {
+  const timestamp = Date.now();
+  toolIdCounter = (toolIdCounter + 1) % 10000;
+  return `${timestamp}-${toolIdCounter}`;
+};
+
 interface Tool {
   id: string;
   icon: React.ComponentType<any>;
@@ -52,48 +60,60 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({ onAddElement, view
   };
 
   const createElement = (tool: Tool, x: number, y: number) => {
-    const id = `${tool.type}-${Date.now()}`;
-    const baseElement = {
-      id,
-      position: { x, y },
-      zIndex: tool.type === 'folder' ? 0 : tool.type === 'chat' ? 2 : 1,
-      isVisible: true,
-      isLocked: false,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
-
+    // Generate numeric ID for Zustand store compatibility
+    const numericId = Date.now() + Math.floor(Math.random() * 1000);
+    
     if (tool.type === 'chat') {
-      return {
-        ...baseElement,
+      const chatElement = {
+        id: numericId,
         type: 'chat' as const,
+        position: { x: x, y: y },
         dimensions: { width: 600, height: 700 },
+        x: x,        // Legacy compatibility
+        y: y,        // Legacy compatibility
+        width: 600,  // Legacy compatibility
+        height: 700, // Legacy compatibility
         title: 'New AI Chat',
-        model: 'gpt-4',
         messages: [],
+        conversations: [],
+        // Optional fields for compatibility
+        model: 'gpt-4',
         connectedContentIds: [],
-        status: 'idle' as const
-      } as ChatData;
+        status: 'idle',
+        zIndex: 2,
+        isVisible: true,
+        isLocked: false,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+      console.log('💬 [CanvasToolbar] Creating AI Chat element (fixed format):', { chatElement });
+      return chatElement;
     }
 
     if (tool.type === 'folder') {
       return {
-        ...baseElement,
+        id: numericId,
         type: 'folder' as const,
-        dimensions: { width: 350, height: 250 },
+        x: x,
+        y: y,
+        width: 350,
+        height: 250,
         name: 'New Profile Collection',
         description: '',
         color: tool.color,
         childIds: [],
         isExpanded: true
-      } as FolderData;
+      };
     }
 
     // Content piece
     return {
-      ...baseElement,
+      id: numericId,
       type: 'content' as const,
-      dimensions: { width: 320, height: 240 },
+      x: x,
+      y: y,
+      width: 320,
+      height: 240,
       url: 'https://example.com',
       title: `New ${tool.label} Content`,
       thumbnail: `https://via.placeholder.com/320x240?text=${encodeURIComponent(tool.label)}&bg=${tool.color.slice(1)}&color=ffffff`,
@@ -102,7 +122,7 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({ onAddElement, view
       likeCount: Math.floor(Math.random() * 5000),
       commentCount: Math.floor(Math.random() * 500),
       tags: [tool.platform || 'content'].filter(Boolean)
-    } as ContentPiece;
+    };
   };
 
   const handleToolClick = (tool: Tool) => {
@@ -120,8 +140,8 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({ onAddElement, view
     const y = 100;
 
     const newElement = createElement(tool, x, y);
-    console.log('[CanvasToolbar] Created element:', newElement);
-    console.log('[CanvasToolbar] Element dimensions:', newElement.dimensions);
+    console.log('🔨 [CanvasToolbar] Tool clicked - created element:', { toolId: tool.id, toolType: tool.type, toolPlatform: tool.platform, newElement });
+    console.log('🔨 [CanvasToolbar] Element dimensions:', newElement.dimensions);
     
     onAddElement(newElement);
     
@@ -143,6 +163,7 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({ onAddElement, view
       const y = (e.clientY - rect.top - viewport.y) / viewport.zoom;
       
       const newElement = createElement(tool, x - 160, y - 120);
+      console.log('🎯 [CanvasToolbar] Drag/drop element creation:', { toolId: tool.id, toolType: tool.type, toolPlatform: tool.platform, newElement });
       onAddElement(newElement);
     } catch (error) {
       console.error('Failed to create element from drop:', error);

@@ -952,11 +952,40 @@ class CanvasPersistenceService {
     try {
       console.log('[CanvasPersistence] Saving canvas:', workspaceId);
       console.log('[CanvasPersistence] Elements to save:', elements.length);
+      console.log('[CanvasPersistence] Element details:', elements.map(el => ({ 
+        id: el.id, 
+        type: el.type, 
+        title: el.title || 'N/A'
+      })));
       console.log('[CanvasPersistence] Connections to save:', connections.length);
+      
+      // Validate elements before saving
+      const validatedElements = elements.map(el => {
+        // Check for required fields
+        if (!el.id || !el.type) {
+          console.warn('[CanvasPersistence] Invalid element missing id or type:', el);
+          return null;
+        }
+        
+        // Check for position fields
+        if (typeof el.x !== 'number' || typeof el.y !== 'number' || 
+            typeof el.width !== 'number' || typeof el.height !== 'number') {
+          console.warn('[CanvasPersistence] Invalid element missing position/dimensions:', el);
+          return null;
+        }
+        
+        return el;
+      }).filter(el => el !== null);
+      
+      console.log('[CanvasPersistence] Validated elements:', {
+        originalCount: elements.length,
+        validCount: validatedElements.length,
+        invalidCount: elements.length - validatedElements.length
+      });
       
       // Prepare canvas_data in the format the projects table expects
       const canvasData = {
-        elements: elements.reduce((acc, el) => {
+        elements: validatedElements.reduce((acc, el) => {
           acc[el.id] = el;
           return acc;
         }, {}),
@@ -980,6 +1009,19 @@ class CanvasPersistenceService {
       
       if (error) {
         console.error('[CanvasPersistence] Error saving canvas:', error);
+        console.error('[CanvasPersistence] Error details:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        });
+        console.error('[CanvasPersistence] Canvas data that failed to save:', {
+          workspaceId,
+          elementCount: elements.length,
+          connectionCount: connections.length,
+          canvasDataStructure: Object.keys(canvasData),
+          elementsStructure: Object.keys(canvasData.elements || {}).length
+        });
         return false;
       }
       
@@ -1023,6 +1065,7 @@ class CanvasPersistenceService {
       
       console.log('[CanvasPersistence] Parsed canvas data:', {
         elementsCount: elements.length,
+        elementTypes: elements.map(el => ({ id: el.id, type: el.type, title: el.title || 'N/A' })),
         connectionsCount: connections.length,
         viewport: canvasData.viewport
       });

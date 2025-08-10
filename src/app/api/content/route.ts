@@ -58,37 +58,37 @@ export async function POST(request: NextRequest) {
     const mockData: Record<string, any> = {
       instagram: {
         title: 'Instagram Post',
-        thumbnail: 'https://via.placeholder.com/300x300/E1306C/white?text=Instagram',
+        thumbnail: 'https://via.placeholder.com/1080x1080/E4405F/ffffff?text=📸+Instagram+Post&font-size=36',
         platform: 'instagram',
         author: 'Instagram User'
       },
       tiktok: {
         title: 'TikTok Video',
-        thumbnail: 'https://via.placeholder.com/300x300/000000/white?text=TikTok',
+        thumbnail: 'https://via.placeholder.com/1080x1920/000000/ffffff?text=🎵+TikTok+Video&font-size=36',
         platform: 'tiktok',
         author: 'TikTok Creator'
       },
       twitter: {
         title: 'X/Twitter Post',
-        thumbnail: 'https://via.placeholder.com/300x300/1DA1F2/white?text=X',
+        thumbnail: 'https://via.placeholder.com/1200x675/1DA1F2/ffffff?text=🐦+X+Post&font-size=32',
         platform: 'twitter',
         author: 'X User'
       },
       loom: {
         title: 'Loom Recording',
-        thumbnail: 'https://via.placeholder.com/300x300/625DF5/white?text=Loom',
+        thumbnail: 'https://via.placeholder.com/1280x720/625DF5/ffffff?text=🎥+Loom+Recording&font-size=32',
         platform: 'loom',
         author: 'Loom User'
       },
       drive: {
         title: 'Google Drive File',
-        thumbnail: 'https://via.placeholder.com/300x300/4285F4/white?text=Drive',
+        thumbnail: 'https://via.placeholder.com/300x300/4285F4/ffffff?text=📁+Drive+File&font-size=24',
         platform: 'drive',
         author: 'Drive Owner'
       },
       unknown: {
         title: 'External Content',
-        thumbnail: 'https://via.placeholder.com/300x300/gray/white?text=Content',
+        thumbnail: 'https://via.placeholder.com/300x300/64748b/ffffff?text=📄+Content&font-size=24',
         platform: 'unknown',
         author: 'Unknown'
       }

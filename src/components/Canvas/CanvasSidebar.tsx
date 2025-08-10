@@ -83,17 +83,35 @@ export const CanvasSidebar: React.FC<CanvasSidebarProps> = ({ onOpenSocialMediaM
     };
     
     if (tool.type === 'chat') {
-      addElement({
-        ...baseElement,
+      const chatElement = {
+        id: baseElement.id,
         type: 'chat',
+        position: { x: baseElement.x, y: baseElement.y },
+        dimensions: { width: baseElement.width, height: baseElement.height },
+        x: baseElement.x,        // Legacy compatibility
+        y: baseElement.y,        // Legacy compatibility
+        width: baseElement.width,  // Legacy compatibility
+        height: baseElement.height, // Legacy compatibility
+        title: baseElement.title,
         messages: [],
         conversations: [{
           id: 'default',
           title: 'New Conversation',
           messages: [],
           createdAt: new Date()
-        }]
-      });
+        }],
+        // Additional required fields
+        model: 'gpt-4',
+        connectedContentIds: [],
+        status: 'idle',
+        zIndex: 2,
+        isVisible: true,
+        isLocked: false,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+      console.log('💬 [CanvasSidebar] Creating AI Chat element (fixed format):', { toolId: tool.id, chatElement });
+      addElement(chatElement);
     } else {
       addElement({
         ...baseElement,

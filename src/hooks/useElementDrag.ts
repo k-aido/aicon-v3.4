@@ -104,9 +104,21 @@ export const useElementDrag = ({
 
   // Mouse down handler
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    // Check if the target is a textarea, input, or has data-no-drag
+    // Check if the target is an interactive element that should not trigger drag
     const target = e.target as HTMLElement;
-    if (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT' || target.closest('[data-no-drag]')) {
+    
+    // Direct interactive elements
+    if (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT' || target.tagName === 'BUTTON' || target.tagName === 'SELECT') {
+      return;
+    }
+    
+    // Check for data-no-drag but only on the direct element, not parents
+    if (target.hasAttribute('data-no-drag')) {
+      return;
+    }
+    
+    // Check if clicking inside a button or other interactive element
+    if (target.closest('button, input, textarea, select, [role="button"]')) {
       return;
     }
     

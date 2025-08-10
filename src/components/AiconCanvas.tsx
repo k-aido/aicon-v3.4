@@ -112,6 +112,29 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
   const debouncedSave = useCallback(
     debounce(async (workspaceId: string, elements: any[], connections: any[], viewport: any, title: string) => {
       console.log('[AiconCanvas] Auto-saving canvas...');
+      
+      // Debug logging for element structures
+      console.log('=== Saving Elements to Supabase ===');
+      elements.forEach((element, index) => {
+        console.log(`Element ${index + 1}:`);
+        console.log('- Type:', element.type);
+        console.log('- ID:', element.id);
+        console.log('- Title:', element.title);
+        console.log('- Full structure:', JSON.stringify(element, null, 2));
+        console.log('Required fields check:');
+        console.log('  - id:', element.id);
+        console.log('  - type:', element.type);
+        console.log('  - x:', element.x);
+        console.log('  - y:', element.y);
+        console.log('  - width:', element.width);
+        console.log('  - height:', element.height);
+        if (element.type === 'chat') {
+          console.log('  - messages:', element.messages ? element.messages.length : 'undefined');
+          console.log('  - conversations:', element.conversations ? element.conversations.length : 'undefined');
+        }
+        console.log('---');
+      });
+      
       try {
         const success = await canvasPersistence.saveCanvas(
           workspaceId,
@@ -137,6 +160,7 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
     if (workspaceId && workspaceId !== 'new' && !isLoading) {
       console.log('[AiconCanvas] Canvas state changed, scheduling auto-save...', {
         elementsCount: elements.length,
+        elementTypes: elements.map(el => ({ id: el.id, type: el.type, title: el.title || 'N/A' })),
         connectionsCount: connections.length,
         viewport,
         title: canvasTitle
@@ -216,40 +240,86 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
   })) as ImportedCanvasElement[];
 
   const handleSetElements = (newElements: ImportedCanvasElement[] | ((prev: ImportedCanvasElement[]) => ImportedCanvasElement[])) => {
+    console.log('🔥 === handleSetElements called ===');
+    console.log('🔥 Current elements before update:', elements.map(e => ({ 
+      id: e.id, 
+      type: e.type, 
+      title: (e as any).title || 'N/A' 
+    })));
+    
     if (typeof newElements === 'function') {
+      console.log('🔥 Handling functional update (setElements with function)');
       // Handle functional updates
       const currentElements = elements;
       const updated = newElements(currentElements as ImportedCanvasElement[]);
-      // Clear and re-add all elements
-      updated.forEach((el, index) => {
-        if (index < elements.length) {
+      
+      console.log('🔥 Updated elements after function call:', updated.map(e => ({ 
+        id: e.id, 
+        type: e.type, 
+        title: (e as any).title || 'N/A' 
+      })));
+      
+      // Create maps for efficient lookups
+      const currentElementMap = new Map(currentElements.map(el => [el.id, el]));
+      const updatedElementMap = new Map(updated.map(el => [el.id, el]));
+      
+      console.log('🔥 Current element IDs:', Array.from(currentElementMap.keys()));
+      console.log('🔥 Updated element IDs:', Array.from(updatedElementMap.keys()));
+      
+      // Update existing elements and add new ones
+      updated.forEach(el => {
+        if (currentElementMap.has(el.id)) {
+          console.log('🔥 ✅ Updating existing element:', { id: el.id, type: el.type });
           updateElement(el.id, el as any);
         } else {
+          console.log('🔥 ➕ Adding new element:', { id: el.id, type: el.type });
           addElement(el as any);
         }
       });
-      // Remove extra elements if needed
-      if (elements.length > updated.length) {
-        for (let i = updated.length; i < elements.length; i++) {
-          deleteElement(elements[i].id);
+      
+      // Remove elements that are no longer in the updated array
+      currentElements.forEach(el => {
+        if (!updatedElementMap.has(el.id)) {
+          console.log('🔥 ❌ DELETING element (not in updated array):', { id: el.id, type: el.type });
+          deleteElement(el.id);
         }
-      }
+      });
     } else {
+      console.log('🔥 Handling direct array update (setElements with array)');
+      console.log('🔥 New elements (replacing):', newElements.map(e => ({ 
+        id: e.id, 
+        type: e.type, 
+        title: (e as any).title || 'N/A' 
+      })));
+      
       // Handle direct array updates
-      newElements.forEach((el, index) => {
-        if (index < elements.length) {
+      const currentElementMap = new Map(elements.map(el => [el.id, el]));
+      const newElementMap = new Map(newElements.map(el => [el.id, el]));
+      
+      console.log('🔥 Current element IDs:', Array.from(currentElementMap.keys()));
+      console.log('🔥 New element IDs:', Array.from(newElementMap.keys()));
+      
+      // Update existing elements and add new ones
+      newElements.forEach(el => {
+        if (currentElementMap.has(el.id)) {
+          console.log('🔥 ✅ Updating existing element:', { id: el.id, type: el.type });
           updateElement(el.id, el as any);
         } else {
+          console.log('🔥 ➕ Adding new element:', { id: el.id, type: el.type });
           addElement(el as any);
         }
       });
-      // Remove extra elements if needed
-      if (elements.length > newElements.length) {
-        for (let i = newElements.length; i < elements.length; i++) {
-          deleteElement(elements[i].id);
+      
+      // Remove elements that are no longer in the new array
+      elements.forEach(el => {
+        if (!newElementMap.has(el.id)) {
+          console.log('🔥 ❌ DELETING element (not in new array):', { id: el.id, type: el.type });
+          deleteElement(el.id);
         }
-      }
+      });
     }
+    
+    console.log('🔥 === handleSetElements complete ===');
   };
 
   const handleSetConnections = (newConnections: ImportedConnection[] | ((prev: ImportedConnection[]) => ImportedConnection[])) => {

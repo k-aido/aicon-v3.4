@@ -8,6 +8,15 @@ import { ContentElement } from './ContentElement';
 import { ChatElement } from './ChatElement';
 import { useCanvasStore } from '@/store/canvasStore';
 
+// Generate truly unique numeric IDs for canvas elements
+let idCounter = 0;
+const generateUniqueId = () => {
+  // Use timestamp + counter to ensure uniqueness even for rapid successive calls
+  const timestamp = Date.now();
+  idCounter = (idCounter + 1) % 10000; // Reset counter after 10000 to prevent overflow
+  return timestamp * 10000 + idCounter;
+};
+
 interface CanvasProps {
   elements: CanvasElement[];
   setElements: React.Dispatch<React.SetStateAction<CanvasElement[]>>;
@@ -86,7 +95,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
     if (!platform) return;
 
     const newElement = {
-      id: Date.now(),
+      id: generateUniqueId(),
       type: 'content' as const,
       x: x - 150,
       y: y - 100,
@@ -151,7 +160,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
       
       // Create new element
       const newElement: CanvasElement = tool.type === 'chat' ? {
-        id: Date.now(),
+        id: generateUniqueId(),
         type: 'chat' as const,
         x: x - 400,
         y: y - 450,
@@ -159,7 +168,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
         height: 900,
         messages: []
       } : {
-        id: Date.now(),
+        id: generateUniqueId(),
         type: 'content' as const,
         x: x - 150,
         y: y - 100,
@@ -171,7 +180,15 @@ const CanvasComponent: React.FC<CanvasProps> = ({
         thumbnail: 'https://via.placeholder.com/300x200'
       };
       
-      setElements(prev => [...prev, newElement]);
+      if (tool.type === 'chat') {
+        console.log('💬 [Canvas] Creating AI Chat element from drag/drop:', { tool, newElement });
+      }
+      console.log('🛠️ [Canvas] Creating element from drag/drop:', { tool, newElement });
+      setElements(prev => {
+        const updated = [...prev, newElement];
+        console.log('🛠️ [Canvas] Elements after drag/drop creation:', updated.map(e => ({ id: e.id, type: e.type, title: (e as any).title || 'N/A' })));
+        return updated;
+      });
     } catch (error) {
       console.error('Failed to parse tool data:', error);
     }
@@ -188,14 +205,37 @@ const CanvasComponent: React.FC<CanvasProps> = ({
 
   // Handle element updates
   const handleElementUpdate = useCallback((id: number, updates: Partial<CanvasElement>) => {
-    setElements(prev => prev.map(el => el.id === id ? { ...el, ...updates } as CanvasElement : el));
+    console.log('🔧 [Canvas] handleElementUpdate called:', { id, updates });
+    setElements(prev => {
+      const updated = prev.map(el => el.id === id ? { ...el, ...updates } as CanvasElement : el);
+      console.log('🔧 [Canvas] Elements after update:', updated.map(e => ({ id: e.id, type: e.type, title: (e as any).title || 'N/A' })));
+      return updated;
+    });
   }, [setElements]);
 
   // Handle element deletion (single)
   const handleElementDelete = useCallback((id: number) => {
-    setElements(prev => prev.filter(el => el.id !== id));
-    setConnections(prev => prev.filter(conn => conn.from !== id && conn.to !== id));
-    setSelectedElementIds(prev => prev.filter(selId => selId !== id));
+    console.log('🗑️ [Canvas] handleElementDelete called:', { id });
+    setElements(prev => {
+      const beforeDelete = prev.map(e => ({ id: e.id, type: e.type, title: (e as any).title || 'N/A' }));
+      const afterDelete = prev.filter(el => el.id !== id);
+      console.log('🗑️ [Canvas] Elements before delete filter:', beforeDelete);
+      console.log('🗑️ [Canvas] Elements after delete filter:', afterDelete.map(e => ({ id: e.id, type: e.type, title: (e as any).title || 'N/A' })));
+      console.log('🗑️ [Canvas] Filter removed', beforeDelete.length - afterDelete.length, 'elements');
+      return afterDelete;
+    });
+    setConnections(prev => {
+      const beforeConnFilter = prev.length;
+      const afterConnFilter = prev.filter(conn => conn.from !== id && conn.to !== id);
+      console.log('🗑️ [Canvas] Connections filter - before:', beforeConnFilter, 'after:', afterConnFilter.length);
+      return afterConnFilter;
+    });
+    setSelectedElementIds(prev => {
+      const beforeSelFilter = prev.length;
+      const afterSelFilter = prev.filter(selId => selId !== id);
+      console.log('🗑️ [Canvas] Selected IDs filter - before:', beforeSelFilter, 'after:', afterSelFilter.length);
+      return afterSelFilter;
+    });
     if (selectedElement?.id === id) {
       setSelectedElement(null);
     }
@@ -203,10 +243,23 @@ const CanvasComponent: React.FC<CanvasProps> = ({
 
   // Handle multiple element deletion
   const handleMultipleElementDelete = useCallback((ids: number[]) => {
-    setElements(prev => prev.filter(el => !ids.includes(el.id)));
-    setConnections(prev => prev.filter(conn => 
-      !ids.includes(conn.from) && !ids.includes(conn.to)
-    ));
+    console.log('🗑️ [Canvas] handleMultipleElementDelete called:', { ids });
+    setElements(prev => {
+      const beforeDelete = prev.map(e => ({ id: e.id, type: e.type, title: (e as any).title || 'N/A' }));
+      const afterDelete = prev.filter(el => !ids.includes(el.id));
+      console.log('🗑️ [Canvas] Elements before multiple delete filter:', beforeDelete);
+      console.log('🗑️ [Canvas] Elements after multiple delete filter:', afterDelete.map(e => ({ id: e.id, type: e.type, title: (e as any).title || 'N/A' })));
+      console.log('🗑️ [Canvas] Multiple delete filter removed', beforeDelete.length - afterDelete.length, 'elements');
+      return afterDelete;
+    });
+    setConnections(prev => {
+      const beforeConnFilter = prev.length;
+      const afterConnFilter = prev.filter(conn => 
+        !ids.includes(conn.from) && !ids.includes(conn.to)
+      );
+      console.log('🗑️ [Canvas] Multiple delete connections filter - before:', beforeConnFilter, 'after:', afterConnFilter.length);
+      return afterConnFilter;
+    });
     setSelectedElementIds([]);
     setSelectedElement(null);
   }, [setElements, setConnections, setSelectedElement]);
@@ -331,7 +384,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
       // Complete connection
       if (connecting !== elementId) {
         const newConnection: Connection = {
-          id: Date.now(),
+          id: generateUniqueId(),
           from: connecting,
           to: elementId
         };

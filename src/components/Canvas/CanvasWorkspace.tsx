@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useMemo } from 'react';
 import { ContentPieceComponent } from './ContentPieceComponent';
 import { FolderComponent } from './FolderComponent';
-import { ChatInterfaceComponent } from './ChatInterfaceComponent';
+import { ChatInterface } from '@/components/Chat/ChatInterface';
 import { ContextMenu, useContextMenu } from './ContextMenu';
 import { ContentDetailsPanel } from '../Sidebar/ContentDetailsPanel';
 import { ChatSidebar } from '../Sidebar/ChatSidebar';
@@ -522,18 +522,30 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
             if (element.type === 'chat') {
               const connectedContent = getConnectedContent(element.id);
               return (
-                <ChatInterfaceComponent
+                <div
                   key={element.id}
-                  element={element as ChatData}
-                  selected={isSelected}
-                  connecting={connecting}
-                  connections={connections}
-                  connectedContent={connectedContent}
-                  onSelect={() => selectElement(element.id)}
-                  onUpdate={handleElementUpdate}
-                  onDelete={handleElementDelete}
-                  onConnectionStart={handleConnectionStart}
-                />
+                  className="absolute pointer-events-auto"
+                  style={{
+                    transform: `translate(${element.position.x}px, ${element.position.y}px)`,
+                    width: element.dimensions.width,
+                    height: element.dimensions.height
+                  }}
+                >
+                  <ChatInterface
+                    element={{
+                      ...element,
+                      id: element.id as number,
+                      x: 0,
+                      y: 0,
+                      width: element.dimensions.width,
+                      height: element.dimensions.height
+                    } as any}
+                    connections={connections as any}
+                    allElements={elements as any}
+                    onUpdate={(id: number, updates: any) => handleElementUpdate(id.toString(), updates)}
+                    onDelete={(id: number) => handleElementDelete(id.toString())}
+                  />
+                </div>
               );
             }
 

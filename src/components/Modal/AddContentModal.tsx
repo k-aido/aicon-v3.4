@@ -48,6 +48,22 @@ export const AddContentModal: React.FC<AddContentModalProps> = ({
         body: JSON.stringify({ url })
       });
 
+      // Check if response is ok before parsing JSON
+      if (!response.ok) {
+        // If the response is not ok, it might be returning HTML (404, 500, etc.)
+        const text = await response.text();
+        console.error('API error response:', text);
+        throw new Error(`API error: ${response.status} ${response.statusText}`);
+      }
+
+      // Check content-type to ensure it's JSON
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text();
+        console.error('Non-JSON response:', text);
+        throw new Error('API returned non-JSON response');
+      }
+
       const contentInfo = await response.json();
       
       if (contentInfo.error) {
@@ -66,13 +82,25 @@ export const AddContentModal: React.FC<AddContentModalProps> = ({
       onClose();
     } catch (error) {
       console.error('Failed to fetch content:', error);
-      // Fallback to mock data
+      
+      // Try to detect platform from URL for better fallback
+      let detectedPlatform = 'unknown';
+      const lowerUrl = url.toLowerCase();
+      if (lowerUrl.includes('instagram.com')) {
+        detectedPlatform = 'instagram';
+      } else if (lowerUrl.includes('youtube.com') || lowerUrl.includes('youtu.be')) {
+        detectedPlatform = 'youtube';
+      } else if (lowerUrl.includes('tiktok.com')) {
+        detectedPlatform = 'tiktok';
+      }
+      
+      // Fallback to mock data with better platform detection
       onAdd({
         type: 'content',
         url,
-        title: 'Content',
-        thumbnail: 'https://via.placeholder.com/300x300',
-        platform: selectedPlatform || 'unknown',
+        title: `${detectedPlatform.charAt(0).toUpperCase() + detectedPlatform.slice(1)} Content`,
+        thumbnail: `https://via.placeholder.com/300x300?text=${detectedPlatform}`,
+        platform: detectedPlatform as Platform,
         width: 300,
         height: 250
       });

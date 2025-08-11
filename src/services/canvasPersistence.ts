@@ -799,11 +799,23 @@ class CanvasPersistenceService {
 
       // Update canvas_data in projects table
       const existingCanvasData = project?.canvas_data || {};
+      
+      // Convert arrays to objects with IDs as keys for consistent storage
+      const elementsObject: Record<string, any> = {};
+      elements.forEach(el => {
+        elementsObject[el.id] = el;
+      });
+      
+      const connectionsObject: Record<string, any> = {};
+      connections.forEach(conn => {
+        connectionsObject[conn.id] = conn;
+      });
+      
       const updatedCanvasData = {
         ...existingCanvasData,
         viewport: viewport || (existingCanvasData as any)?.viewport || { x: 0, y: 0, zoom: 1.0 },
-        elements: elements,
-        connections: connections,
+        elements: elementsObject,
+        connections: connectionsObject,
         last_saved: new Date().toISOString()
       };
 
@@ -866,10 +878,20 @@ class CanvasPersistenceService {
             // Extract elements and connections from canvas_data
             const canvasData = canvas.canvas_data as any;
             if (canvasData?.elements && canvasData?.connections) {
+              // Convert elements object to array
+              const elementsArray = Object.values(canvasData.elements || {});
+              // Convert connections object to array
+              const connectionsArray = Object.values(canvasData.connections || {});
+              
+              console.log('[CanvasPersistence] Converted canvas data:', {
+                elementsCount: elementsArray.length,
+                connectionsCount: connectionsArray.length
+              });
+              
               return {
                 workspace,
-                elements: canvasData.elements,
-                connections: canvasData.connections
+                elements: elementsArray,
+                connections: connectionsArray
               };
             }
             

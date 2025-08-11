@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Canvas } from './Canvas/Canvas';
 import { CanvasNavigation } from './Canvas/CanvasNavigation';
 import { CanvasSidebar } from './Canvas/CanvasSidebar';
@@ -49,8 +49,13 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
     platform: undefined
   });
   const [isLoading, setIsLoading] = useState(true);
-  const { elements, connections, addElement, updateElement, deleteElement, addConnection, deleteConnection, setCanvasTitle } = useCanvasStore();
+  const [hasLoadedInitialData, setHasLoadedInitialData] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const { elements, connections, addElement, updateElement, deleteElement, addConnection, deleteConnection, canvasTitle } = useCanvasStore();
   const router = useRouter();
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const saveStatusTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Load canvas data if canvasId is provided
   useEffect(() => {
@@ -67,22 +72,13 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
               connectionsCount: loadedConnections.length 
             });
             
-            // Set canvas title
-            setCanvasTitle(workspace.title);
+            // Use the store directly to avoid dependency issues
+            const store = useCanvasStore.getState();
+            store.setCanvasTitle(workspace.title);
+            store.loadCanvasData(loadedElements, loadedConnections);
             
-            // Clear existing elements and connections
-            elements.forEach(el => deleteElement(el.id));
-            connections.forEach(conn => deleteConnection(conn.id));
-            
-            // Load elements
-            loadedElements.forEach(element => {
-              addElement(element);
-            });
-            
-            // Load connections
-            loadedConnections.forEach(connection => {
-              addConnection(connection);
-            });
+            // Mark that we've loaded the initial data
+            setHasLoadedInitialData(true);
           } else {
             console.error('[AiconCanvas] Canvas not found:', canvasId);
             // Redirect to dashboard if canvas not found
@@ -91,12 +87,112 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
         } catch (error) {
           console.error('[AiconCanvas] Error loading canvas:', error);
         }
+      } else if (canvasId === 'new') {
+        // For new canvases, mark as loaded immediately
+        setHasLoadedInitialData(true);
       }
       setIsLoading(false);
     };
 
     loadCanvas();
-  }, [canvasId]); // Only depend on canvasId to avoid re-running on state changes
+  }, [canvasId, router]); // Only depend on canvasId and router
+
+  // Auto-save functionality
+  const saveCanvas = useCallback(async () => {
+    if (!canvasId || canvasId === 'new' || saveStatus === 'saving') {
+      return;
+    }
+
+    // Don't show saving status in UI, just save silently
+    try {
+      console.log('[AiconCanvas] Auto-saving canvas:', canvasId);
+      const success = await canvasPersistence.saveCanvas(
+        canvasId,
+        elements,
+        connections,
+        undefined, // viewport - we can add this later if needed
+        canvasTitle
+      );
+      
+      if (success) {
+        console.log('[AiconCanvas] Canvas saved successfully');
+        setSaveStatus('idle');  // Go straight back to idle
+        setLastSaved(new Date());
+      } else {
+        console.error('[AiconCanvas] Failed to save canvas');
+        setSaveStatus('error');
+        // Keep error status visible for longer
+        if (saveStatusTimeoutRef.current) {
+          clearTimeout(saveStatusTimeoutRef.current);
+        }
+        saveStatusTimeoutRef.current = setTimeout(() => {
+          setSaveStatus('idle');
+        }, 5000);
+      }
+    } catch (error) {
+      console.error('[AiconCanvas] Error saving canvas:', error);
+      setSaveStatus('error');
+      // Keep error status visible for longer
+      if (saveStatusTimeoutRef.current) {
+        clearTimeout(saveStatusTimeoutRef.current);
+      }
+      saveStatusTimeoutRef.current = setTimeout(() => {
+        setSaveStatus('idle');
+      }, 5000);
+    }
+  }, [canvasId, elements, connections, canvasTitle, saveStatus]);
+
+  // Auto-save when elements, connections, or title changes
+  useEffect(() => {
+    // Don't autosave until we've loaded the initial data
+    if (!hasLoadedInitialData) {
+      console.log('[AiconCanvas] Skipping autosave - initial data not loaded yet');
+      return;
+    }
+    
+    if (!canvasId || canvasId === 'new') {
+      return;
+    }
+
+    // Clear existing timeout
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    // Set new timeout for auto-save (2 seconds after last change)
+    saveTimeoutRef.current = setTimeout(() => {
+      saveCanvas();
+    }, 2000);
+
+    // Cleanup
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, [elements, connections, canvasTitle, saveCanvas, hasLoadedInitialData]);
+
+  // Save immediately when component unmounts and clear store
+  useEffect(() => {
+    return () => {
+      if (canvasId && canvasId !== 'new' && hasLoadedInitialData) {
+        // Save synchronously on unmount (best effort)
+        const store = useCanvasStore.getState();
+        canvasPersistence.saveCanvas(
+          canvasId,
+          store.elements,
+          store.connections,
+          undefined,
+          store.canvasTitle
+        );
+      }
+      
+      // Clear the canvas store to prevent stale data
+      const store = useCanvasStore.getState();
+      store.clearCanvas();
+      store.setCanvasTitle('Canvas Title');
+    };
+  }, [canvasId, hasLoadedInitialData]);
 
   // Auto-analyze content when added to canvas
   useEffect(() => {
@@ -248,10 +344,25 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
 
   return (
     <div className="h-screen flex flex-col bg-gray-50">
-      <CanvasNavigation />
+      <CanvasNavigation lastSaved={lastSaved} />
       
       <div className="flex-1 flex relative">
         <CanvasSidebar onOpenSocialMediaModal={handleOpenSocialMediaModal} />
+        
+        {/* Error notification only */}
+        {saveStatus === 'error' && (
+          <div className="absolute top-4 right-4 z-50 transition-all duration-300 animate-pulse">
+            <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 flex items-center space-x-2 shadow-lg">
+              <svg className="h-5 w-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+              </svg>
+              <div>
+                <p className="text-sm font-medium text-red-800">Save failed</p>
+                <p className="text-xs text-red-600 mt-0.5">Changes may not be saved. Please check your connection.</p>
+              </div>
+            </div>
+          </div>
+        )}
         
         <Canvas
           elements={canvasElements}

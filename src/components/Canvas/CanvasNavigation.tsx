@@ -2,10 +2,15 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Home } from 'lucide-react';
 import { useCanvasStore } from '@/store/canvasStore';
 
-export const CanvasNavigation: React.FC = () => {
+interface CanvasNavigationProps {
+  lastSaved?: Date | null;
+}
+
+export const CanvasNavigation: React.FC<CanvasNavigationProps> = ({ lastSaved }) => {
   const { canvasTitle, setCanvasTitle } = useCanvasStore();
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(canvasTitle);
+  const [, setUpdateTrigger] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -14,6 +19,15 @@ export const CanvasNavigation: React.FC = () => {
       inputRef.current.select();
     }
   }, [isEditing]);
+
+  // Update the last saved display every 30 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setUpdateTrigger(prev => prev + 1);
+    }, 30000);
+    
+    return () => clearInterval(interval);
+  }, []);
 
   const handleDoubleClick = () => {
     setIsEditing(true);
@@ -39,6 +53,22 @@ export const CanvasNavigation: React.FC = () => {
     } else if (e.key === 'Escape') {
       handleCancel();
     }
+  };
+
+  const formatLastSaved = () => {
+    if (!lastSaved) return null;
+    
+    const now = new Date();
+    const diff = now.getTime() - lastSaved.getTime();
+    const seconds = Math.floor(diff / 1000);
+    
+    if (seconds < 5) return 'just now';
+    if (seconds < 60) return `${seconds}s ago`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    return lastSaved.toLocaleDateString();
   };
 
   return (
@@ -85,6 +115,19 @@ export const CanvasNavigation: React.FC = () => {
             Double-click to edit
           </span>
         </div>
+      )}
+
+      {/* Last Saved Indicator */}
+      {lastSaved && formatLastSaved() && (
+        <>
+          <div className="mx-2 h-4 w-px bg-gray-200"></div>
+          <span className="text-xs text-gray-400 flex items-center">
+            <svg className="w-3 h-3 mr-1 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+            </svg>
+            Saved {formatLastSaved()}
+          </span>
+        </>
       )}
     </nav>
   );

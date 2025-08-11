@@ -833,13 +833,12 @@ class CanvasPersistenceService {
         return false;
       }
 
-      // Also save to dedicated tables for better querying
-      const [elementsResult, connectionsResult] = await Promise.all([
-        this.saveElements(workspaceId, elements),
-        this.saveConnections(workspaceId, connections)
-      ]);
-
-      return elementsResult && connectionsResult;
+      // Successfully saved to projects table
+      console.log('[CanvasPersistence] Canvas saved successfully to projects table');
+      return true;
+      
+      // Note: We're not using dedicated tables for now since they don't exist
+      // The canvas_data JSONB field in projects table is sufficient for storage
     } catch (error) {
       console.error('Error in saveCanvas:', error);
       return false;
@@ -895,16 +894,12 @@ class CanvasPersistenceService {
               };
             }
             
-            // Fall back to loading from dedicated tables
-            const [elements, connections] = await Promise.all([
-              this.loadElements(workspaceId),
-              this.loadConnections(workspaceId)
-            ]);
-            
+            // No canvas_data found, return empty canvas
+            console.log('[CanvasPersistence] No canvas_data found, returning empty canvas');
             return {
               workspace,
-              elements,
-              connections
+              elements: [],
+              connections: []
             };
           }
         } else if (response.status === 404) {
@@ -1001,23 +996,28 @@ class CanvasPersistenceService {
       // Try to load from canvas_data first (faster)
       const canvasData = project.canvas_data as any;
       if (canvasData?.elements && canvasData?.connections) {
+        // Convert objects to arrays
+        const elementsArray = Object.values(canvasData.elements || {});
+        const connectionsArray = Object.values(canvasData.connections || {});
+        
+        console.log('[CanvasPersistence] Loaded canvas data from project:', {
+          elementsCount: elementsArray.length,
+          connectionsCount: connectionsArray.length
+        });
+        
         return {
           workspace,
-          elements: canvasData.elements,
-          connections: canvasData.connections
+          elements: elementsArray,
+          connections: connectionsArray
         };
       }
 
-      // Fall back to loading from dedicated tables
-      const [elements, connections] = await Promise.all([
-        this.loadElements(workspaceId),
-        this.loadConnections(workspaceId)
-      ]);
-
+      // No canvas_data found, return empty canvas
+      console.log('[CanvasPersistence] No canvas_data found in project, returning empty canvas');
       return {
         workspace,
-        elements,
-        connections
+        elements: [],
+        connections: []
       };
     } catch (error) {
       console.error('Error in loadCanvas:', error);

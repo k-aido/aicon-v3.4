@@ -49,6 +49,12 @@ interface CanvasState {
   // Canvas title
   setCanvasTitle: (title: string) => void;
   
+  // Clear all elements and connections
+  clearCanvas: () => void;
+  
+  // Load complete canvas data
+  loadCanvasData: (elements: Element[], connections: Connection[]) => void;
+  
   // Get connected content for a chat element
   getConnectedContent: (chatId: number) => Element[];
 }
@@ -61,9 +67,17 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   canvasTitle: 'Canvas Title',
   
   addElement: (element) => {
-    set((state) => ({
-      elements: [...state.elements, element]
-    }));
+    set((state) => {
+      // Check if element with this ID already exists
+      const existingElement = state.elements.find(el => el.id === element.id);
+      if (existingElement) {
+        console.warn(`[CanvasStore] Element with ID ${element.id} already exists, skipping add`);
+        return state;
+      }
+      return {
+        elements: [...state.elements, element]
+      };
+    });
   },
   
   updateElement: (id, updates) => {
@@ -89,9 +103,17 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   },
   
   addConnection: (connection) => {
-    set((state) => ({
-      connections: [...state.connections, connection]
-    }));
+    set((state) => {
+      // Check if connection with this ID already exists
+      const existingConnection = state.connections.find(conn => conn.id === connection.id);
+      if (existingConnection) {
+        console.warn(`[CanvasStore] Connection with ID ${connection.id} already exists, skipping add`);
+        return state;
+      }
+      return {
+        connections: [...state.connections, connection]
+      };
+    });
   },
   
   deleteConnection: (id) => {
@@ -106,6 +128,24 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   
   setCanvasTitle: (title) => {
     set({ canvasTitle: title });
+  },
+  
+  clearCanvas: () => {
+    set({
+      elements: [],
+      connections: [],
+      selectedElement: null,
+      connecting: null
+    });
+  },
+  
+  loadCanvasData: (elements, connections) => {
+    set({
+      elements: elements,
+      connections: connections,
+      selectedElement: null,
+      connecting: null
+    });
   },
   
   getConnectedContent: (chatId) => {

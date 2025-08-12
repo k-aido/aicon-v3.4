@@ -49,8 +49,11 @@ export const SocialMediaModal: React.FC<SocialMediaModalProps> = ({ isOpen, onCl
     }
   };
 
-  const generateId = (): number => {
-    return elements.length > 0 ? Math.max(...elements.map(el => el.id)) + 1 : 1;
+  const generateId = (): string => {
+    // Generate string ID to match CanvasToolbar pattern for consistency
+    const timestamp = Date.now();
+    const random = Math.floor(Math.random() * 1000000);
+    return `${timestamp}-${random}`;
   };
 
   const handleSubmit = async () => {
@@ -62,14 +65,16 @@ export const SocialMediaModal: React.FC<SocialMediaModalProps> = ({ isOpen, onCl
     }
 
     setIsSubmitting(true);
+    
+    const { platform: detectedPlatform, scope } = detectContentInfo(url);
+    const webhookToken = `svc_webhook_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+    const elementId = generateId();
 
     try {
-      const { platform: detectedPlatform, scope } = detectContentInfo(url);
-      const webhookToken = `svc_webhook_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
       // Create social media element with pending state
       const newElement = {
-        id: generateId(),
+        id: elementId,
         type: 'content' as const,
         x: Math.random() * 400 + 100,
         y: Math.random() * 300 + 100,
@@ -140,7 +145,7 @@ export const SocialMediaModal: React.FC<SocialMediaModalProps> = ({ isOpen, onCl
       
       // Remove element if job creation failed
       const canvasStore = useCanvasStore.getState();
-      canvasStore.deleteElement(generateId() - 1);
+      canvasStore.deleteElement(elementId);
     } finally {
       setIsSubmitting(false);
     }

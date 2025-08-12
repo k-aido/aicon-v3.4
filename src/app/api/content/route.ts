@@ -1,61 +1,80 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { validateSocialMediaUrl, parseUrl, getPlatformDisplayName, getPlatformErrorMessage } from '@/utils/urlValidator';
 
-// Utility to detect platform from URL
-const detectPlatform = (url: string) => {
-  if (url.includes('youtube.com') || url.includes('youtu.be')) return 'youtube';
-  if (url.includes('instagram.com')) return 'instagram';
-  if (url.includes('tiktok.com')) return 'tiktok';
-  if (url.includes('twitter.com') || url.includes('x.com')) return 'twitter';
-  if (url.includes('loom.com')) return 'loom';
-  if (url.includes('drive.google.com')) return 'drive';
-  return 'unknown';
-};
-
-// Extract YouTube video ID
-const getYouTubeId = (url: string) => {
-  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
-  const match = url.match(regExp);
-  return match && match[2].length === 11 ? match[2] : null;
-};
+interface ContentResponse {
+  title: string;
+  thumbnail: string;
+  platform: string;
+  author?: string;
+  url: string;
+  error?: string;
+}
 
 export async function POST(request: NextRequest) {
   try {
     const { url } = await request.json();
     
-    if (!url) {
-      return NextResponse.json({ error: 'URL is required' }, { status: 400 });
+    if (!url || typeof url !== 'string') {
+      return NextResponse.json({ 
+        error: 'URL is required and must be a valid string' 
+      }, { status: 400 });
     }
 
-    const platform = detectPlatform(url);
+    // Validate the URL format and platform
+    if (!validateSocialMediaUrl(url)) {
+      return NextResponse.json({ 
+        error: 'Invalid social media URL. Please provide a valid URL from YouTube, Instagram, TikTok, or X/Twitter.' 
+      }, { status: 400 });
+    }
 
-    // For YouTube, we can get real data
-    if (platform === 'youtube') {
-      const videoId = getYouTubeId(url);
-      if (videoId) {
-        try {
-          // Using YouTube oEmbed API (no API key required)
-          const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
-          const response = await fetch(oembedUrl);
-          
-          if (response.ok) {
-            const data = await response.json();
-            return NextResponse.json({
-              title: data.title,
-              thumbnail: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
-              platform: 'youtube',
-              author: data.author_name,
-              url: url
-            });
+    // Parse URL to get platform and ID
+    const urlInfo = parseUrl(url);
+    
+    if (!urlInfo.isValid) {
+      return NextResponse.json({ 
+        error: urlInfo.error || getPlatformErrorMessage(urlInfo.platform) 
+      }, { status: 400 });
+    }
+
+    console.log(`[Content API] Processing ${urlInfo.platform} URL:`, { id: urlInfo.id, url });
+
+    // For YouTube, try to get real data using oEmbed API
+    if (urlInfo.platform === 'youtube' && urlInfo.id) {
+      try {
+        const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
+        const response = await fetch(oembedUrl, {
+          headers: {
+            'User-Agent': 'AICON Content Analyzer/1.0'
           }
-        } catch (error) {
-          console.error('YouTube fetch error:', error);
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          const contentResponse: ContentResponse = {
+            title: data.title || 'YouTube Video',
+            thumbnail: `https://img.youtube.com/vi/${urlInfo.id}/maxresdefault.jpg`,
+            platform: 'youtube',
+            author: data.author_name || 'Unknown Creator',
+            url: url
+          };
+          
+          console.log(`[Content API] Successfully fetched YouTube data:`, contentResponse.title);
+          return NextResponse.json(contentResponse);
         }
+      } catch (error) {
+        console.error('[Content API] YouTube oEmbed error:', error);
+        // Fall through to mock data
       }
     }
 
-    // For other platforms, return mock data for now
-    // In a real implementation, you would use their respective APIs
-    const mockData: Record<string, any> = {
+    // For other platforms or if YouTube fetch fails, return mock data
+    const mockData: Record<string, Omit<ContentResponse, 'url'>> = {
+      youtube: {
+        title: 'YouTube Video',
+        thumbnail: `https://img.youtube.com/vi/${urlInfo.id || 'default'}/maxresdefault.jpg`,
+        platform: 'youtube',
+        author: 'YouTube Creator'
+      },
       instagram: {
         title: 'Instagram Post',
         thumbnail: 'https://via.placeholder.com/1080x1080/E4405F/ffffff?text=📸+Instagram+Post&font-size=36',
@@ -73,35 +92,36 @@ export async function POST(request: NextRequest) {
         thumbnail: 'https://via.placeholder.com/1200x675/1DA1F2/ffffff?text=🐦+X+Post&font-size=32',
         platform: 'twitter',
         author: 'X User'
-      },
-      loom: {
-        title: 'Loom Recording',
-        thumbnail: 'https://via.placeholder.com/1280x720/625DF5/ffffff?text=🎥+Loom+Recording&font-size=32',
-        platform: 'loom',
-        author: 'Loom User'
-      },
-      drive: {
-        title: 'Google Drive File',
-        thumbnail: 'https://via.placeholder.com/300x300/4285F4/ffffff?text=📁+Drive+File&font-size=24',
-        platform: 'drive',
-        author: 'Drive Owner'
-      },
-      unknown: {
-        title: 'External Content',
-        thumbnail: 'https://via.placeholder.com/300x300/64748b/ffffff?text=📄+Content&font-size=24',
-        platform: 'unknown',
-        author: 'Unknown'
       }
     };
 
-    const contentInfo = mockData[platform] || mockData.unknown;
-    return NextResponse.json({ ...contentInfo, url });
+    const platformData = mockData[urlInfo.platform];
+    if (!platformData) {
+      return NextResponse.json({ 
+        error: `Content analysis not supported for ${getPlatformDisplayName(urlInfo.platform)}` 
+      }, { status: 400 });
+    }
+
+    const contentResponse: ContentResponse = {
+      ...platformData,
+      url: url
+    };
+
+    console.log(`[Content API] Returning mock data for ${urlInfo.platform}:`, contentResponse.title);
+    return NextResponse.json(contentResponse);
 
   } catch (error: any) {
-    console.error('Content API error:', error);
-    return NextResponse.json(
-      { error: error.message || 'Failed to fetch content' },
-      { status: 500 }
-    );
+    console.error('[Content API] Unexpected error:', error);
+    
+    // Return user-friendly error messages
+    if (error.name === 'TypeError' && error.message?.includes('fetch')) {
+      return NextResponse.json({
+        error: 'Network error while fetching content. Please try again.'
+      }, { status: 503 });
+    }
+    
+    return NextResponse.json({
+      error: 'An unexpected error occurred while analyzing the content. Please try again.'
+    }, { status: 500 });
   }
 }

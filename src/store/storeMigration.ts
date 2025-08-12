@@ -16,24 +16,24 @@ export function migrateToNormalizedStore() {
   // Migrate elements
   const elementsStore = useElementsStore.getState();
   if (oldState.elements.length > 0) {
-    elementsStore.addElements(oldState.elements);
+    elementsStore.addElements(oldState.elements as any);
   }
   
   // Migrate connections
   const connectionsStore = useConnectionsStore.getState();
   if (oldState.connections.length > 0) {
     oldState.connections.forEach(connection => {
-      connectionsStore.addConnection(connection);
+      connectionsStore.addConnection(connection as any);
     });
   }
   
   // Migrate UI state
   const uiStore = useUIStore.getState();
   if (oldState.selectedElement) {
-    uiStore.setSelectedIds([oldState.selectedElement.id]);
+    uiStore.setSelectedIds([oldState.selectedElement.id as any]);
   }
   if (oldState.connecting !== null) {
-    uiStore.setConnectingId(oldState.connecting);
+    uiStore.setConnectingId(oldState.connecting as any);
   }
   
   // Migrate metadata

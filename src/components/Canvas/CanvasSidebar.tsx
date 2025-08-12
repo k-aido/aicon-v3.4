@@ -68,8 +68,9 @@ export const CanvasSidebar: React.FC<CanvasSidebarProps> = ({ onOpenSocialMediaM
     const centerX = rect.width / 2;
     const centerY = rect.height / 2;
     
-    // Find next available ID
-    const maxId = elements.length > 0 ? Math.max(...elements.map(el => el.id)) : 0;
+    // Find next available ID - convert to numbers for Math.max, filter out non-numeric
+    const numericIds = elements.map(el => typeof el.id === 'number' ? el.id : parseInt(String(el.id)) || 0);
+    const maxId = numericIds.length > 0 ? Math.max(...numericIds) : 0;
     const newId = maxId + 1;
     
     // Create element based on type

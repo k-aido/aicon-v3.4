@@ -60,14 +60,14 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({ onAddElement, view
   };
 
   const createElement = (tool: Tool, x: number, y: number) => {
-    // Generate numeric ID for Canvas compatibility (avoid conflicts with Canvas.tsx)
+    // Generate string ID to match CanvasWorkspace pattern
     const timestamp = Date.now();
     const random = Math.floor(Math.random() * 1000000);
-    const numericId = timestamp * 2000000000 + random; // Different multiplier to avoid Canvas conflicts
+    const stringId = `${tool.type}-${timestamp}-${random}`; // Use descriptive string ID
     
     if (tool.type === 'chat') {
       const chatElement = {
-        id: numericId.toString(),
+        id: stringId,
         type: 'chat' as const,
         position: { x: x, y: y },
         dimensions: { width: 600, height: 700 },
@@ -94,7 +94,7 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({ onAddElement, view
 
     if (tool.type === 'folder') {
       return {
-        id: numericId.toString(),
+        id: stringId,
         type: 'folder' as const,
         position: { x: x, y: y },
         dimensions: { width: 350, height: 250 },
@@ -117,7 +117,7 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({ onAddElement, view
 
     // Content piece
     return {
-      id: numericId.toString(),
+      id: stringId,
       type: 'content' as const,
       position: { x: x, y: y },
       dimensions: { width: 320, height: 240 },
@@ -142,7 +142,7 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({ onAddElement, view
   };
 
   const handleToolClick = (tool: Tool) => {
-    console.log('[CanvasToolbar] Tool clicked:', tool.id, tool.type);
+    console.log('🔨 [CanvasToolbar] Tool clicked:', tool.id, tool.type);
     
     // Check if it's a social media platform and modal handler is available
     const socialMediaPlatforms = ['instagram', 'tiktok', 'youtube'];
@@ -158,6 +158,7 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({ onAddElement, view
     const newElement = createElement(tool, x, y);
     console.log('🔨 [CanvasToolbar] Tool clicked - created element:', { toolId: tool.id, toolType: tool.type, toolPlatform: tool.platform, newElement });
     console.log('🔨 [CanvasToolbar] Element dimensions:', (newElement as any).dimensions);
+    console.log('🔨 [CanvasToolbar] About to call onAddElement with:', newElement);
     
     onAddElement(newElement);
     

@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
 interface Element {
-  id: number;
+  id: string | number;  // Accept both string and number IDs for compatibility
   type: 'content' | 'chat' | 'folder';
   x: number;
   y: number;
@@ -19,34 +19,34 @@ interface Element {
   name?: string;
   description?: string;
   color?: string;
-  childIds?: number[];
+  childIds?: (string | number)[];  // Also accept mixed ID types
   isExpanded?: boolean;
 }
 
 interface Connection {
   id: number;
-  from: number;
-  to: number;
+  from: string | number;  // Support mixed ID types in connections
+  to: string | number;    // Support mixed ID types in connections
 }
 
 interface CanvasState {
   elements: Element[];
   connections: Connection[];
   selectedElement: Element | null;
-  connecting: number | null;
+  connecting: string | number | null;  // Support mixed ID types
   canvasTitle: string;
   workspaceId: string | null;
   viewport: { x: number; y: number; zoom: number };
   
   // Actions
   addElement: (element: Element) => void;
-  updateElement: (id: number, updates: Partial<Element>) => void;
-  deleteElement: (id: number) => void;
+  updateElement: (id: string | number, updates: Partial<Element>) => void;
+  deleteElement: (id: string | number) => void;
   setSelectedElement: (element: Element | null) => void;
   
   addConnection: (connection: Connection) => void;
   deleteConnection: (id: number) => void;
-  setConnecting: (elementId: number | null) => void;
+  setConnecting: (elementId: string | number | null) => void;
   
   // Canvas title and workspace
   setCanvasTitle: (title: string) => void;
@@ -56,11 +56,11 @@ interface CanvasState {
   setViewport: (viewport: { x: number; y: number; zoom: number }) => void;
   
   // Get connected content for a chat element
-  getConnectedContent: (chatId: number) => Element[];
+  getConnectedContent: (chatId: string | number) => Element[];
 }
 
 // Helper function to check for duplicate connections
-const isDuplicateConnection = (connections: Connection[], from: number, to: number): boolean => {
+const isDuplicateConnection = (connections: Connection[], from: string | number, to: string | number): boolean => {
   return connections.some(conn => 
     (conn.from === from && conn.to === to) || 
     (conn.from === to && conn.to === from)
@@ -77,9 +77,22 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   viewport: { x: 0, y: 0, zoom: 1.0 },
   
   addElement: (element) => {
-    set((state) => ({
-      elements: [...state.elements, element]
-    }));
+    set((state) => {
+      const beforeElements = state.elements.map(e => ({ id: e.id, type: e.type, title: e.title || 'N/A' }));
+      const newElements = [...state.elements, element];
+      const afterElements = newElements.map(e => ({ id: e.id, type: e.type, title: e.title || 'N/A' }));
+      
+      console.log('➕ [canvasStore] addElement operation:', { 
+        addingElement: { id: element.id, type: element.type, title: element.title || 'N/A' },
+        beforeElements, 
+        afterElements,
+        elementsCount: { before: beforeElements.length, after: afterElements.length }
+      });
+      
+      return {
+        elements: newElements
+      };
+    });
   },
   
   updateElement: (id, updates) => {

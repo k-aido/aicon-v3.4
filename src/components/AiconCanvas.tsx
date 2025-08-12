@@ -12,7 +12,7 @@ import { debounce } from '@/utils/debounce';
 
 // Use store's Element type instead of imported CanvasElement
 type Element = {
-  id: number;
+  id: string | number;  // Support mixed ID types
   type: 'content' | 'chat';
   x: number;
   y: number;
@@ -30,8 +30,8 @@ type Element = {
 
 type Connection = {
   id: number;
-  from: number;
-  to: number;
+  from: string | number;  // Support mixed ID types
+  to: string | number;    // Support mixed ID types
 };
 
 interface AiconCanvasAppProps {
@@ -40,7 +40,7 @@ interface AiconCanvasAppProps {
 
 const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
   const [selectedElement, setSelectedElement] = useState<Element | null>(null);
-  const [connecting, setConnecting] = useState<number | null>(null);
+  const [connecting, setConnecting] = useState<string | number | null>(null);
   const [analysisPanel, setAnalysisPanel] = useState<{ isOpen: boolean; content: ContentElement | null }>({
     isOpen: false,
     content: null
@@ -169,6 +169,16 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
     }
   }, [elements, connections, viewport, canvasTitle, workspaceId, isLoading, debouncedSave]);
 
+  // Debug logging for element changes
+  useEffect(() => {
+    console.log('🎯 [AiconCanvas] Elements changed. Count:', elements.length);
+    console.log('🎯 [AiconCanvas] Current elements:', elements.map(e => ({ 
+      id: e.id, 
+      type: e.type, 
+      title: (e as any).title || 'N/A' 
+    })));
+  }, [elements]);
+
   // Auto-analyze content when added to canvas
   useEffect(() => {
     elements.forEach(element => {
@@ -259,49 +269,64 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
         title: (e as any).title || 'N/A' 
       })));
       
-      // Create maps for efficient lookups
-      const currentElementMap = new Map(currentElements.map(el => [el.id, el]));
-      const updatedElementMap = new Map(updated.map(el => [el.id, el]));
+      // SMART SYNC: Determine operation type based on element count changes
+      const currentCount = currentElements.length;
+      const updatedCount = updated.length;
+      const countDifference = updatedCount - currentCount;
       
-      console.log('🔥 Current element IDs:', Array.from(currentElementMap.keys()));
-      console.log('🔥 Updated element IDs:', Array.from(updatedElementMap.keys()));
+      console.log('🔥 Count analysis:', { currentCount, updatedCount, countDifference });
       
-      // Update existing elements and add new ones
-      updated.forEach(el => {
-        if (currentElementMap.has(el.id)) {
-          console.log('🔥 ✅ Updating existing element:', { id: el.id, type: el.type });
-          updateElement(el.id, el as any);
-        } else {
-          console.log('🔥 ➕ Adding new element:', { id: el.id, type: el.type });
-          addElement(el as any);
-        }
-      });
+      if (countDifference === 1) {
+        // Likely adding a single element - use safe append
+        console.log('🔥 Detected single element addition - using safe append');
+        const currentElementMap = new Map(currentElements.map(el => [String(el.id), el]));
+        updated.forEach(el => {
+          if (!currentElementMap.has(String(el.id))) {
+            console.log('🔥 ➕ Adding new element (SAFE APPEND):', { id: el.id, type: el.type });
+            addElement(el as any);
+          }
+        });
+      } else {
+        // Other operations (moves, deletes, bulk changes) - use full sync
+        console.log('🔥 Detected move/delete/bulk operation - using full sync');
+        const currentElementMap = new Map(currentElements.map(el => [String(el.id), el]));
+        const updatedElementMap = new Map(updated.map(el => [String(el.id), el]));
+        
+        // Update existing elements and add new ones
+        updated.forEach(el => {
+          if (currentElementMap.has(String(el.id))) {
+            console.log('🔥 ✅ Updating existing element:', { id: el.id, type: el.type });
+            updateElement(el.id, el as any);
+          } else {
+            console.log('🔥 ➕ Adding new element:', { id: el.id, type: el.type });
+            addElement(el as any);
+          }
+        });
+        
+        // Remove elements that are no longer in the updated array (for deletes/moves)
+        currentElements.forEach(el => {
+          if (!updatedElementMap.has(String(el.id))) {
+            console.log('🔥 ❌ Removing element (legitimate operation):', { id: el.id, type: el.type });
+            deleteElement(el.id);
+          }
+        });
+      }
       
-      // Remove elements that are no longer in the updated array
-      currentElements.forEach(el => {
-        if (!updatedElementMap.has(el.id)) {
-          console.log('🔥 ❌ DELETING element (not in updated array):', { id: el.id, type: el.type });
-          deleteElement(el.id);
-        }
-      });
     } else {
       console.log('🔥 Handling direct array update (setElements with array)');
-      console.log('🔥 New elements (replacing):', newElements.map(e => ({ 
+      console.log('🔥 New elements:', newElements.map(e => ({ 
         id: e.id, 
         type: e.type, 
         title: (e as any).title || 'N/A' 
       })));
       
-      // Handle direct array updates
-      const currentElementMap = new Map(elements.map(el => [el.id, el]));
-      const newElementMap = new Map(newElements.map(el => [el.id, el]));
-      
-      console.log('🔥 Current element IDs:', Array.from(currentElementMap.keys()));
-      console.log('🔥 New element IDs:', Array.from(newElementMap.keys()));
+      // For direct array updates, use full sync (this is usually from state loads)
+      const currentElementMap = new Map(elements.map(el => [String(el.id), el]));
+      const newElementMap = new Map(newElements.map(el => [String(el.id), el]));
       
       // Update existing elements and add new ones
       newElements.forEach(el => {
-        if (currentElementMap.has(el.id)) {
+        if (currentElementMap.has(String(el.id))) {
           console.log('🔥 ✅ Updating existing element:', { id: el.id, type: el.type });
           updateElement(el.id, el as any);
         } else {
@@ -312,27 +337,27 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
       
       // Remove elements that are no longer in the new array
       elements.forEach(el => {
-        if (!newElementMap.has(el.id)) {
-          console.log('🔥 ❌ DELETING element (not in new array):', { id: el.id, type: el.type });
+        if (!newElementMap.has(String(el.id))) {
+          console.log('🔥 ❌ Removing element (direct array sync):', { id: el.id, type: el.type });
           deleteElement(el.id);
         }
       });
     }
     
-    console.log('🔥 === handleSetElements complete ===');
+    console.log('🔥 === handleSetElements complete - SMART SYNC ===');
   };
 
   const handleSetConnections = (newConnections: ImportedConnection[] | ((prev: ImportedConnection[]) => ImportedConnection[])) => {
     if (typeof newConnections === 'function') {
-      const currentConnections = connections;
+      const currentConnections = connections as ImportedConnection[];
       const updated = newConnections(currentConnections);
       // Clear and re-add all connections
       connections.forEach(conn => deleteConnection(conn.id));
-      updated.forEach(conn => addConnection(conn));
+      updated.forEach(conn => addConnection(conn as any));
     } else {
       // Clear and re-add all connections
       connections.forEach(conn => deleteConnection(conn.id));
-      newConnections.forEach(conn => addConnection(conn));
+      newConnections.forEach(conn => addConnection(conn as any));
     }
   };
 
@@ -375,10 +400,10 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
           setElements={handleSetElements}
           selectedElement={selectedElement as ImportedCanvasElement | null}
           setSelectedElement={setSelectedElement as React.Dispatch<React.SetStateAction<ImportedCanvasElement | null>>}
-          connections={connections}
+          connections={connections as ImportedConnection[]}
           setConnections={handleSetConnections}
-          connecting={connecting}
-          setConnecting={setConnecting}
+          connecting={connecting as number | null}
+          setConnecting={setConnecting as React.Dispatch<React.SetStateAction<number | null>>}
           onOpenAnalysisPanel={handleOpenAnalysisPanel}
           onOpenSocialMediaModal={handleOpenSocialMediaModal}
         />

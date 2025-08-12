@@ -99,19 +99,22 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
 
   // Auto-save functionality
   const saveCanvas = useCallback(async () => {
-    if (!canvasId || canvasId === 'new' || saveStatus === 'saving') {
+    if (!canvasId || canvasId === 'new') {
       return;
     }
-
+    
+    // Get the latest state from the store
+    const currentStore = useCanvasStore.getState();
+    
     // Don't show saving status in UI, just save silently
     try {
-      console.log('[AiconCanvas] Auto-saving canvas:', canvasId);
+      console.log('[AiconCanvas] Auto-saving canvas:', canvasId, 'with', currentStore.elements.length, 'elements');
       const success = await canvasPersistence.saveCanvas(
         canvasId,
-        elements,
-        connections,
+        currentStore.elements,
+        currentStore.connections,
         undefined, // viewport - we can add this later if needed
-        canvasTitle
+        currentStore.canvasTitle
       );
       
       if (success) {
@@ -140,7 +143,7 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
         setSaveStatus('idle');
       }, 5000);
     }
-  }, [canvasId, elements, connections, canvasTitle, saveStatus]);
+  }, [canvasId]);
 
   // Auto-save when elements, connections, or title changes
   useEffect(() => {
@@ -154,6 +157,8 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
       return;
     }
 
+    console.log('[AiconCanvas] Autosave triggered - elements:', elements.length, 'connections:', connections.length);
+
     // Clear existing timeout
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
@@ -161,6 +166,7 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
 
     // Set new timeout for auto-save (2 seconds after last change)
     saveTimeoutRef.current = setTimeout(() => {
+      console.log('[AiconCanvas] Executing autosave after timeout');
       saveCanvas();
     }, 2000);
 
@@ -269,35 +275,46 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
       // Handle functional updates
       const currentElements = elements;
       const updated = newElements(currentElements as ImportedCanvasElement[]);
-      // Clear and re-add all elements
-      updated.forEach((el, index) => {
-        if (index < elements.length) {
+      
+      // Get IDs of updated elements
+      const updatedIds = new Set(updated.map(el => el.id));
+      
+      // Remove elements that are not in the updated list
+      elements.forEach(el => {
+        if (!updatedIds.has(el.id)) {
+          deleteElement(el.id);
+        }
+      });
+      
+      // Update or add elements
+      updated.forEach(el => {
+        const existing = elements.find(e => e.id === el.id);
+        if (existing) {
           updateElement(el.id, el as any);
         } else {
           addElement(el as any);
         }
       });
-      // Remove extra elements if needed
-      if (elements.length > updated.length) {
-        for (let i = updated.length; i < elements.length; i++) {
-          deleteElement(elements[i].id);
-        }
-      }
     } else {
       // Handle direct array updates
-      newElements.forEach((el, index) => {
-        if (index < elements.length) {
+      const newIds = new Set(newElements.map(el => el.id));
+      
+      // Remove elements that are not in the new list
+      elements.forEach(el => {
+        if (!newIds.has(el.id)) {
+          deleteElement(el.id);
+        }
+      });
+      
+      // Update or add elements
+      newElements.forEach(el => {
+        const existing = elements.find(e => e.id === el.id);
+        if (existing) {
           updateElement(el.id, el as any);
         } else {
           addElement(el as any);
         }
       });
-      // Remove extra elements if needed
-      if (elements.length > newElements.length) {
-        for (let i = newElements.length; i < elements.length; i++) {
-          deleteElement(elements[i].id);
-        }
-      }
     }
   };
 

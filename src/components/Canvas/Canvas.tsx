@@ -548,11 +548,13 @@ const CanvasComponent: React.FC<CanvasProps> = ({
 
         
         {/* Render Elements */}
-        {elements.map(element => {
+        {elements.map((element) => {
+          const uniqueKey = `${element.type}-${element.id}-${element.x || 0}-${element.y || 0}`;
+          
           if (element.type === 'content') {
             return (
               <ContentElement
-                key={element.id}
+                key={`content-${element.id}`}
                 element={element}
                 selected={selectedElementIds.includes(element.id)}
                 connecting={connecting}
@@ -568,7 +570,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
           } else if (element.type === 'chat') {
             return (
               <ChatElement
-                key={element.id}
+                key={`chat-${element.id}`}
                 element={element}
                 selected={selectedElementIds.includes(element.id)}
                 connecting={connecting}
@@ -581,6 +583,8 @@ const CanvasComponent: React.FC<CanvasProps> = ({
               />
             );
           }
+          
+          // Fallback for any other element types
           return null;
         })}
       </div>

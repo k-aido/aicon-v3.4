@@ -267,6 +267,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
 
   // Handle element selection with multi-select support
   const handleElementSelect = useCallback((element: CanvasElement, event?: React.MouseEvent) => {
+    console.log('🎯 [Canvas] Element selected:', { elementId: element.id, type: element.type });
     const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
     const isCtrlCmd = isMac ? event?.metaKey : event?.ctrlKey;
     const isShift = event?.shiftKey;
@@ -356,11 +357,17 @@ const CanvasComponent: React.FC<CanvasProps> = ({
 
   // Convert elements to the format expected by keyboard shortcuts
   const elementsRecord = useMemo(() => {
-    return elements.reduce((acc, el) => {
+    const record = elements.reduce((acc, el) => {
       acc[el.id.toString()] = el as any;
       return acc;
     }, {} as Record<string, any>);
-  }, [elements]);
+    console.log('🗂️ [Canvas] Elements record for keyboard shortcuts:', {
+      elementCount: elements.length,
+      recordKeys: Object.keys(record),
+      selectedIdsAsStrings: selectedElementIds.map(id => id.toString())
+    });
+    return record;
+  }, [elements, selectedElementIds]);
 
   // Keyboard shortcuts
   useKeyboardShortcuts({
@@ -368,7 +375,9 @@ const CanvasComponent: React.FC<CanvasProps> = ({
     elements: elementsRecord,
     enabled: true,
     onDelete: (elementIds: string[]) => {
-      const ids = elementIds.map(id => parseInt(id));
+      console.log('🔥 [Canvas] Keyboard delete triggered:', { elementIds, selectedElementIds });
+      const ids = elementIds.map(id => parseInt(id)).filter(id => !isNaN(id));
+      console.log('🔥 [Canvas] Parsed IDs for deletion:', ids);
       if (ids.length > 0) {
         handleMultipleElementDelete(ids);
       }

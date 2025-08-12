@@ -353,6 +353,7 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
               <button 
                 onClick={(e) => {
                   e.stopPropagation();
+                  console.log('🗑️ [ContentElement] Delete button clicked:', { elementId: element.id });
                   onDelete(element.id);
                 }}
                 className="p-1 hover:bg-gray-700 rounded transition-colors outline-none focus:outline-none"

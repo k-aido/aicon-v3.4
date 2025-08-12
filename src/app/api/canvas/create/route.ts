@@ -191,6 +191,7 @@ export async function POST(request: NextRequest) {
       created_by_user_id: userId,
       title: uniqueTitle,
       description: `Created on ${new Date().toLocaleString()}`,
+      project_type: 'canvas',
       canvas_data: {
         viewport: { x: 0, y: 0, zoom: 1.0 },
         elements: {},
@@ -203,6 +204,8 @@ export async function POST(request: NextRequest) {
       },
       is_archived: false,
       is_public: false,
+      is_starred: false,
+      starred_at: null,
       last_accessed_at: new Date().toISOString()
     };
 

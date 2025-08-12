@@ -12,8 +12,7 @@
  * - chat_interfaces table for chat elements
  */
 
-import { createBrowserClient } from '@/lib/supabase/client';
-import type { Database } from '@/types/database';
+import { createBrowserClient } from '../../lib/supabase/client';
 
 // Types matching the existing database schema
 export interface Project {
@@ -22,6 +21,7 @@ export interface Project {
   created_by_user_id?: string;
   title: string;
   description?: string;
+  project_type?: string;
   canvas_data?: {
     viewport?: {
       x: number;
@@ -34,6 +34,8 @@ export interface Project {
   settings?: Record<string, any>;
   is_archived: boolean;
   is_public: boolean;
+  is_starred?: boolean;
+  starred_at?: string | null;
   thumbnail_url?: string;
   last_accessed_at?: string;
   last_accessed_by_user_id?: string;
@@ -46,6 +48,7 @@ export interface Project {
 export interface CanvasWorkspace extends Project {
   // Additional fields for compatibility
   user_id?: string;
+  name?: string; // For compatibility, maps to title
   title: string; // maps to name
   last_accessed: string; // maps to updated_at
   access_count: number;
@@ -56,6 +59,8 @@ export interface CanvasWorkspace extends Project {
   };
   settings: Record<string, any>;
   is_public: boolean;
+  is_starred?: boolean;
+  starred_at?: string | null;
   share_token?: string;
   tags: string[];
   deleted_at?: string;
@@ -308,6 +313,8 @@ class CanvasPersistenceService {
       description: project.description || '',
       is_archived: project.is_archived || false,
       is_public: project.is_public || false,
+      is_starred: project.is_starred || false,
+      starred_at: project.starred_at || null,
       thumbnail_url: project.thumbnail_url || undefined,
       last_accessed_at: project.last_accessed_at || undefined,
       last_accessed_by_user_id: project.last_accessed_by_user_id || undefined
@@ -356,7 +363,9 @@ class CanvasPersistenceService {
           share_token: undefined,
           tags: [],
           deleted_at: undefined,
-          title: project.title || 'Untitled Canvas'
+          title: project.title || 'Untitled Canvas',
+          is_starred: project.is_starred || false,
+          starred_at: project.starred_at || null
         } as CanvasWorkspace;
       }
     });
@@ -1065,7 +1074,7 @@ class CanvasPersistenceService {
       
       console.log('[CanvasPersistence] Parsed canvas data:', {
         elementsCount: elements.length,
-        elementTypes: elements.map(el => ({ id: el.id, type: el.type, title: el.title || 'N/A' })),
+        elementTypes: elements.map((el: any) => ({ id: el.id, type: el.type, title: el.title || 'N/A' })),
         connectionsCount: connections.length,
         viewport: canvasData.viewport
       });

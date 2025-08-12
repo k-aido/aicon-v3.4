@@ -81,12 +81,19 @@ export async function POST(request: NextRequest) {
       }
     }
     
+    // Handle demo mode - use demo user ID if no auth
     if (!userId) {
-      console.log('[API] No user ID available after all checks');
-      return NextResponse.json(
-        { error: 'User ID required - either authenticate or provide userId' },
-        { status: 401 }
-      );
+      const demoUserId = process.env.NEXT_PUBLIC_DEMO_USER_ID;
+      if (demoUserId) {
+        console.log('[API] Using demo user ID:', demoUserId);
+        userId = demoUserId;
+      } else {
+        console.log('[API] No user ID available after all checks');
+        return NextResponse.json(
+          { error: 'User ID required - either authenticate or provide userId' },
+          { status: 401 }
+        );
+      }
     }
 
     // Use service role key to ensure we can create projects
@@ -112,18 +119,32 @@ export async function POST(request: NextRequest) {
     });
 
     // First, check if user has a profile (our actual user table)
-    console.log('[API] Checking for existing user_profile...');
-    const { data: profileRecord, error: profileError } = await supabase
-      .from('user_profiles')
-      .select('user_id')
-      .eq('user_id', userId)
+    console.log('[API] Checking for existing user record...');
+    const { data: userRecord, error: userError } = await supabase
+      .from('users')
+      .select('id, account_id')
+      .eq('id', userId)
       .single();
 
-    if (profileError && profileError.code !== 'PGRST116') { // PGRST116 = no rows found
-      console.error('[API] Error checking user profile:', profileError);
+    if (userError && userError.code !== 'PGRST116') { // PGRST116 = no rows found
+      console.error('[API] Error checking user record:', userError);
     }
 
-    let accountId = userRecord?.account_id || requestAccountId;
+    // Check for existing account if we have one
+    let existingAccount = null;
+    let accountId = userRecord?.account_id || requestAccountId || process.env.NEXT_PUBLIC_DEMO_ACCOUNT_ID || userId; // Use demo account ID or userId as fallback
+
+    if (accountId) {
+      const { data: accountData, error: accountCheckError } = await supabase
+        .from('accounts')
+        .select('id')
+        .eq('id', accountId)
+        .single();
+      
+      if (!accountCheckError) {
+        existingAccount = accountData;
+      }
+    }
 
     if (requestAccountId && !userRecord?.account_id) {
       console.log('[API] Using provided accountId:', requestAccountId);

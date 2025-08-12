@@ -4,10 +4,10 @@ import { cookies } from 'next/headers';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { canvasId: string } }
+  { params }: { params: Promise<{ canvasId: string }> }
 ) {
   try {
-    const canvasId = params.canvasId;
+    const { canvasId } = await params;
     
     if (!canvasId) {
       return NextResponse.json(

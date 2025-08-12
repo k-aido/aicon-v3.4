@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { User, Sprout, Search, Home, Clock, Star, Trash2 } from 'lucide-react';
 import { canvasPersistence, CanvasPersistenceService } from '@/services/canvasPersistence';
-import { createBrowserClient } from '../../lib/supabase/client';
+import { createBrowserClient } from '../../../lib/supabase/client';
 
 interface CanvasPreview {
   id: string;

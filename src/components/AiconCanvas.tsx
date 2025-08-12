@@ -82,14 +82,14 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
             
             // Load elements
             if (canvasData.elements && Array.isArray(canvasData.elements)) {
-              canvasData.elements.forEach(element => {
+              canvasData.elements.forEach((element: any) => {
                 addElement(element);
               });
             }
             
             // Load connections
             if (canvasData.connections && Array.isArray(canvasData.connections)) {
-              canvasData.connections.forEach(connection => {
+              canvasData.connections.forEach((connection: any) => {
                 addConnection(connection);
               });
             }

@@ -534,7 +534,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
                   <ChatInterface
                     element={{
                       ...element,
-                      id: element.id as number,
+                      id: Number(element.id),
                       x: 0,
                       y: 0,
                       width: element.dimensions.width,

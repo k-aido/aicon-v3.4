@@ -88,7 +88,7 @@ export const SocialMediaModal: React.FC<SocialMediaModalProps> = ({ isOpen, onCl
         }
       };
 
-      console.log('📱 [SocialMediaModal] Adding social element:', { platform: contentInfo.platform, scope: contentInfo.scope, newElement });
+      console.log('📱 [SocialMediaModal] Adding social element:', { platform: detectedPlatform, scope, newElement });
       addElement(newElement);
 
       // Call webhook API to create job

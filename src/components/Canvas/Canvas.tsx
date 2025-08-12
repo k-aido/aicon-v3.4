@@ -9,12 +9,14 @@ import { ChatElement } from './ChatElement';
 import { useCanvasStore } from '@/store/canvasStore';
 
 // Generate truly unique numeric IDs for canvas elements
-let idCounter = 0;
+let idCounter = Math.floor(Math.random() * 1000000); // Start with random base to avoid conflicts
 const generateUniqueId = () => {
-  // Use timestamp + counter to ensure uniqueness even for rapid successive calls
+  // Use timestamp + random + counter to ensure uniqueness even for rapid successive calls
   const timestamp = Date.now();
-  idCounter = (idCounter + 1) % 10000; // Reset counter after 10000 to prevent overflow
-  return timestamp * 10000 + idCounter;
+  const random = Math.floor(Math.random() * 1000);
+  idCounter = (idCounter + 1) % 1000000; // Reset counter after 1M to prevent overflow
+  // Create a unique combination that's very unlikely to collide
+  return timestamp * 1000000000 + random * 1000000 + idCounter;
 };
 
 interface CanvasProps {
@@ -60,7 +62,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
 
   // Canvas drag handling
   const { isDragging, handleMouseDown } = useCanvasDrag({
-    onDragMove: (position) => setViewport(prev => ({ ...prev, ...position })),
+    onDragMove: (position) => setViewport({ ...viewport, ...position }),
     onDragEnd: () => {
       // Clear selection when clicking on empty canvas
       setSelectedElement(null);
@@ -122,7 +124,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
       e.preventDefault();
       const delta = e.deltaY > 0 ? 0.9 : 1.1;
       const newZoom = Math.max(0.25, Math.min(3, viewport.zoom * delta));
-      setViewport(prev => ({ ...prev, zoom: newZoom }));
+      setViewport({ ...viewport, zoom: newZoom });
     }
     // If over content elements without modifier key, allow normal scroll behavior
   };
@@ -435,8 +437,8 @@ const CanvasComponent: React.FC<CanvasProps> = ({
 
   // Reset zoom to 100%
   const handleResetZoom = useCallback(() => {
-    setViewport(prev => ({ ...prev, zoom: 1 }));
-  }, []);
+    setViewport({ ...viewport, zoom: 1 });
+  }, [viewport, setViewport]);
 
   // Connection preview path
   const connectionPreview = useMemo(() => {
@@ -631,7 +633,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
         <div className="bg-white rounded-lg shadow-lg p-1 flex gap-1 items-center">
           <span className="px-2 text-sm text-gray-700">{Math.round(viewport.zoom * 100)}%</span>
           <button 
-            onClick={() => setViewport(prev => ({ ...prev, zoom: Math.min(3, prev.zoom * 1.2) }))}
+            onClick={() => setViewport({ ...viewport, zoom: Math.min(3, viewport.zoom * 1.2) })}
             className="p-1 hover:bg-gray-100 rounded text-gray-700 outline-none focus:outline-none"
             title="Zoom In"
           >
@@ -640,7 +642,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
             </svg>
           </button>
           <button 
-            onClick={() => setViewport(prev => ({ ...prev, zoom: Math.max(0.25, prev.zoom * 0.8) }))}
+            onClick={() => setViewport({ ...viewport, zoom: Math.max(0.25, viewport.zoom * 0.8) })}
             className="p-1 hover:bg-gray-100 rounded text-gray-700 outline-none focus:outline-none"
             title="Zoom Out"
           >

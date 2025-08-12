@@ -508,7 +508,7 @@ class CanvasPersistenceService {
         accountId = userId;
       } else {
         console.log(`[CanvasPersistence] Found user record, account_id: ${userRecord.account_id}`);
-        accountId = userRecord.account_id;
+        accountId = userRecord.account_id as string;
       }
       
       // Use API endpoint for creation to handle RLS issues
@@ -689,7 +689,7 @@ class CanvasPersistenceService {
         }
         
         console.log(`[CanvasPersistence] ✅ Found ${data?.length || 0} projects by account_id`);
-        return this.mapProjectsToWorkspaces(data || []);
+        return this.mapProjectsToWorkspaces((data || []) as unknown as Project[]);
       } else {
         // No user found, try querying by created_by_user_id as fallback
         console.log('[CanvasPersistence] ⚠️ No user found, querying by created_by_user_id:', userId);
@@ -717,7 +717,7 @@ class CanvasPersistenceService {
         }
         
         console.log(`[CanvasPersistence] ✅ Found ${data?.length || 0} projects by created_by_user_id`);
-        return this.mapProjectsToWorkspaces(data || []);
+        return this.mapProjectsToWorkspaces((data || []) as unknown as Project[]);
       }
     } catch (error) {
       console.error('[CanvasPersistence] ❌ CRITICAL ERROR: Unexpected error in getUserWorkspaces');
@@ -1087,7 +1087,7 @@ class CanvasPersistenceService {
       });
       
       // Convert canvas_data from database format to app format
-      const canvasData = data.canvas_data || {};
+      const canvasData = data.canvas_data || {} as any;
       const elements = canvasData.elements ? Object.values(canvasData.elements) : [];
       const connections = canvasData.connections ? Object.values(canvasData.connections) : [];
       

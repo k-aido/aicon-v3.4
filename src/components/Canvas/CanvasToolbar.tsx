@@ -60,12 +60,14 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({ onAddElement, view
   };
 
   const createElement = (tool: Tool, x: number, y: number) => {
-    // Generate numeric ID for Zustand store compatibility
-    const numericId = Date.now() + Math.floor(Math.random() * 1000);
+    // Generate numeric ID for Canvas compatibility (avoid conflicts with Canvas.tsx)
+    const timestamp = Date.now();
+    const random = Math.floor(Math.random() * 1000000);
+    const numericId = timestamp * 2000000000 + random; // Different multiplier to avoid Canvas conflicts
     
     if (tool.type === 'chat') {
       const chatElement = {
-        id: numericId,
+        id: numericId.toString(),
         type: 'chat' as const,
         position: { x: x, y: y },
         dimensions: { width: 600, height: 700 },
@@ -79,7 +81,7 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({ onAddElement, view
         // Optional fields for compatibility
         model: 'gpt-4',
         connectedContentIds: [],
-        status: 'idle',
+        status: 'idle' as const,
         zIndex: 2,
         isVisible: true,
         isLocked: false,
@@ -92,8 +94,10 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({ onAddElement, view
 
     if (tool.type === 'folder') {
       return {
-        id: numericId,
+        id: numericId.toString(),
         type: 'folder' as const,
+        position: { x: x, y: y },
+        dimensions: { width: 350, height: 250 },
         x: x,
         y: y,
         width: 350,
@@ -102,14 +106,21 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({ onAddElement, view
         description: '',
         color: tool.color,
         childIds: [],
-        isExpanded: true
+        isExpanded: true,
+        zIndex: 1,
+        isVisible: true,
+        isLocked: false,
+        createdAt: new Date(),
+        updatedAt: new Date()
       };
     }
 
     // Content piece
     return {
-      id: numericId,
+      id: numericId.toString(),
       type: 'content' as const,
+      position: { x: x, y: y },
+      dimensions: { width: 320, height: 240 },
       x: x,
       y: y,
       width: 320,
@@ -117,11 +128,16 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({ onAddElement, view
       url: 'https://example.com',
       title: `New ${tool.label} Content`,
       thumbnail: `https://via.placeholder.com/320x240?text=${encodeURIComponent(tool.label)}&bg=${tool.color.slice(1)}&color=ffffff`,
-      platform: tool.platform || 'unknown',
+      platform: (tool.platform || 'unknown') as any,
       viewCount: Math.floor(Math.random() * 100000),
       likeCount: Math.floor(Math.random() * 5000),
       commentCount: Math.floor(Math.random() * 500),
-      tags: [tool.platform || 'content'].filter(Boolean)
+      tags: [tool.platform || 'content'].filter(Boolean),
+      zIndex: 1,
+      isVisible: true,
+      isLocked: false,
+      createdAt: new Date(),
+      updatedAt: new Date()
     };
   };
 
@@ -141,7 +157,7 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({ onAddElement, view
 
     const newElement = createElement(tool, x, y);
     console.log('🔨 [CanvasToolbar] Tool clicked - created element:', { toolId: tool.id, toolType: tool.type, toolPlatform: tool.platform, newElement });
-    console.log('🔨 [CanvasToolbar] Element dimensions:', newElement.dimensions);
+    console.log('🔨 [CanvasToolbar] Element dimensions:', (newElement as any).dimensions);
     
     onAddElement(newElement);
     

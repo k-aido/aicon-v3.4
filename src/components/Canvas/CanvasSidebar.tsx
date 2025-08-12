@@ -85,7 +85,7 @@ export const CanvasSidebar: React.FC<CanvasSidebarProps> = ({ onOpenSocialMediaM
     if (tool.type === 'chat') {
       const chatElement = {
         id: baseElement.id,
-        type: 'chat',
+        type: 'chat' as const,
         position: { x: baseElement.x, y: baseElement.y },
         dimensions: { width: baseElement.width, height: baseElement.height },
         x: baseElement.x,        // Legacy compatibility
@@ -115,7 +115,7 @@ export const CanvasSidebar: React.FC<CanvasSidebarProps> = ({ onOpenSocialMediaM
     } else {
       addElement({
         ...baseElement,
-        type: 'content',
+        type: 'content' as const,
         url: '',
         platform: tool.platform || 'website',
         thumbnail: `https://via.placeholder.com/300x200?text=${encodeURIComponent(tool.label)}`,

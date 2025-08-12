@@ -81,9 +81,16 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const messages = activeConversation?.messages || [];
   const setMessages = (newMessages: Message[]) => {
     const updatedConversations = conversations.map(conv =>
-      conv.id === activeConversationId ? { ...conv, messages: newMessages } : conv
+      conv.id === activeConversationId ? { 
+        ...conv, 
+        messages: newMessages.map(msg => ({
+          ...msg,
+          timestamp: (msg as any).timestamp || new Date(),
+          model: selectedModel
+        }))
+      } : conv
     );
-    setConversations(updatedConversations);
+    setStoreConversations(element.id, updatedConversations);
   };
   
   const modelDropdownRef = useRef<HTMLDivElement>(null);

@@ -110,22 +110,21 @@ const CanvasComponent: React.FC<CanvasProps> = ({
     setElements(prev => [...prev, newElement]);
   }, [setElements]);
 
-  // Handle zoom - only on canvas background or connection lines
+  // Handle zoom - works with Ctrl/Cmd key for better UX
   const handleWheel = (e: React.WheelEvent) => {
+    // Only zoom when Ctrl/Cmd key is pressed, or when over canvas background/connections
     const target = e.target as HTMLElement;
-    
-    // Check if we're hovering over the canvas background or connection lines
     const isCanvasBackground = target.classList.contains('canvas-background') || target === canvasRef.current;
     const isConnectionLine = target.closest('svg') && !target.closest('.pointer-events-auto');
+    const shouldZoom = e.ctrlKey || e.metaKey || isCanvasBackground || isConnectionLine;
     
-    // Only zoom if we're over canvas background or connection lines
-    if (isCanvasBackground || isConnectionLine) {
+    if (shouldZoom) {
       e.preventDefault();
       const delta = e.deltaY > 0 ? 0.9 : 1.1;
       const newZoom = Math.max(0.25, Math.min(3, viewport.zoom * delta));
       setViewport(prev => ({ ...prev, zoom: newZoom }));
     }
-    // If over content elements, chat interfaces, etc., allow normal scroll behavior
+    // If over content elements without modifier key, allow normal scroll behavior
   };
 
   // Track mouse position for connection preview

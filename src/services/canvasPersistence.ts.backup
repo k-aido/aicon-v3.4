@@ -987,6 +987,30 @@ class CanvasPersistenceService {
       })));
       console.log('[CanvasPersistence] Connections to save:', connections.length);
       
+<<<<<<< HEAD
+      const project = projectData[0];
+
+      // Update canvas_data in projects table
+      const existingCanvasData = project?.canvas_data || {};
+      
+      // Convert arrays to objects with IDs as keys for consistent storage
+      const elementsObject: Record<string, any> = {};
+      elements.forEach(el => {
+        elementsObject[el.id] = el;
+      });
+      
+      const connectionsObject: Record<string, any> = {};
+      connections.forEach(conn => {
+        connectionsObject[conn.id] = conn;
+      });
+      
+      const updatedCanvasData = {
+        ...existingCanvasData,
+        viewport: viewport || (existingCanvasData as any)?.viewport || { x: 0, y: 0, zoom: 1.0 },
+        elements: elementsObject,
+        connections: connectionsObject,
+        last_saved: new Date().toISOString()
+=======
       // Validate elements before saving
       const validatedElements = elements.map(el => {
         // Check for required fields
@@ -1022,6 +1046,7 @@ class CanvasPersistenceService {
           return acc;
         }, {}),
         viewport: viewport || { x: 0, y: 0, zoom: 1.0 }
+>>>>>>> 57b2e039039c7a0461aba1e88d968c28c7c4a976
       };
       
       // Update the project with the new canvas data
@@ -1052,9 +1077,19 @@ class CanvasPersistenceService {
         });
         return false;
       }
+<<<<<<< HEAD
+
+      // Successfully saved to projects table
+      console.log('[CanvasPersistence] Canvas saved successfully to projects table');
+      return true;
+      
+      // Note: We're not using dedicated tables for now since they don't exist
+      // The canvas_data JSONB field in projects table is sufficient for storage
+=======
       
       console.log('[CanvasPersistence] Canvas saved successfully');
       return true;
+>>>>>>> 57b2e039039c7a0461aba1e88d968c28c7c4a976
     } catch (error) {
       console.error('[CanvasPersistence] Error in saveCanvas:', error);
       return false;
@@ -1068,7 +1103,95 @@ class CanvasPersistenceService {
     try {
       console.log('[CanvasPersistence] Loading canvas for workspace:', workspaceId);
       
+<<<<<<< HEAD
+      // First try to use the API endpoint which has service role access
+      // This avoids RLS issues when loading canvases
+      try {
+        const response = await fetch(`/api/canvas/${workspaceId}`);
+        
+        if (response.ok) {
+          const { canvas } = await response.json();
+          
+          if (canvas) {
+            console.log('[CanvasPersistence] Canvas loaded via API:', {
+              id: canvas.id,
+              title: canvas.title,
+              hasCanvasData: !!canvas.canvas_data
+            });
+            
+            const workspace = this.projectToWorkspace(canvas);
+            
+            // Extract elements and connections from canvas_data
+            const canvasData = canvas.canvas_data as any;
+            if (canvasData?.elements && canvasData?.connections) {
+              // Convert elements object to array
+              const elementsArray = Object.values(canvasData.elements || {});
+              // Convert connections object to array
+              const connectionsArray = Object.values(canvasData.connections || {});
+              
+              console.log('[CanvasPersistence] Converted canvas data:', {
+                elementsCount: elementsArray.length,
+                connectionsCount: connectionsArray.length
+              });
+              
+              return {
+                workspace,
+                elements: elementsArray,
+                connections: connectionsArray
+              };
+            }
+            
+            // No canvas_data found, return empty canvas
+            console.log('[CanvasPersistence] No canvas_data found, returning empty canvas');
+            return {
+              workspace,
+              elements: [],
+              connections: []
+            };
+          }
+        } else if (response.status === 404) {
+          console.log('[CanvasPersistence] Canvas not found via API');
+          return {
+            workspace: null,
+            elements: [],
+            connections: []
+          };
+        }
+      } catch (apiError) {
+        console.log('[CanvasPersistence] API call failed, falling back to direct query:', apiError);
+      }
+      
+      // Fallback to direct Supabase query if API fails
+      // Ensure we have a session before querying
+      const { data: { session }, error: sessionError } = await this.supabase.auth.getSession();
+      
+      if (sessionError || !session) {
+        console.error('[CanvasPersistence] No session available:', sessionError);
+        console.log('[CanvasPersistence] Attempting to restore session from storage...');
+        
+        // Try to refresh the session
+        const { data: { session: refreshedSession }, error: refreshError } = await this.supabase.auth.refreshSession();
+        
+        if (refreshError || !refreshedSession) {
+          console.error('[CanvasPersistence] Failed to refresh session:', refreshError);
+          return {
+            workspace: null,
+            elements: [],
+            connections: []
+          };
+        }
+        
+        console.log('[CanvasPersistence] Session refreshed successfully:', refreshedSession.user?.id);
+      }
+      
+      // Check current auth session
+      const { data: { user } } = await this.supabase.auth.getUser();
+      console.log('[CanvasPersistence] Current auth user:', user?.id, user?.email);
+      
+      const { data: projectData, error } = await this.supabase
+=======
       const { data, error } = await this.supabase
+>>>>>>> 57b2e039039c7a0461aba1e88d968c28c7c4a976
         .from('projects')
         .select('*')
         .eq('id', workspaceId)
@@ -1079,6 +1202,37 @@ class CanvasPersistenceService {
         return null;
       }
       
+<<<<<<< HEAD
+      const project = projectData[0];
+
+      const workspace = this.projectToWorkspace(project);
+
+      // Try to load from canvas_data first (faster)
+      const canvasData = project.canvas_data as any;
+      if (canvasData?.elements && canvasData?.connections) {
+        // Convert objects to arrays
+        const elementsArray = Object.values(canvasData.elements || {});
+        const connectionsArray = Object.values(canvasData.connections || {});
+        
+        console.log('[CanvasPersistence] Loaded canvas data from project:', {
+          elementsCount: elementsArray.length,
+          connectionsCount: connectionsArray.length
+        });
+        
+        return {
+          workspace,
+          elements: elementsArray,
+          connections: connectionsArray
+        };
+      }
+
+      // No canvas_data found, return empty canvas
+      console.log('[CanvasPersistence] No canvas_data found in project, returning empty canvas');
+      return {
+        workspace,
+        elements: [],
+        connections: []
+=======
       console.log('[CanvasPersistence] Canvas data loaded:', {
         id: data.id,
         title: data.title,
@@ -1103,6 +1257,7 @@ class CanvasPersistenceService {
         elements,
         connections,
         viewport: canvasData.viewport || { x: 0, y: 0, zoom: 1.0 }
+>>>>>>> 57b2e039039c7a0461aba1e88d968c28c7c4a976
       };
     } catch (error) {
       console.error('[CanvasPersistence] Error in loadCanvas:', error);

@@ -8,10 +8,11 @@ import { useCanvasStore } from '@/store/canvasStore';
 import { ContentElement, CanvasElement as ImportedCanvasElement, Connection as ImportedConnection } from '@/types';
 import { canvasPersistence } from '@/services/canvasPersistence';
 import { useRouter } from 'next/navigation';
+import { debounce } from '@/utils/debounce';
 
 // Use store's Element type instead of imported CanvasElement
 type Element = {
-  id: number;
+  id: string | number;  // Support mixed ID types
   type: 'content' | 'chat';
   x: number;
   y: number;
@@ -29,8 +30,8 @@ type Element = {
 
 type Connection = {
   id: number;
-  from: number;
-  to: number;
+  from: string | number;  // Support mixed ID types
+  to: string | number;    // Support mixed ID types
 };
 
 interface AiconCanvasAppProps {
@@ -39,7 +40,7 @@ interface AiconCanvasAppProps {
 
 const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
   const [selectedElement, setSelectedElement] = useState<Element | null>(null);
-  const [connecting, setConnecting] = useState<number | null>(null);
+  const [connecting, setConnecting] = useState<string | number | null>(null);
   const [analysisPanel, setAnalysisPanel] = useState<{ isOpen: boolean; content: ContentElement | null }>({
     isOpen: false,
     content: null
@@ -52,7 +53,7 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
   const [hasLoadedInitialData, setHasLoadedInitialData] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
-  const { elements, connections, addElement, updateElement, deleteElement, addConnection, deleteConnection, canvasTitle } = useCanvasStore();
+  const { elements, connections, addElement, updateElement, deleteElement, addConnection, deleteConnection, setCanvasTitle, setWorkspaceId, setViewport, viewport, canvasTitle, workspaceId } = useCanvasStore();
   const router = useRouter();
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const saveStatusTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -63,19 +64,40 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
       if (canvasId && canvasId !== 'new') {
         try {
           console.log(`[AiconCanvas] Loading canvas: ${canvasId}`);
-          const { workspace, elements: loadedElements, connections: loadedConnections } = await canvasPersistence.loadCanvas(canvasId);
+          const canvasData = await canvasPersistence.loadCanvas(canvasId);
           
-          if (workspace) {
+          if (canvasData) {
             console.log(`[AiconCanvas] Canvas loaded:`, { 
-              title: workspace.title, 
-              elementsCount: loadedElements.length,
-              connectionsCount: loadedConnections.length 
+              title: canvasData.title, 
+              elementsCount: canvasData.elements?.length || 0,
+              connectionsCount: canvasData.connections?.length || 0,
+              viewport: canvasData.viewport
             });
             
-            // Use the store directly to avoid dependency issues
-            const store = useCanvasStore.getState();
-            store.setCanvasTitle(workspace.title);
-            store.loadCanvasData(loadedElements, loadedConnections);
+            // Set canvas title, workspace ID, and viewport
+            setCanvasTitle(canvasData.title || 'Untitled Canvas');
+            setWorkspaceId(canvasId);
+            if (canvasData.viewport) {
+              setViewport(canvasData.viewport);
+            }
+            
+            // Clear existing elements and connections
+            elements.forEach(el => deleteElement(el.id));
+            connections.forEach(conn => deleteConnection(conn.id));
+            
+            // Load elements
+            if (canvasData.elements && Array.isArray(canvasData.elements)) {
+              canvasData.elements.forEach((element: any) => {
+                addElement(element);
+              });
+            }
+            
+            // Load connections
+            if (canvasData.connections && Array.isArray(canvasData.connections)) {
+              canvasData.connections.forEach((connection: any) => {
+                addConnection(connection);
+              });
+            }
             
             // Mark that we've loaded the initial data
             setHasLoadedInitialData(true);
@@ -113,7 +135,7 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
         canvasId,
         currentStore.elements,
         currentStore.connections,
-        undefined, // viewport - we can add this later if needed
+        currentStore.viewport,
         currentStore.canvasTitle
       );
       
@@ -145,7 +167,7 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
     }
   }, [canvasId]);
 
-  // Auto-save when elements, connections, or title changes
+  // Auto-save when elements, connections, title, or viewport changes
   useEffect(() => {
     // Don't autosave until we've loaded the initial data
     if (!hasLoadedInitialData) {
@@ -176,7 +198,7 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
         clearTimeout(saveTimeoutRef.current);
       }
     };
-  }, [elements, connections, canvasTitle, saveCanvas, hasLoadedInitialData]);
+  }, [elements, connections, canvasTitle, viewport, saveCanvas, hasLoadedInitialData]);
 
   // Save immediately when component unmounts and clear store
   useEffect(() => {
@@ -188,7 +210,7 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
           canvasId,
           store.elements,
           store.connections,
-          undefined,
+          store.viewport,
           store.canvasTitle
         );
       }
@@ -199,6 +221,16 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
       store.setCanvasTitle('Canvas Title');
     };
   }, [canvasId, hasLoadedInitialData]);
+
+  // Debug logging for element changes
+  useEffect(() => {
+    console.log('🎯 [AiconCanvas] Elements changed. Count:', elements.length);
+    console.log('🎯 [AiconCanvas] Current elements:', elements.map(e => ({ 
+      id: e.id, 
+      type: e.type, 
+      title: (e as any).title || 'N/A' 
+    })));
+  }, [elements]);
 
   // Auto-analyze content when added to canvas
   useEffect(() => {
@@ -271,64 +303,114 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
   })) as ImportedCanvasElement[];
 
   const handleSetElements = (newElements: ImportedCanvasElement[] | ((prev: ImportedCanvasElement[]) => ImportedCanvasElement[])) => {
+    console.log('🔥 === handleSetElements called ===');
+    console.log('🔥 Current elements before update:', elements.map(e => ({ 
+      id: e.id, 
+      type: e.type, 
+      title: (e as any).title || 'N/A' 
+    })));
+    
     if (typeof newElements === 'function') {
+      console.log('🔥 Handling functional update (setElements with function)');
       // Handle functional updates
       const currentElements = elements;
       const updated = newElements(currentElements as ImportedCanvasElement[]);
       
-      // Get IDs of updated elements
-      const updatedIds = new Set(updated.map(el => el.id));
+      console.log('🔥 Updated elements after function call:', updated.map(e => ({ 
+        id: e.id, 
+        type: e.type, 
+        title: (e as any).title || 'N/A' 
+      })));
       
-      // Remove elements that are not in the updated list
-      elements.forEach(el => {
-        if (!updatedIds.has(el.id)) {
-          deleteElement(el.id);
-        }
-      });
+      // SMART SYNC: Determine operation type based on element count changes
+      const currentCount = currentElements.length;
+      const updatedCount = updated.length;
+      const countDifference = updatedCount - currentCount;
       
-      // Update or add elements
-      updated.forEach(el => {
-        const existing = elements.find(e => e.id === el.id);
-        if (existing) {
-          updateElement(el.id, el as any);
-        } else {
-          addElement(el as any);
-        }
-      });
+      console.log('🔥 Count analysis:', { currentCount, updatedCount, countDifference });
+      
+      if (countDifference === 1) {
+        // Likely adding a single element - use safe append
+        console.log('🔥 Detected single element addition - using safe append');
+        const currentElementMap = new Map(currentElements.map(el => [String(el.id), el]));
+        updated.forEach(el => {
+          if (!currentElementMap.has(String(el.id))) {
+            console.log('🔥 ➕ Adding new element (SAFE APPEND):', { id: el.id, type: el.type });
+            addElement(el as any);
+          }
+        });
+      } else {
+        // Other operations (moves, deletes, bulk changes) - use full sync
+        console.log('🔥 Detected move/delete/bulk operation - using full sync');
+        const currentElementMap = new Map(currentElements.map(el => [String(el.id), el]));
+        const updatedElementMap = new Map(updated.map(el => [String(el.id), el]));
+        
+        // Update existing elements and add new ones
+        updated.forEach(el => {
+          if (currentElementMap.has(String(el.id))) {
+            console.log('🔥 ✅ Updating existing element:', { id: el.id, type: el.type });
+            updateElement(el.id, el as any);
+          } else {
+            console.log('🔥 ➕ Adding new element:', { id: el.id, type: el.type });
+            addElement(el as any);
+          }
+        });
+        
+        // Remove elements that are no longer in the updated array (for deletes/moves)
+        currentElements.forEach(el => {
+          if (!updatedElementMap.has(String(el.id))) {
+            console.log('🔥 ❌ Removing element (legitimate operation):', { id: el.id, type: el.type });
+            deleteElement(el.id);
+          }
+        });
+      }
+      
     } else {
-      // Handle direct array updates
-      const newIds = new Set(newElements.map(el => el.id));
+      console.log('🔥 Handling direct array update (setElements with array)');
+      console.log('🔥 New elements:', newElements.map(e => ({ 
+        id: e.id, 
+        type: e.type, 
+        title: (e as any).title || 'N/A' 
+      })));
       
-      // Remove elements that are not in the new list
-      elements.forEach(el => {
-        if (!newIds.has(el.id)) {
-          deleteElement(el.id);
+      // For direct array updates, use full sync (this is usually from state loads)
+      const currentElementMap = new Map(elements.map(el => [String(el.id), el]));
+      const newElementMap = new Map(newElements.map(el => [String(el.id), el]));
+      
+      // Update existing elements and add new ones
+      newElements.forEach(el => {
+        if (currentElementMap.has(String(el.id))) {
+          console.log('🔥 ✅ Updating existing element:', { id: el.id, type: el.type });
+          updateElement(el.id, el as any);
+        } else {
+          console.log('🔥 ➕ Adding new element:', { id: el.id, type: el.type });
+          addElement(el as any);
         }
       });
       
-      // Update or add elements
-      newElements.forEach(el => {
-        const existing = elements.find(e => e.id === el.id);
-        if (existing) {
-          updateElement(el.id, el as any);
-        } else {
-          addElement(el as any);
+      // Remove elements that are no longer in the new array
+      elements.forEach(el => {
+        if (!newElementMap.has(String(el.id))) {
+          console.log('🔥 ❌ Removing element (direct array sync):', { id: el.id, type: el.type });
+          deleteElement(el.id);
         }
       });
     }
+    
+    console.log('🔥 === handleSetElements complete - SMART SYNC ===');
   };
 
   const handleSetConnections = (newConnections: ImportedConnection[] | ((prev: ImportedConnection[]) => ImportedConnection[])) => {
     if (typeof newConnections === 'function') {
-      const currentConnections = connections;
+      const currentConnections = connections as ImportedConnection[];
       const updated = newConnections(currentConnections);
       // Clear and re-add all connections
       connections.forEach(conn => deleteConnection(conn.id));
-      updated.forEach(conn => addConnection(conn));
+      updated.forEach(conn => addConnection(conn as any));
     } else {
       // Clear and re-add all connections
       connections.forEach(conn => deleteConnection(conn.id));
-      newConnections.forEach(conn => addConnection(conn));
+      newConnections.forEach(conn => addConnection(conn as any));
     }
   };
 
@@ -386,10 +468,10 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
           setElements={handleSetElements}
           selectedElement={selectedElement as ImportedCanvasElement | null}
           setSelectedElement={setSelectedElement as React.Dispatch<React.SetStateAction<ImportedCanvasElement | null>>}
-          connections={connections}
+          connections={connections as ImportedConnection[]}
           setConnections={handleSetConnections}
-          connecting={connecting}
-          setConnecting={setConnecting}
+          connecting={connecting as number | null}
+          setConnecting={setConnecting as React.Dispatch<React.SetStateAction<number | null>>}
           onOpenAnalysisPanel={handleOpenAnalysisPanel}
           onOpenSocialMediaModal={handleOpenSocialMediaModal}
         />

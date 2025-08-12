@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import { ChatElement as ChatElementType, Connection, CanvasElement } from '@/types';
 import { ConnectionPoint } from './ConnectionPoint';
-import { EnhancedChatInterface } from '@/components/Chat/EnhancedChatInterface';
+import { ChatInterface } from '@/components/Chat/ChatInterface';
 import { useElementDrag } from '@/hooks/useElementDrag';
 import { SimpleResize } from './SimpleResize';
 
@@ -91,7 +91,7 @@ export const ChatElement: React.FC<ChatElementProps> = React.memo(({
           onClick={handleConnectionClick}
         />
         
-        <EnhancedChatInterface 
+        <ChatInterface 
           element={element} 
           connections={connections}
           allElements={allElements}

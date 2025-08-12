@@ -6,6 +6,18 @@ import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { ConnectionLine } from './ConnectionLine';
 import { ContentElement } from './ContentElement';
 import { ChatElement } from './ChatElement';
+import { useCanvasStore } from '@/store/canvasStore';
+
+// Generate truly unique numeric IDs for canvas elements
+let idCounter = Math.floor(Math.random() * 1000000); // Start with random base to avoid conflicts
+const generateUniqueId = () => {
+  // Use timestamp + random + counter to ensure uniqueness even for rapid successive calls
+  const timestamp = Date.now();
+  const random = Math.floor(Math.random() * 1000);
+  idCounter = (idCounter + 1) % 1000000; // Reset counter after 1M to prevent overflow
+  // Create a unique combination that's very unlikely to collide
+  return timestamp * 1000000000 + random * 1000000 + idCounter;
+};
 
 interface CanvasProps {
   elements: CanvasElement[];
@@ -36,7 +48,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
   onOpenSocialMediaModal
 }) => {
   const canvasRef = useRef<HTMLDivElement>(null);
-  const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, zoom: 1 });
+  const { viewport, setViewport } = useCanvasStore();
   const [mousePos, setMousePos] = useState<Position>({ x: 0, y: 0 });
   const [selectedElementIds, setSelectedElementIds] = useState<number[]>([]);
   const [lastClickedElementId, setLastClickedElementId] = useState<number | null>(null);
@@ -50,7 +62,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
 
   // Canvas drag handling
   const { isDragging, handleMouseDown } = useCanvasDrag({
-    onDragMove: (position) => setViewport(prev => ({ ...prev, ...position })),
+    onDragMove: (position) => setViewport({ ...viewport, ...position }),
     onDragEnd: () => {
       // Clear selection when clicking on empty canvas
       setSelectedElement(null);
@@ -85,7 +97,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
     if (!platform) return;
 
     const newElement = {
-      id: Date.now(),
+      id: generateUniqueId(),
       type: 'content' as const,
       x: x - 150,
       y: y - 100,
@@ -100,22 +112,21 @@ const CanvasComponent: React.FC<CanvasProps> = ({
     setElements(prev => [...prev, newElement]);
   }, [setElements]);
 
-  // Handle zoom - only on canvas background or connection lines
+  // Handle zoom - works with Ctrl/Cmd key for better UX
   const handleWheel = (e: React.WheelEvent) => {
+    // Only zoom when Ctrl/Cmd key is pressed, or when over canvas background/connections
     const target = e.target as HTMLElement;
-    
-    // Check if we're hovering over the canvas background or connection lines
     const isCanvasBackground = target.classList.contains('canvas-background') || target === canvasRef.current;
     const isConnectionLine = target.closest('svg') && !target.closest('.pointer-events-auto');
+    const shouldZoom = e.ctrlKey || e.metaKey || isCanvasBackground || isConnectionLine;
     
-    // Only zoom if we're over canvas background or connection lines
-    if (isCanvasBackground || isConnectionLine) {
+    if (shouldZoom) {
       e.preventDefault();
       const delta = e.deltaY > 0 ? 0.9 : 1.1;
       const newZoom = Math.max(0.25, Math.min(3, viewport.zoom * delta));
-      setViewport(prev => ({ ...prev, zoom: newZoom }));
+      setViewport({ ...viewport, zoom: newZoom });
     }
-    // If over content elements, chat interfaces, etc., allow normal scroll behavior
+    // If over content elements without modifier key, allow normal scroll behavior
   };
 
   // Track mouse position for connection preview
@@ -150,7 +161,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
       
       // Create new element
       const newElement: CanvasElement = tool.type === 'chat' ? {
-        id: Date.now(),
+        id: generateUniqueId(),
         type: 'chat' as const,
         x: x - 400,
         y: y - 450,
@@ -158,7 +169,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
         height: 900,
         messages: []
       } : {
-        id: Date.now(),
+        id: generateUniqueId(),
         type: 'content' as const,
         x: x - 150,
         y: y - 100,
@@ -170,7 +181,15 @@ const CanvasComponent: React.FC<CanvasProps> = ({
         thumbnail: 'https://via.placeholder.com/300x200'
       };
       
-      setElements(prev => [...prev, newElement]);
+      if (tool.type === 'chat') {
+        console.log('💬 [Canvas] Creating AI Chat element from drag/drop:', { tool, newElement });
+      }
+      console.log('🛠️ [Canvas] Creating element from drag/drop:', { tool, newElement });
+      setElements(prev => {
+        const updated = [...prev, newElement];
+        console.log('🛠️ [Canvas] Elements after drag/drop creation:', updated.map(e => ({ id: e.id, type: e.type, title: (e as any).title || 'N/A' })));
+        return updated;
+      });
     } catch (error) {
       console.error('Failed to parse tool data:', error);
     }
@@ -187,14 +206,37 @@ const CanvasComponent: React.FC<CanvasProps> = ({
 
   // Handle element updates
   const handleElementUpdate = useCallback((id: number, updates: Partial<CanvasElement>) => {
-    setElements(prev => prev.map(el => el.id === id ? { ...el, ...updates } as CanvasElement : el));
+    console.log('🔧 [Canvas] handleElementUpdate called:', { id, updates });
+    setElements(prev => {
+      const updated = prev.map(el => el.id === id ? { ...el, ...updates } as CanvasElement : el);
+      console.log('🔧 [Canvas] Elements after update:', updated.map(e => ({ id: e.id, type: e.type, title: (e as any).title || 'N/A' })));
+      return updated;
+    });
   }, [setElements]);
 
   // Handle element deletion (single)
   const handleElementDelete = useCallback((id: number) => {
-    setElements(prev => prev.filter(el => el.id !== id));
-    setConnections(prev => prev.filter(conn => conn.from !== id && conn.to !== id));
-    setSelectedElementIds(prev => prev.filter(selId => selId !== id));
+    console.log('🗑️ [Canvas] handleElementDelete called:', { id });
+    setElements(prev => {
+      const beforeDelete = prev.map(e => ({ id: e.id, type: e.type, title: (e as any).title || 'N/A' }));
+      const afterDelete = prev.filter(el => el.id !== id);
+      console.log('🗑️ [Canvas] Elements before delete filter:', beforeDelete);
+      console.log('🗑️ [Canvas] Elements after delete filter:', afterDelete.map(e => ({ id: e.id, type: e.type, title: (e as any).title || 'N/A' })));
+      console.log('🗑️ [Canvas] Filter removed', beforeDelete.length - afterDelete.length, 'elements');
+      return afterDelete;
+    });
+    setConnections(prev => {
+      const beforeConnFilter = prev.length;
+      const afterConnFilter = prev.filter(conn => conn.from !== id && conn.to !== id);
+      console.log('🗑️ [Canvas] Connections filter - before:', beforeConnFilter, 'after:', afterConnFilter.length);
+      return afterConnFilter;
+    });
+    setSelectedElementIds(prev => {
+      const beforeSelFilter = prev.length;
+      const afterSelFilter = prev.filter(selId => selId !== id);
+      console.log('🗑️ [Canvas] Selected IDs filter - before:', beforeSelFilter, 'after:', afterSelFilter.length);
+      return afterSelFilter;
+    });
     if (selectedElement?.id === id) {
       setSelectedElement(null);
     }
@@ -202,10 +244,23 @@ const CanvasComponent: React.FC<CanvasProps> = ({
 
   // Handle multiple element deletion
   const handleMultipleElementDelete = useCallback((ids: number[]) => {
-    setElements(prev => prev.filter(el => !ids.includes(el.id)));
-    setConnections(prev => prev.filter(conn => 
-      !ids.includes(conn.from) && !ids.includes(conn.to)
-    ));
+    console.log('🗑️ [Canvas] handleMultipleElementDelete called:', { ids });
+    setElements(prev => {
+      const beforeDelete = prev.map(e => ({ id: e.id, type: e.type, title: (e as any).title || 'N/A' }));
+      const afterDelete = prev.filter(el => !ids.includes(el.id));
+      console.log('🗑️ [Canvas] Elements before multiple delete filter:', beforeDelete);
+      console.log('🗑️ [Canvas] Elements after multiple delete filter:', afterDelete.map(e => ({ id: e.id, type: e.type, title: (e as any).title || 'N/A' })));
+      console.log('🗑️ [Canvas] Multiple delete filter removed', beforeDelete.length - afterDelete.length, 'elements');
+      return afterDelete;
+    });
+    setConnections(prev => {
+      const beforeConnFilter = prev.length;
+      const afterConnFilter = prev.filter(conn => 
+        !ids.includes(conn.from) && !ids.includes(conn.to)
+      );
+      console.log('🗑️ [Canvas] Multiple delete connections filter - before:', beforeConnFilter, 'after:', afterConnFilter.length);
+      return afterConnFilter;
+    });
     setSelectedElementIds([]);
     setSelectedElement(null);
   }, [setElements, setConnections, setSelectedElement]);
@@ -330,7 +385,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
       // Complete connection
       if (connecting !== elementId) {
         const newConnection: Connection = {
-          id: Date.now(),
+          id: generateUniqueId(),
           from: connecting,
           to: elementId
         };
@@ -382,8 +437,8 @@ const CanvasComponent: React.FC<CanvasProps> = ({
 
   // Reset zoom to 100%
   const handleResetZoom = useCallback(() => {
-    setViewport(prev => ({ ...prev, zoom: 1 }));
-  }, []);
+    setViewport({ ...viewport, zoom: 1 });
+  }, [viewport, setViewport]);
 
   // Connection preview path
   const connectionPreview = useMemo(() => {
@@ -578,7 +633,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
         <div className="bg-white rounded-lg shadow-lg p-1 flex gap-1 items-center">
           <span className="px-2 text-sm text-gray-700">{Math.round(viewport.zoom * 100)}%</span>
           <button 
-            onClick={() => setViewport(prev => ({ ...prev, zoom: Math.min(3, prev.zoom * 1.2) }))}
+            onClick={() => setViewport({ ...viewport, zoom: Math.min(3, viewport.zoom * 1.2) })}
             className="p-1 hover:bg-gray-100 rounded text-gray-700 outline-none focus:outline-none"
             title="Zoom In"
           >
@@ -587,7 +642,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
             </svg>
           </button>
           <button 
-            onClick={() => setViewport(prev => ({ ...prev, zoom: Math.max(0.25, prev.zoom * 0.8) }))}
+            onClick={() => setViewport({ ...viewport, zoom: Math.max(0.25, viewport.zoom * 0.8) })}
             className="p-1 hover:bg-gray-100 rounded text-gray-700 outline-none focus:outline-none"
             title="Zoom Out"
           >

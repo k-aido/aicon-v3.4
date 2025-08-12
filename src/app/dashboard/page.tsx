@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { User, Sprout, Search, Home, Star } from 'lucide-react';
-import { canvasPersistence } from '@/services/canvasPersistence';
-import { createBrowserClient } from '@/lib/supabase/client';
+import { User, Sprout, Search, Home, Clock, Star, Trash2 } from 'lucide-react';
+import { canvasPersistence, CanvasPersistenceService } from '@/services/canvasPersistence';
+import { createBrowserClient } from '../../../lib/supabase/client';
 
 interface CanvasPreview {
   id: string;
@@ -15,6 +15,9 @@ interface CanvasPreview {
   icon: 'user' | 'plant' | 'search';
   elementCount: number;
   isStarred?: boolean;
+  is_starred?: boolean;
+  starred_at?: string | null;
+  last_accessed_at?: string;
 }
 
 // Mock canvas data with different icons and colors
@@ -54,7 +57,9 @@ const mockCanvases: CanvasPreview[] = [
 const CanvasCard: React.FC<{
   canvas: CanvasPreview;
   onClick: (id: string) => void;
-}> = ({ canvas, onClick }) => {
+  onDelete: (id: string, title: string) => void;
+  onToggleStar: (id: string, currentStarred: boolean) => void;
+}> = ({ canvas, onClick, onDelete, onToggleStar }) => {
   const IconComponent = canvas.icon === 'user' ? User : 
                        canvas.icon === 'plant' ? Sprout : 
                        Search;
@@ -64,7 +69,48 @@ const CanvasCard: React.FC<{
       onClick={() => onClick(canvas.id)}
       className="cursor-pointer transition-transform hover:scale-105"
     >
-      <div className={`${canvas.color} rounded-2xl p-6 h-64 relative overflow-hidden`}>
+      <div className={`${canvas.color} rounded-2xl p-6 h-64 relative overflow-hidden group`}>
+        {/* Star button */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation(); // Prevent navigation to canvas
+            e.preventDefault();
+            onToggleStar(canvas.id, canvas.is_starred || false);
+          }}
+          className={`absolute top-2 right-2 p-2 rounded-lg transition-all z-10 ${
+            canvas.is_starred 
+              ? 'text-yellow-500 bg-yellow-50 hover:bg-yellow-100' 
+              : 'text-gray-400 bg-gray-50 hover:bg-gray-100 hover:text-gray-600'
+          }`}
+          title={canvas.is_starred ? 'Unstar canvas' : 'Star canvas'}
+        >
+          <svg 
+            className="w-5 h-5" 
+            fill={canvas.is_starred ? 'currentColor' : 'none'} 
+            stroke="currentColor" 
+            viewBox="0 0 24 24"
+          >
+            <path 
+              strokeLinecap="round" 
+              strokeLinejoin="round" 
+              strokeWidth={2} 
+              d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" 
+            />
+          </svg>
+        </button>
+
+        {/* Delete button */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation(); // Prevent navigation to canvas
+            onDelete(canvas.id, canvas.title);
+          }}
+          className="absolute bottom-2 right-2 p-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-all opacity-0 group-hover:opacity-100 shadow-lg z-10"
+          title="Delete canvas"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+
         {/* Canvas preview area */}
         <div className="bg-white rounded-lg h-40 p-4 mb-4">
           <div className="grid grid-cols-3 gap-2">
@@ -96,9 +142,18 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true); // Start with loading true
   const [isInitializing, setIsInitializing] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'home' | 'starred'>('home');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [currentFilter, setCurrentFilter] = useState<'all' | 'starred'>('all');
   
   const supabase = createBrowserClient();
+
+  // Filtered canvases based on current filter
+  const filteredCanvases = useMemo(() => {
+    if (currentFilter === 'starred') {
+      return canvases.filter(canvas => canvas.is_starred === true);
+    }
+    return canvases; // Show all for 'all' filter
+  }, [canvases, currentFilter]);
 
   // Load canvases function
   const loadCanvases = async (userIdToLoad: string) => {
@@ -118,7 +173,10 @@ export default function DashboardPage() {
         color: ['bg-purple-200', 'bg-green-200', 'bg-orange-200'][index % 3],
         icon: ['user', 'plant', 'search'][index % 3] as 'user' | 'plant' | 'search',
         elementCount: 0, // Could be calculated from canvas_data
-        isStarred: false
+        isStarred: workspace.is_starred || false,
+        is_starred: workspace.is_starred || false,
+        starred_at: workspace.starred_at || null,
+        last_accessed_at: workspace.last_accessed_at || workspace.updated_at
       }));
       
       setCanvases(canvasPreviews);
@@ -131,49 +189,114 @@ export default function DashboardPage() {
 
   // Get current user and load canvases
   useEffect(() => {
-    const initialize = async () => {
+    const checkAuth = async () => {
       try {
-        console.log('[Dashboard] Starting initialization...');
+        console.log('[Dashboard] Starting auth check...');
         setIsInitializing(true);
         
-        const { data: { user }, error } = await supabase.auth.getUser();
-        console.log('[Dashboard] Auth check result:', { user: !!user, userId: user?.id, error });
+        // First get the session
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         
-        if (error) {
-          console.error('[Dashboard] Auth error:', error);
+        console.log('[Dashboard] Session check result:', {
+          hasSession: !!session,
+          userId: session?.user?.id,
+          email: session?.user?.email,
+          sessionError
+        });
+        
+        if (sessionError || !session) {
+          console.error('[Dashboard] No session found:', sessionError);
           router.push('/login');
           return;
         }
         
-        if (user) {
-          console.log('[Dashboard] User authenticated, loading canvases...');
-          setUserId(user.id);
-          // Load the authenticated user's canvases
-          await loadCanvases(user.id);
-        } else {
-          console.log('[Dashboard] No user found, redirecting to login');
-          // If no user, redirect to login
-          router.push('/login');
-          return;
-        }
+        console.log('[Dashboard] Session found:', session.user.id);
+        setUserId(session.user.id);
+        setIsAuthenticated(true);
+        
+        // Now load canvases with the authenticated user ID
+        await loadCanvases(session.user.id);
       } catch (error) {
-        console.error('[Dashboard] Error initializing:', error);
+        console.error('[Dashboard] Auth check error:', error);
         router.push('/login');
       } finally {
         setIsInitializing(false);
       }
     };
-    initialize();
-  }, []);
+    
+    checkAuth();
+  }, [router]);
 
   const handleCanvasClick = (canvasId: string) => {
     router.push(`/canvas/${canvasId}`);
   };
 
+  const handleDeleteCanvas = async (canvasId: string, canvasTitle: string) => {
+    // Confirm deletion
+    const confirmed = window.confirm(
+      `Are you sure you want to delete "${canvasTitle}"? This action cannot be undone.`
+    );
+    
+    if (!confirmed) return;
+    
+    try {
+      setIsLoading(true);
+      console.log('[Dashboard] Deleting canvas:', canvasId);
+      
+      const success = await canvasPersistence.deleteWorkspace(canvasId);
+      
+      if (success) {
+        // Remove canvas from state
+        setCanvases(prevCanvases => 
+          prevCanvases.filter(canvas => canvas.id !== canvasId)
+        );
+        
+        // Show success message
+        console.log('[Dashboard] Canvas deleted successfully:', canvasTitle);
+      } else {
+        console.error('[Dashboard] Failed to delete canvas:', canvasId);
+        alert('Failed to delete canvas. Please try again.');
+      }
+    } catch (error) {
+      console.error('[Dashboard] Error deleting canvas:', error);
+      alert('An error occurred while deleting the canvas.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleToggleStar = async (canvasId: string, currentStarred: boolean) => {
+    try {
+      const persistenceService = CanvasPersistenceService.getInstance();
+      const success = await persistenceService.toggleStarWorkspace(canvasId, !currentStarred);
+      
+      if (success) {
+        // Update local state
+        setCanvases(prevCanvases => 
+          prevCanvases.map(canvas => 
+            canvas.id === canvasId 
+              ? { ...canvas, is_starred: !currentStarred, starred_at: !currentStarred ? new Date().toISOString() : null }
+              : canvas
+          ).sort((a, b) => {
+            // Sort starred items first
+            if (a.is_starred && !b.is_starred) return -1;
+            if (!a.is_starred && b.is_starred) return 1;
+            // Then by last_accessed_at
+            return new Date(b.last_accessed_at || 0).getTime() - new Date(a.last_accessed_at || 0).getTime();
+          })
+        );
+      } else {
+        alert('Failed to update star status. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error toggling star:', error);
+    }
+  };
+
   const createNewCanvas = async () => {
     try {
-      if (!userId) {
-        console.error('[Dashboard] No user ID available');
+      if (!userId || !isAuthenticated) {
+        console.error('[Dashboard] No authenticated user available');
         router.push('/login');
         return;
       }
@@ -181,12 +304,17 @@ export default function DashboardPage() {
       // Show loading state for canvas creation only
       setIsLoading(true);
 
-      // Skip connection test for now - let the API handle connection issues
-      console.log('[Dashboard] Skipping connection test, proceeding with canvas creation...');
+      // Verify session is still valid before creating canvas
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        console.error('[Dashboard] Session expired during canvas creation');
+        router.push('/login');
+        return;
+      }
       
       // Use authenticated user ID
       console.log('[Dashboard] Creating canvas for user:', userId);
-      console.log('[Dashboard] User email:', (await supabase.auth.getUser()).data.user?.email);
+      console.log('[Dashboard] User email:', session.user?.email);
       
       const canvas = await canvasPersistence.createWorkspace(
         userId,
@@ -238,9 +366,9 @@ export default function DashboardPage() {
       <div className="w-64 bg-white border-r border-gray-200 p-4">
         <nav className="space-y-1">
           <button
-            onClick={() => setActiveTab('home')}
+            onClick={() => setCurrentFilter('all')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-              activeTab === 'home' 
+              currentFilter === 'all' 
                 ? 'bg-gray-100 text-gray-900' 
                 : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
             }`}
@@ -250,9 +378,9 @@ export default function DashboardPage() {
           </button>
           
           <button
-            onClick={() => setActiveTab('starred')}
+            onClick={() => setCurrentFilter('starred')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-              activeTab === 'starred' 
+              currentFilter === 'starred' 
                 ? 'bg-gray-100 text-gray-900' 
                 : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
             }`}
@@ -278,19 +406,30 @@ export default function DashboardPage() {
                 </div>
               ))
             ) : (
-              canvases
-                .filter(canvas => activeTab === 'home' || (activeTab === 'starred' && canvas.isStarred))
-                .map((canvas) => (
-                  <CanvasCard
-                    key={canvas.id}
-                    canvas={canvas}
-                    onClick={handleCanvasClick}
-                  />
-                ))
+              filteredCanvases.map((canvas) => (
+                <CanvasCard
+                  key={canvas.id}
+                  canvas={canvas}
+                  onClick={handleCanvasClick}
+                  onDelete={handleDeleteCanvas}
+                  onToggleStar={handleToggleStar}
+                />
+              ))
             )}
             
-            {/* Show empty state only if not loading and no canvases */}
-            {!isLoading && canvases.length === 0 && (
+            {/* Show empty state for starred filter when no starred canvases */}
+            {currentFilter === 'starred' && filteredCanvases.length === 0 && !isLoading && (
+              <div className="col-span-full text-center py-12">
+                <div className="text-gray-400 mb-4">
+                  <Star className="w-16 h-16 mx-auto mb-4" />
+                </div>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No starred canvases yet</h3>
+                <p className="text-gray-500 mb-6">Star your important canvases to see them here!</p>
+              </div>
+            )}
+            
+            {/* Show empty state only if not loading and no canvases at all */}
+            {!isLoading && canvases.length === 0 && currentFilter === 'all' && (
               <div className="col-span-full text-center py-12">
                 <div className="text-gray-400 mb-4">
                   <svg className="w-16 h-16 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

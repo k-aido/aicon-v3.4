@@ -22,7 +22,9 @@ const ContentAdder: React.FC<ContentAdderProps> = ({ onClose }) => {
   };
 
   const generateId = (): number => {
-    return elements.length > 0 ? Math.max(...elements.map(el => el.id)) + 1 : 1;
+    // Convert mixed ID types to numbers for Math.max
+    const numericIds = elements.map(el => typeof el.id === 'number' ? el.id : parseInt(String(el.id)) || 0);
+    return numericIds.length > 0 ? Math.max(...numericIds) + 1 : 1;
   };
 
   const handleAddContent = () => {

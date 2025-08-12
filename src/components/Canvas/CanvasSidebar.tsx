@@ -68,8 +68,9 @@ export const CanvasSidebar: React.FC<CanvasSidebarProps> = ({ onOpenSocialMediaM
     const centerX = rect.width / 2;
     const centerY = rect.height / 2;
     
-    // Find next available ID
-    const maxId = elements.length > 0 ? Math.max(...elements.map(el => el.id)) : 0;
+    // Find next available ID - convert to numbers for Math.max, filter out non-numeric
+    const numericIds = elements.map(el => typeof el.id === 'number' ? el.id : parseInt(String(el.id)) || 0);
+    const maxId = numericIds.length > 0 ? Math.max(...numericIds) : 0;
     const newId = maxId + 1;
     
     // Create element based on type
@@ -83,21 +84,39 @@ export const CanvasSidebar: React.FC<CanvasSidebarProps> = ({ onOpenSocialMediaM
     };
     
     if (tool.type === 'chat') {
-      addElement({
-        ...baseElement,
-        type: 'chat',
+      const chatElement = {
+        id: baseElement.id,
+        type: 'chat' as const,
+        position: { x: baseElement.x, y: baseElement.y },
+        dimensions: { width: baseElement.width, height: baseElement.height },
+        x: baseElement.x,        // Legacy compatibility
+        y: baseElement.y,        // Legacy compatibility
+        width: baseElement.width,  // Legacy compatibility
+        height: baseElement.height, // Legacy compatibility
+        title: baseElement.title,
         messages: [],
         conversations: [{
           id: 'default',
           title: 'New Conversation',
           messages: [],
           createdAt: new Date()
-        }]
-      });
+        }],
+        // Additional required fields
+        model: 'gpt-4',
+        connectedContentIds: [],
+        status: 'idle',
+        zIndex: 2,
+        isVisible: true,
+        isLocked: false,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+      console.log('💬 [CanvasSidebar] Creating AI Chat element (fixed format):', { toolId: tool.id, chatElement });
+      addElement(chatElement);
     } else {
       addElement({
         ...baseElement,
-        type: 'content',
+        type: 'content' as const,
         url: '',
         platform: tool.platform || 'website',
         thumbnail: `https://via.placeholder.com/300x200?text=${encodeURIComponent(tool.label)}`,

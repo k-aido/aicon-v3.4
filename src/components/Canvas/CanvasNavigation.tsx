@@ -1,17 +1,20 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Home } from 'lucide-react';
+import { Home, Trash2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useCanvasStore } from '@/store/canvasStore';
+import { canvasPersistence } from '@/services/canvasPersistence';
 
 interface CanvasNavigationProps {
   lastSaved?: Date | null;
 }
 
 export const CanvasNavigation: React.FC<CanvasNavigationProps> = ({ lastSaved }) => {
-  const { canvasTitle, setCanvasTitle } = useCanvasStore();
+  const { canvasTitle, setCanvasTitle, workspaceId } = useCanvasStore();
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(canvasTitle);
   const [, setUpdateTrigger] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const router = useRouter();
 
   useEffect(() => {
     if (isEditing && inputRef.current) {
@@ -34,10 +37,36 @@ export const CanvasNavigation: React.FC<CanvasNavigationProps> = ({ lastSaved })
     setEditValue(canvasTitle);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const trimmedValue = editValue.trim();
-    if (trimmedValue && trimmedValue !== canvasTitle) {
-      setCanvasTitle(trimmedValue.slice(0, 50));
+    if (trimmedValue && trimmedValue !== canvasTitle && workspaceId) {
+      const newTitle = trimmedValue.slice(0, 50);
+      
+      // Update local state immediately for responsive UI
+      setCanvasTitle(newTitle);
+      
+      try {
+        console.log('[CanvasNavigation] Saving title change:', { 
+          workspaceId, 
+          oldTitle: canvasTitle, 
+          newTitle 
+        });
+        
+        // Persist to database
+        const success = await canvasPersistence.updateWorkspace(workspaceId, {
+          title: newTitle
+        });
+        
+        if (success) {
+          console.log('[CanvasNavigation] Title saved successfully');
+        } else {
+          console.error('[CanvasNavigation] Failed to save title');
+          // Could optionally revert the title here or show an error message
+        }
+      } catch (error) {
+        console.error('[CanvasNavigation] Error saving title:', error);
+        // Could optionally revert the title here or show an error message
+      }
     }
     setIsEditing(false);
   };
@@ -71,8 +100,38 @@ export const CanvasNavigation: React.FC<CanvasNavigationProps> = ({ lastSaved })
     return lastSaved.toLocaleDateString();
   };
 
+  const handleDeleteCanvas = async () => {
+    if (!workspaceId) {
+      console.error('[CanvasNavigation] No workspace ID available for deletion');
+      return;
+    }
+
+    const confirmed = window.confirm(
+      'Are you sure you want to delete this canvas? All elements and connections will be permanently removed.'
+    );
+    
+    if (!confirmed) return;
+    
+    try {
+      console.log('[CanvasNavigation] Deleting canvas:', workspaceId);
+      const success = await canvasPersistence.deleteWorkspace(workspaceId);
+      
+      if (success) {
+        console.log('[CanvasNavigation] Canvas deleted successfully');
+        // Navigate back to dashboard
+        router.push('/dashboard');
+      } else {
+        console.error('[CanvasNavigation] Failed to delete canvas');
+        alert('Failed to delete canvas.');
+      }
+    } catch (error) {
+      console.error('[CanvasNavigation] Error deleting canvas:', error);
+      alert('An error occurred while deleting the canvas.');
+    }
+  };
+
   return (
-    <nav className="fixed top-4 left-4 h-12 bg-white rounded-lg shadow-lg z-50 flex items-center px-4" style={{ width: 'auto' }}>
+    <nav className="fixed top-4 left-4 h-12 bg-white rounded-lg shadow-lg z-50 flex items-center px-4 w-auto">
       {/* Home Button */}
       <button 
         className="p-2 hover:bg-gray-100 rounded-md transition-colors"
@@ -129,6 +188,20 @@ export const CanvasNavigation: React.FC<CanvasNavigationProps> = ({ lastSaved })
           </span>
         </>
       )}
+
+      {/* Separator */}
+      <div className="mx-3 h-6 w-px bg-gray-300"></div>
+
+      {/* Delete Button */}
+      <button
+        onClick={handleDeleteCanvas}
+        className="px-3 py-2 bg-red-500 hover:bg-red-600 text-white rounded-md text-sm flex items-center gap-2 transition-colors"
+        title="Delete canvas"
+        disabled={!workspaceId}
+      >
+        <Trash2 className="w-4 h-4" />
+        Delete
+      </button>
     </nav>
   );
 };

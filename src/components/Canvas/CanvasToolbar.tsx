@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Globe } from 'lucide-react';
+import { Globe, UserSearch } from 'lucide-react';
 import { AIChatIcon, InstagramIcon, TikTokIcon, YouTubeIcon, ProfilesIcon } from '@/components/icons/PngIcons';
 import { ContentPiece, ChatData, FolderData } from '@/types/canvas';
 
@@ -16,12 +16,13 @@ interface Tool {
   icon: React.ComponentType<any>;
   label: string;
   color: string;
-  type: 'chat' | 'content' | 'folder';
+  type: 'chat' | 'content' | 'folder' | 'creator-search';
   platform?: string;
 }
 
 const tools: Tool[] = [
   { id: 'ai-chat', icon: AIChatIcon, label: 'AI Chat', color: '#8B5CF6', type: 'chat' },
+  { id: 'creator-search', icon: UserSearch, label: 'Search Creators', color: '#10B981', type: 'creator-search' },
   { id: 'instagram', icon: InstagramIcon, label: 'Instagram', color: '#E4405F', type: 'content', platform: 'instagram' },
   { id: 'tiktok', icon: TikTokIcon, label: 'TikTok', color: '#000000', type: 'content', platform: 'tiktok' },
   { id: 'youtube', icon: YouTubeIcon, label: 'YouTube', color: '#FF0000', type: 'content', platform: 'youtube' },
@@ -32,9 +33,10 @@ interface CanvasToolbarProps {
   onAddElement: (element: ContentPiece | ChatData | FolderData) => void;
   viewport: { x: number; y: number; zoom: number };
   onOpenSocialMediaModal?: (platform?: string) => void;
+  onOpenCreatorSearch?: () => void;
 }
 
-export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({ onAddElement, viewport, onOpenSocialMediaModal }) => {
+export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({ onAddElement, viewport, onOpenSocialMediaModal, onOpenCreatorSearch }) => {
   const [draggingTool, setDraggingTool] = useState<Tool | null>(null);
   const [activeTool, setActiveTool] = useState<string | null>(null);
   const [hoveredTool, setHoveredTool] = useState<string | null>(null);
@@ -143,6 +145,14 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({ onAddElement, view
 
   const handleToolClick = (tool: Tool) => {
     console.log('🔨 [CanvasToolbar] Tool clicked:', tool.id, tool.type);
+    
+    // Handle creator search
+    if (tool.id === 'creator-search' && onOpenCreatorSearch) {
+      onOpenCreatorSearch();
+      setActiveTool(tool.id);
+      setTimeout(() => setActiveTool(null), 300);
+      return;
+    }
     
     // Check if it's a social media platform and modal handler is available
     const socialMediaPlatforms = ['instagram', 'tiktok', 'youtube'];

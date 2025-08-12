@@ -4,7 +4,7 @@ import { cookies } from 'next/headers';
 
 export async function POST(request: NextRequest) {
   try {
-    const { title, userId: requestUserId } = await request.json();
+    const { title, userId: requestUserId, accountId: requestAccountId } = await request.json();
 
     if (!title) {
       return NextResponse.json(
@@ -123,24 +123,15 @@ export async function POST(request: NextRequest) {
       console.error('[API] Error checking user profile:', profileError);
     }
 
-    // For simplicity, we'll use the user ID as the account ID for individual users
-    let accountId = userId;
+    let accountId = userRecord?.account_id || requestAccountId;
 
-    // If no user profile exists, we can still create projects (they will be linked to user_id directly)
-    if (!profileRecord) {
-      console.log('[API] No user_profile found, but proceeding with canvas creation');
-      console.log('[API] User may need to complete onboarding to get full functionality');
+    if (requestAccountId && !userRecord?.account_id) {
+      console.log('[API] Using provided accountId:', requestAccountId);
     }
 
-    // Ensure account exists for this user
-    const { data: existingAccount, error: accountCheckError } = await supabase
-      .from('accounts')
-      .select('id')
-      .eq('id', accountId)
-      .single();
-
-    if (!existingAccount && (!accountCheckError || accountCheckError.code === 'PGRST116')) {
-      console.log('[API] Creating account for user...');
+    // If no user record exists, create account and user records
+    if (!userRecord && !requestAccountId) {
+      console.log('[API] No user record found, creating account and user...');
       
       // Get user email from auth
       const userEmail = session?.user?.email || `user_${userId.substring(0, 8)}@aicon.app`;
@@ -266,6 +257,7 @@ export async function POST(request: NextRequest) {
       user_id: userId, // Also set user_id for RLS policies
       title: uniqueTitle,
       description: `Created on ${new Date().toLocaleString()}`,
+      project_type: 'canvas',
       canvas_data: {
         viewport: { x: 0, y: 0, zoom: 1.0 },
         elements: {},
@@ -278,6 +270,8 @@ export async function POST(request: NextRequest) {
       },
       is_archived: false,
       is_public: false,
+      is_starred: false,
+      starred_at: null,
       last_accessed_at: new Date().toISOString()
     };
 

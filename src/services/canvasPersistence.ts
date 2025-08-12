@@ -21,7 +21,7 @@ export interface Project {
   created_by_user_id?: string;
   title: string;
   description?: string;
-  project_type?: string;  // Optional project type field
+  project_type?: string;
   canvas_data?: {
     viewport?: {
       x: number;
@@ -34,6 +34,8 @@ export interface Project {
   settings?: Record<string, any>;
   is_archived: boolean;
   is_public: boolean;
+  is_starred?: boolean;
+  starred_at?: string | null;
   thumbnail_url?: string;
   last_accessed_at?: string;
   last_accessed_by_user_id?: string;
@@ -46,6 +48,7 @@ export interface Project {
 export interface CanvasWorkspace extends Project {
   // Additional fields for compatibility
   user_id?: string;
+  name?: string; // For compatibility, maps to title
   title: string; // maps to name
   last_accessed: string; // maps to updated_at
   access_count: number;
@@ -56,6 +59,8 @@ export interface CanvasWorkspace extends Project {
   };
   settings: Record<string, any>;
   is_public: boolean;
+  is_starred?: boolean;
+  starred_at?: string | null;
   share_token?: string;
   tags: string[];
   deleted_at?: string;
@@ -109,6 +114,7 @@ export interface CanvasVersion {
 }
 
 class CanvasPersistenceService {
+  private static instance: CanvasPersistenceService | null = null;
   private supabase;
   
   constructor() {
@@ -139,6 +145,16 @@ class CanvasPersistenceService {
     } catch (error) {
       console.error('[CanvasPersistence] Failed to restore session:', error);
     }
+  }
+
+  /**
+   * Get singleton instance of CanvasPersistenceService
+   */
+  static getInstance(): CanvasPersistenceService {
+    if (!CanvasPersistenceService.instance) {
+      CanvasPersistenceService.instance = new CanvasPersistenceService();
+    }
+    return CanvasPersistenceService.instance;
   }
 
   /**
@@ -297,20 +313,81 @@ class CanvasPersistenceService {
 
   /**
    * Helper method to transform Project to CanvasWorkspace format
+   * Handles NULL values properly for all fields
    */
   private projectToWorkspace(project: Project): CanvasWorkspace {
     return {
       ...project,
-      user_id: project.created_by_user_id || project.account_id, // For compatibility
-      title: project.title, // Already has title from Project
-      last_accessed: project.last_accessed_at || project.updated_at,
+      user_id: project.created_by_user_id || project.account_id || '', // Handle NULL created_by_user_id
+      name: project.title || 'Untitled Canvas', // For compatibility, handle NULL title
+      last_accessed: project.last_accessed_at || project.updated_at || project.created_at,
       access_count: 0,
       viewport: project.canvas_data?.viewport || { x: 0, y: 0, zoom: 1.0 },
       settings: project.settings || {},
       share_token: undefined,
       tags: [],
-      deleted_at: undefined
+      deleted_at: undefined,
+      // Ensure all required fields are present
+      title: project.title || 'Untitled Canvas',
+      description: project.description || '',
+      is_archived: project.is_archived || false,
+      is_public: project.is_public || false,
+      is_starred: project.is_starred || false,
+      starred_at: project.starred_at || null,
+      thumbnail_url: project.thumbnail_url || undefined,
+      last_accessed_at: project.last_accessed_at || undefined,
+      last_accessed_by_user_id: project.last_accessed_by_user_id || undefined
     };
+  }
+
+  /**
+   * Helper method to map array of projects to workspaces with error handling
+   */
+  private mapProjectsToWorkspaces(projects: Project[]): CanvasWorkspace[] {
+    return projects.map((project, index) => {
+      try {
+        console.log(`[CanvasPersistence] 🔍 DEBUG: Mapping project ${index + 1}/${projects.length}:`, {
+          id: project.id,
+          title: project.title,
+          account_id: project.account_id,
+          created_by_user_id: project.created_by_user_id
+        });
+        
+        const workspace = this.projectToWorkspace(project);
+        
+        console.log(`[CanvasPersistence] 🔍 DEBUG: Mapped workspace ${index + 1}:`, {
+          id: workspace.id,
+          title: workspace.title,
+          user_id: workspace.user_id,
+          account_id: workspace.account_id
+        });
+        
+        return workspace;
+      } catch (error) {
+        console.error('[CanvasPersistence] ❌ ERROR: Failed to map project to workspace:', {
+          projectId: project.id,
+          error,
+          projectData: project
+        });
+        
+        // Return a minimal workspace if mapping fails
+        return {
+          ...project,
+          user_id: project.created_by_user_id || project.account_id || '',
+          name: project.title || 'Untitled Canvas',
+          last_accessed: project.last_accessed_at || project.updated_at || project.created_at,
+          access_count: 0,
+          viewport: project.canvas_data?.viewport || { x: 0, y: 0, zoom: 1.0 },
+          settings: project.settings || {},
+          share_token: undefined,
+          tags: [],
+          deleted_at: undefined,
+          title: project.title || 'Untitled Canvas',
+          is_starred: project.is_starred || false,
+          starred_at: project.starred_at || null
+        } as CanvasWorkspace;
+      }
+    });
   }
 
   /**
@@ -416,6 +493,24 @@ class CanvasPersistenceService {
       console.log(`[CanvasPersistence] ========== CREATING NEW WORKSPACE ==========`);
       console.log(`[CanvasPersistence] User ID: ${userId}, Title: ${title}`);
       
+      // First, get the user's account_id from the users table
+      console.log(`[CanvasPersistence] Looking up account_id for user...`);
+      const { data: userRecord, error: userError } = await this.supabase
+        .from('users')
+        .select('account_id')
+        .eq('id', userId)
+        .single();
+        
+      let accountId: string;
+      if (userError || !userRecord) {
+        console.log(`[CanvasPersistence] No user record found for ${userId}, will use userId as accountId`);
+        // If no user record exists, the API will create one
+        accountId = userId;
+      } else {
+        console.log(`[CanvasPersistence] Found user record, account_id: ${userRecord.account_id}`);
+        accountId = userRecord.account_id;
+      }
+      
       // Use API endpoint for creation to handle RLS issues
       const response = await fetch('/api/canvas/create', {
         method: 'POST',
@@ -424,7 +519,8 @@ class CanvasPersistenceService {
         },
         body: JSON.stringify({
           title,
-          userId // Send as fallback if session not available
+          userId, // Send userId for created_by_user_id
+          accountId // Send accountId to ensure proper association
         })
       });
 
@@ -526,71 +622,181 @@ class CanvasPersistenceService {
    */
   async getUserWorkspaces(userId: string): Promise<CanvasWorkspace[]> {
     try {
-      console.log(`[CanvasPersistence] ========== FETCHING USER WORKSPACES ==========`);
-      console.log(`[CanvasPersistence] User ID: ${userId}`);
+      console.log('[CanvasPersistence] ========== FETCHING USER WORKSPACES ==========');
+      console.log('[CanvasPersistence] 🔍 DEBUG: Input userId:', userId);
       
-      // Check current auth session first
-      const { data: { user } } = await this.supabase.auth.getUser();
-      console.log(`[CanvasPersistence] Current auth user:`, user?.id, user?.email);
+      // Check current auth session
+      const { data: { session }, error: sessionError } = await this.supabase.auth.getSession();
+      console.log('[CanvasPersistence] 🔐 Current auth session:', session ? 'Authenticated' : 'Not authenticated');
+      console.log('[CanvasPersistence] 🔐 Session user ID:', session?.user?.id);
+      console.log('[CanvasPersistence] 🔐 Session user email:', session?.user?.email);
+      console.log('[CanvasPersistence] 🔐 Session error:', sessionError);
       
-      if (!user) {
-        console.error(`[CanvasPersistence] No authenticated user found`);
-        return [];
+      if (!session) {
+        console.error('[CanvasPersistence] ❌ No authenticated session found');
+        console.log('[CanvasPersistence] ⚠️  Proceeding without session (might cause RLS issues)');
+      } else {
+        // Compare session user ID with provided userId
+        if (session.user.id !== userId) {
+          console.warn('[CanvasPersistence] ⚠️  Session user ID does not match provided userId:', {
+            sessionUserId: session.user.id,
+            providedUserId: userId
+          });
+        } else {
+          console.log('[CanvasPersistence] ✅ Session user ID matches provided userId');
+        }
       }
       
-      // Check if user exists in user_profiles (our actual user table)
-      console.log(`[CanvasPersistence] Checking user_profiles for user...`);
-      const { data: profileRecord, error: profileError } = await this.supabase
-        .from('user_profiles')
-        .select('user_id')
-        .eq('user_id', userId)
+      // First try to get user's account_id
+      const { data: userData, error: userError } = await this.supabase
+        .from('users')
+        .select('account_id')
+        .eq('id', userId)
         .single();
+      
+      console.log('[CanvasPersistence] 🔍 DEBUG: User lookup result:', {
+        userData,
+        userError,
+        hasAccountId: !!userData?.account_id,
+        errorCode: userError?.code,
+        errorMessage: userError?.message
+      });
+      
+      if (userData?.account_id) {
+        // User found, query by account_id
+        console.log('[CanvasPersistence] ✅ User found, querying by account_id:', userData.account_id);
+        const { data, error } = await this.supabase
+          .from('projects')
+          .select('*')
+          .eq('account_id', userData.account_id)
+          .eq('project_type', 'canvas')
+          .eq('is_archived', false)
+          .order('is_starred', { ascending: false }) // Starred first
+          .order('starred_at', { ascending: false, nullsFirst: false }) // Recently starred first
+          .order('last_accessed_at', { ascending: false }); // Then by last accessed
         
-      if (profileError || !profileRecord) {
-        console.log(`[CanvasPersistence] No user_profile found for ${userId}, user may need to complete onboarding`);
-        return [];
+        console.log('[CanvasPersistence] 🔍 DEBUG: Account-based query result:', {
+          data,
+          error,
+          dataLength: data?.length || 0,
+          errorCode: error?.code,
+          errorMessage: error?.message
+        });
+        
+        if (error) {
+          console.error('[CanvasPersistence] ❌ ERROR: Failed to query projects by account_id:', error);
+          throw error;
+        }
+        
+        console.log(`[CanvasPersistence] ✅ Found ${data?.length || 0} projects by account_id`);
+        return this.mapProjectsToWorkspaces(data || []);
+      } else {
+        // No user found, try querying by created_by_user_id as fallback
+        console.log('[CanvasPersistence] ⚠️ No user found, querying by created_by_user_id:', userId);
+        const { data, error } = await this.supabase
+          .from('projects')
+          .select('*')
+          .eq('created_by_user_id', userId)
+          .eq('project_type', 'canvas')
+          .eq('is_archived', false)
+          .order('is_starred', { ascending: false }) // Starred first
+          .order('starred_at', { ascending: false, nullsFirst: false }) // Recently starred first
+          .order('last_accessed_at', { ascending: false }); // Then by last accessed
+        
+        console.log('[CanvasPersistence] 🔍 DEBUG: created_by_user_id query result:', {
+          data,
+          error,
+          dataLength: data?.length || 0,
+          errorCode: error?.code,
+          errorMessage: error?.message
+        });
+        
+        if (error) {
+          console.error('[CanvasPersistence] ❌ ERROR: Failed to query projects by created_by_user_id:', error);
+          throw error;
+        }
+        
+        console.log(`[CanvasPersistence] ✅ Found ${data?.length || 0} projects by created_by_user_id`);
+        return this.mapProjectsToWorkspaces(data || []);
       }
-      
-      console.log(`[CanvasPersistence] Found user profile for: ${userId}`);
-      
-      // For now, we'll look for projects where the user is the creator
-      // This handles the case where users don't have individual accounts yet
-      
-      // First, let's check what projects exist
-      const { data: allProjects } = await this.supabase
-        .from('projects')
-        .select('id, account_id, title, created_by_user_id, user_id')
-        .limit(10);
-        
-      console.log('[CanvasPersistence] All projects in database:', allProjects);
-      
-      // Query for projects created by this user OR where user_id matches OR in user's account
-      const { data, error } = await this.supabase
-        .from('projects')
-        .select('*')
-        .or(`created_by_user_id.eq.${userId},user_id.eq.${userId},account_id.eq.${userId}`)
-        .order('updated_at', { ascending: false }) as { data: Project[] | null; error: any };
+    } catch (error) {
+      console.error('[CanvasPersistence] ❌ CRITICAL ERROR: Unexpected error in getUserWorkspaces');
+      console.error('[CanvasPersistence] 🔍 DEBUG: Exception details:', {
+        error,
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        errorStack: error instanceof Error ? error.stack : 'No stack trace',
+        userId,
+        timestamp: new Date().toISOString()
+      });
+      return [];
+    }
+  }
 
+  /**
+   * Update workspace (project) details
+   */
+  async updateWorkspace(workspaceId: string, updates: Partial<CanvasWorkspace>): Promise<boolean> {
+    try {
+      console.log(`[CanvasPersistence] ========== UPDATING WORKSPACE ==========`);
+      console.log(`[CanvasPersistence] 🔍 DEBUG: Workspace ID:`, workspaceId);
+      console.log(`[CanvasPersistence] 🔍 DEBUG: Updates:`, updates);
+
+      const updateData: any = {
+        updated_at: new Date().toISOString(),
+        last_accessed_at: new Date().toISOString()
+      };
+      
+      // Map workspace fields to project fields
+      if (updates.title !== undefined) {
+        updateData.title = updates.title;
+        console.log(`[CanvasPersistence] 📝 Updating title to:`, updates.title);
+      }
+      if (updates.description !== undefined) {
+        updateData.description = updates.description;
+        console.log(`[CanvasPersistence] 📝 Updating description to:`, updates.description);
+      }
+      if (updates.is_public !== undefined) {
+        updateData.is_public = updates.is_public;
+        console.log(`[CanvasPersistence] 📝 Updating is_public to:`, updates.is_public);
+      }
+      if (updates.is_archived !== undefined) {
+        updateData.is_archived = updates.is_archived;
+        console.log(`[CanvasPersistence] 📝 Updating is_archived to:`, updates.is_archived);
+      }
+
+      console.log(`[CanvasPersistence] 🔍 DEBUG: Final update data:`, updateData);
+      
+      const { error } = await this.supabase
+        .from('projects')
+        .update(updateData)
+        .eq('id', workspaceId);
+      
       if (error) {
-        console.error('[CanvasPersistence] Error fetching user projects:', error);
-        console.error('[CanvasPersistence] Error details:', {
+        console.error('[CanvasPersistence] ❌ ERROR: Failed to update workspace:', error);
+        console.error('[CanvasPersistence] 🔍 DEBUG: Error details:', {
           message: error.message,
           details: error.details,
           hint: error.hint,
           code: error.code,
-          userId,
-          query: 'projects table with created_by_user_id or user_id'
+          workspaceId,
+          updateData
         });
-        
-        return [];
+        return false;
       }
-
-      console.log(`[CanvasPersistence] Found ${data?.length || 0} projects for user ${userId}`);
-      console.log('[CanvasPersistence] Projects data:', data);
-      return (data || []).map(project => this.projectToWorkspace(project));
+      
+      console.log('[CanvasPersistence] ✅ Workspace updated successfully:', workspaceId);
+      return true;
     } catch (error) {
-      console.error('[CanvasPersistence] Unexpected error in getUserWorkspaces:', error);
-      return [];
+      console.error('[CanvasPersistence] ❌ CRITICAL ERROR: Unexpected error in updateWorkspace');
+      console.error('[CanvasPersistence] 🔍 DEBUG: Exception details:', {
+        error,
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        errorStack: error instanceof Error ? error.stack : 'No stack trace',
+        workspaceId,
+        updates,
+        timestamp: new Date().toISOString()
+      });
+      return false;
     }
   }
 
@@ -765,71 +971,92 @@ class CanvasPersistenceService {
    * Save complete canvas state
    */
   async saveCanvas(
-    workspaceId: string, 
-    elements: any[], 
+    workspaceId: string,
+    elements: any[],
     connections: any[],
     viewport?: { x: number; y: number; zoom: number },
     title?: string
   ): Promise<boolean> {
     try {
-      // Get current project data
-      console.log('[CanvasPersistence] Fetching project for save:', workspaceId);
-      const { data: projectData, error: fetchError } = await this.supabase
-        .from('projects')
-        .select('canvas_data')
-        .eq('id', workspaceId);
-
-      console.log('[CanvasPersistence] Project fetch for save result:', {
-        data: projectData,
-        error: fetchError,
-        dataLength: projectData?.length || 0
-      });
-
-      if (fetchError) {
-        console.error('[CanvasPersistence] Error fetching project for save:', fetchError);
-        return false;
-      }
-
-      if (!projectData || projectData.length === 0) {
-        console.error('[CanvasPersistence] No project found to save to:', workspaceId);
-        return false;
-      }
+      console.log('[CanvasPersistence] Saving canvas:', workspaceId);
+      console.log('[CanvasPersistence] Elements to save:', elements.length);
+      console.log('[CanvasPersistence] Element details:', elements.map(el => ({ 
+        id: el.id, 
+        type: el.type, 
+        title: el.title || 'N/A'
+      })));
+      console.log('[CanvasPersistence] Connections to save:', connections.length);
       
-      const project = projectData[0];
-
-      // Update canvas_data in projects table
-      const existingCanvasData = project?.canvas_data || {};
-      const updatedCanvasData = {
-        ...existingCanvasData,
-        viewport: viewport || (existingCanvasData as any)?.viewport || { x: 0, y: 0, zoom: 1.0 },
-        elements: elements,
-        connections: connections,
-        last_saved: new Date().toISOString()
+      // Validate elements before saving
+      const validatedElements = elements.map(el => {
+        // Check for required fields
+        if (!el.id || !el.type) {
+          console.warn('[CanvasPersistence] Invalid element missing id or type:', el);
+          return null;
+        }
+        
+        // Check for position fields
+        if (typeof el.x !== 'number' || typeof el.y !== 'number' || 
+            typeof el.width !== 'number' || typeof el.height !== 'number') {
+          console.warn('[CanvasPersistence] Invalid element missing position/dimensions:', el);
+          return null;
+        }
+        
+        return el;
+      }).filter(el => el !== null);
+      
+      console.log('[CanvasPersistence] Validated elements:', {
+        originalCount: elements.length,
+        validCount: validatedElements.length,
+        invalidCount: elements.length - validatedElements.length
+      });
+      
+      // Prepare canvas_data in the format the projects table expects
+      const canvasData = {
+        elements: validatedElements.reduce((acc, el) => {
+          acc[el.id] = el;
+          return acc;
+        }, {}),
+        connections: connections.reduce((acc, conn) => {
+          acc[conn.id] = conn;
+          return acc;
+        }, {}),
+        viewport: viewport || { x: 0, y: 0, zoom: 1.0 }
       };
-
-      const { error: updateError } = await this.supabase
+      
+      // Update the project with the new canvas data
+      const { error } = await this.supabase
         .from('projects')
         .update({
-          ...(title && { title: title }),
-          canvas_data: updatedCanvasData,
+          canvas_data: canvasData,
+          title: title,
+          last_accessed_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })
         .eq('id', workspaceId);
-
-      if (updateError) {
-        console.error('Error updating project:', updateError);
+      
+      if (error) {
+        console.error('[CanvasPersistence] Error saving canvas:', error);
+        console.error('[CanvasPersistence] Error details:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        });
+        console.error('[CanvasPersistence] Canvas data that failed to save:', {
+          workspaceId,
+          elementCount: elements.length,
+          connectionCount: connections.length,
+          canvasDataStructure: Object.keys(canvasData),
+          elementsStructure: Object.keys(canvasData.elements || {}).length
+        });
         return false;
       }
-
-      // Also save to dedicated tables for better querying
-      const [elementsResult, connectionsResult] = await Promise.all([
-        this.saveElements(workspaceId, elements),
-        this.saveConnections(workspaceId, connections)
-      ]);
-
-      return elementsResult && connectionsResult;
+      
+      console.log('[CanvasPersistence] Canvas saved successfully');
+      return true;
     } catch (error) {
-      console.error('Error in saveCanvas:', error);
+      console.error('[CanvasPersistence] Error in saveCanvas:', error);
       return false;
     }
   }
@@ -837,173 +1064,49 @@ class CanvasPersistenceService {
   /**
    * Load complete canvas state
    */
-  async loadCanvas(workspaceId: string): Promise<{
-    workspace: CanvasWorkspace | null;
-    elements: any[];
-    connections: any[];
-  }> {
+  async loadCanvas(workspaceId: string): Promise<any> {
     try {
-      // Get project with canvas_data
       console.log('[CanvasPersistence] Loading canvas for workspace:', workspaceId);
       
-      // First try to use the API endpoint which has service role access
-      // This avoids RLS issues when loading canvases
-      try {
-        const response = await fetch(`/api/canvas/${workspaceId}`);
-        
-        if (response.ok) {
-          const { canvas } = await response.json();
-          
-          if (canvas) {
-            console.log('[CanvasPersistence] Canvas loaded via API:', {
-              id: canvas.id,
-              title: canvas.title,
-              hasCanvasData: !!canvas.canvas_data
-            });
-            
-            const workspace = this.projectToWorkspace(canvas);
-            
-            // Extract elements and connections from canvas_data
-            const canvasData = canvas.canvas_data as any;
-            if (canvasData?.elements && canvasData?.connections) {
-              return {
-                workspace,
-                elements: canvasData.elements,
-                connections: canvasData.connections
-              };
-            }
-            
-            // Fall back to loading from dedicated tables
-            const [elements, connections] = await Promise.all([
-              this.loadElements(workspaceId),
-              this.loadConnections(workspaceId)
-            ]);
-            
-            return {
-              workspace,
-              elements,
-              connections
-            };
-          }
-        } else if (response.status === 404) {
-          console.log('[CanvasPersistence] Canvas not found via API');
-          return {
-            workspace: null,
-            elements: [],
-            connections: []
-          };
-        }
-      } catch (apiError) {
-        console.log('[CanvasPersistence] API call failed, falling back to direct query:', apiError);
-      }
-      
-      // Fallback to direct Supabase query if API fails
-      // Ensure we have a session before querying
-      const { data: { session }, error: sessionError } = await this.supabase.auth.getSession();
-      
-      if (sessionError || !session) {
-        console.error('[CanvasPersistence] No session available:', sessionError);
-        console.log('[CanvasPersistence] Attempting to restore session from storage...');
-        
-        // Try to refresh the session
-        const { data: { session: refreshedSession }, error: refreshError } = await this.supabase.auth.refreshSession();
-        
-        if (refreshError || !refreshedSession) {
-          console.error('[CanvasPersistence] Failed to refresh session:', refreshError);
-          return {
-            workspace: null,
-            elements: [],
-            connections: []
-          };
-        }
-        
-        console.log('[CanvasPersistence] Session refreshed successfully:', refreshedSession.user?.id);
-      }
-      
-      // Check current auth session
-      const { data: { user } } = await this.supabase.auth.getUser();
-      console.log('[CanvasPersistence] Current auth user:', user?.id, user?.email);
-      
-      const { data: projectData, error } = await this.supabase
+      const { data, error } = await this.supabase
         .from('projects')
         .select('*')
-        .eq('id', workspaceId) as { data: Project[] | null; error: any };
-
-      console.log('[CanvasPersistence] Load canvas query result:', {
-        data: projectData,
-        error,
-        dataLength: projectData?.length || 0
-      });
-
-      if (error) {
-        console.error('[CanvasPersistence] Error loading project:', error);
-        console.error('[CanvasPersistence] Error details:', {
-          message: error.message,
-          code: error.code,
-          details: error.details,
-          hint: error.hint
-        });
-        
-        // Check if it's an RLS error
-        if (error.code === '42501' || error.message?.includes('row-level security')) {
-          console.error('[CanvasPersistence] RLS Policy Error - User cannot access this project');
-          console.error('[CanvasPersistence] Current user:', user?.id);
-          console.error('[CanvasPersistence] Trying to load project:', workspaceId);
-        }
-        
-        return {
-          workspace: null,
-          elements: [],
-          connections: []
-        };
-      }
-
-      if (!projectData || projectData.length === 0) {
-        console.error('[CanvasPersistence] No project found to load:', workspaceId);
-        console.error('[CanvasPersistence] This could be due to:');
-        console.error('[CanvasPersistence] 1. Project does not exist');
-        console.error('[CanvasPersistence] 2. RLS policies blocking access');
-        console.error('[CanvasPersistence] 3. User not authenticated properly');
-        console.error('[CanvasPersistence] Current auth user:', user?.id, user?.email);
-        return {
-          workspace: null,
-          elements: [],
-          connections: []
-        };
+        .eq('id', workspaceId)
+        .single();
+      
+      if (error || !data) {
+        console.error('[CanvasPersistence] Error loading canvas:', error);
+        return null;
       }
       
-      const project = projectData[0];
-
-      const workspace = this.projectToWorkspace(project);
-
-      // Try to load from canvas_data first (faster)
-      const canvasData = project.canvas_data as any;
-      if (canvasData?.elements && canvasData?.connections) {
-        return {
-          workspace,
-          elements: canvasData.elements,
-          connections: canvasData.connections
-        };
-      }
-
-      // Fall back to loading from dedicated tables
-      const [elements, connections] = await Promise.all([
-        this.loadElements(workspaceId),
-        this.loadConnections(workspaceId)
-      ]);
-
+      console.log('[CanvasPersistence] Canvas data loaded:', {
+        id: data.id,
+        title: data.title,
+        hasCanvasData: !!data.canvas_data,
+        canvasDataKeys: data.canvas_data ? Object.keys(data.canvas_data) : []
+      });
+      
+      // Convert canvas_data from database format to app format
+      const canvasData = data.canvas_data || {};
+      const elements = canvasData.elements ? Object.values(canvasData.elements) : [];
+      const connections = canvasData.connections ? Object.values(canvasData.connections) : [];
+      
+      console.log('[CanvasPersistence] Parsed canvas data:', {
+        elementsCount: elements.length,
+        elementTypes: elements.map((el: any) => ({ id: el.id, type: el.type, title: el.title || 'N/A' })),
+        connectionsCount: connections.length,
+        viewport: canvasData.viewport
+      });
+      
       return {
-        workspace,
+        ...data,
         elements,
-        connections
+        connections,
+        viewport: canvasData.viewport || { x: 0, y: 0, zoom: 1.0 }
       };
     } catch (error) {
-      console.error('Error in loadCanvas:', error);
-      return {
-        workspace: null,
-        elements: [],
-        connections: []
-      };
+      console.error('[CanvasPersistence] Error in loadCanvas:', error);
+      return null;
     }
   }
 
@@ -1012,19 +1115,108 @@ class CanvasPersistenceService {
    */
   async deleteWorkspace(workspaceId: string): Promise<boolean> {
     try {
+      console.log('[CanvasPersistence] Deleting workspace:', workspaceId);
+      
+      // Delete the project (canvas_elements and canvas_connections will cascade delete if they exist)
       const { error } = await this.supabase
         .from('projects')
         .delete()
         .eq('id', workspaceId);
-
+      
       if (error) {
-        console.error('Error deleting project:', error);
+        console.error('[CanvasPersistence] Error deleting workspace:', error);
         return false;
       }
-
+      
+      console.log('[CanvasPersistence] Workspace deleted successfully:', workspaceId);
       return true;
     } catch (error) {
-      console.error('Error in deleteWorkspace:', error);
+      console.error('[CanvasPersistence] Error in deleteWorkspace:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Soft delete workspace (marks as archived instead of removing)
+   */
+  async softDeleteWorkspace(workspaceId: string): Promise<boolean> {
+    try {
+      console.log('[CanvasPersistence] Soft deleting workspace:', workspaceId);
+      
+      const { error } = await this.supabase
+        .from('projects')
+        .update({
+          is_archived: true,
+          deleted_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', workspaceId);
+      
+      if (error) {
+        console.error('[CanvasPersistence] Error soft deleting workspace:', error);
+        console.error('[CanvasPersistence] Error details:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code,
+          workspaceId
+        });
+        return false;
+      }
+      
+      console.log('[CanvasPersistence] Workspace soft deleted successfully:', workspaceId);
+      return true;
+    } catch (error) {
+      console.error('[CanvasPersistence] Error in softDeleteWorkspace:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Toggle star status for a workspace
+   */
+  async toggleStarWorkspace(workspaceId: string, isStarred: boolean): Promise<boolean> {
+    try {
+      console.log('[CanvasPersistence] Toggling star for workspace:', workspaceId, isStarred);
+      
+      const updateData: any = {
+        is_starred: isStarred,
+        starred_at: isStarred ? new Date().toISOString() : null,
+        updated_at: new Date().toISOString()
+      };
+      
+      console.log('[CanvasPersistence] 🔍 DEBUG: Star update data:', updateData);
+      
+      const { error } = await this.supabase
+        .from('projects')
+        .update(updateData)
+        .eq('id', workspaceId);
+      
+      if (error) {
+        console.error('[CanvasPersistence] ❌ ERROR: Failed to toggle star:', error);
+        console.error('[CanvasPersistence] 🔍 DEBUG: Error details:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code,
+          workspaceId,
+          isStarred
+        });
+        return false;
+      }
+      
+      console.log('[CanvasPersistence] ✅ Star toggled successfully:', { workspaceId, isStarred });
+      return true;
+    } catch (error) {
+      console.error('[CanvasPersistence] ❌ CRITICAL ERROR: Unexpected error in toggleStarWorkspace');
+      console.error('[CanvasPersistence] 🔍 DEBUG: Exception details:', {
+        error,
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        errorStack: error instanceof Error ? error.stack : 'No stack trace',
+        workspaceId,
+        isStarred,
+        timestamp: new Date().toISOString()
+      });
       return false;
     }
   }
@@ -1133,3 +1325,6 @@ class CanvasPersistenceService {
 
 // Export singleton instance
 export const canvasPersistence = new CanvasPersistenceService();
+
+// Export class for getInstance pattern
+export { CanvasPersistenceService };

@@ -10,17 +10,17 @@ const mockData: Record<Platform, ContentInfo> = {
   },
   instagram: {
     title: "Instagram Post",
-    thumbnail: "https://via.placeholder.com/300x300/E1306C/white?text=IG",
+    thumbnail: "https://via.placeholder.com/1080x1080/E4405F/ffffff?text=📸+Instagram+Post&font-size=36",
     platform: "instagram"
   },
   tiktok: {
     title: "TikTok Video",
-    thumbnail: "https://via.placeholder.com/300x300/000000/white?text=TT",
+    thumbnail: "https://via.placeholder.com/1080x1920/000000/ffffff?text=🎵+TikTok+Video&font-size=36",
     platform: "tiktok"
   },
   unknown: {
     title: "Unknown Content",
-    thumbnail: "https://via.placeholder.com/300x300/gray/white?text=?",
+    thumbnail: "https://via.placeholder.com/300x300/64748b/ffffff?text=📄+Content&font-size=24",
     platform: "unknown"
   }
 };

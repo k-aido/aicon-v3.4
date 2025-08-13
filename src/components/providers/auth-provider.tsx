@@ -56,6 +56,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(data.session);
       setUser(data.user);
       
+      // Ensure user has all necessary database records
+      try {
+        console.log('Ensuring user database records exist...');
+        const setupResponse = await fetch('/api/auth/setup-user', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            userId: data.user.id,
+            email: data.user.email || email
+          })
+        });
+        
+        if (!setupResponse.ok) {
+          const setupError = await setupResponse.json();
+          console.error('Failed to ensure user records:', setupError);
+        }
+      } catch (setupError) {
+        console.error('Error ensuring user records:', setupError);
+      }
+      
       // Check if email is verified (skip in development)
       const isDev = process.env.NODE_ENV === 'development' && window.location.hostname === 'localhost';
       if (!isDev && !data.user.email_confirmed_at) {
@@ -119,10 +139,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     
     if (!error && data.user) {
-      // DEV ONLY: Auto-confirm email for localhost development
+      // Set up all necessary database records for the new user
+      try {
+        console.log('Setting up user database records...');
+        const setupResponse = await fetch('/api/auth/setup-user', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            userId: data.user.id,
+            email: data.user.email || email
+          })
+        });
+        
+        if (!setupResponse.ok) {
+          const setupError = await setupResponse.json();
+          console.error('Failed to setup user records:', setupError);
+        } else {
+          console.log('User database records created successfully');
+        }
+      } catch (setupError) {
+        console.error('Error setting up user records:', setupError);
+      }
+      
+      // DEV ONLY: Auto-confirm email and sign in for localhost development
       const isDev = process.env.NODE_ENV === 'development' && window.location.hostname === 'localhost';
       if (isDev) {
-        console.warn('DEV ONLY: Auto-confirming email for localhost development');
+        console.warn('DEV ONLY: Auto-confirming email and signing in for localhost development');
         try {
           // Call our API route to confirm the email server-side
           await fetch('/api/dev/confirm-email', {
@@ -131,12 +173,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             body: JSON.stringify({ userId: data.user.id })
           });
           
-          // Force refresh the session after email confirmation
+          // Wait a moment for the email confirmation to process
           await new Promise(resolve => setTimeout(resolve, 1000));
-          const { data: refreshedSession } = await supabase.auth.getSession();
-          if (refreshedSession.session) {
-            setSession(refreshedSession.session);
-            setUser(refreshedSession.session.user);
+          
+          // Now sign in the user automatically to get a proper session
+          console.log('DEV: Automatically signing in after signup...');
+          const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+            email,
+            password,
+          });
+          
+          if (signInError) {
+            console.error('Dev auto sign-in failed:', signInError);
+          } else if (signInData.session) {
+            console.log('DEV: Auto sign-in successful, session established');
+            setSession(signInData.session);
+            setUser(signInData.session.user);
+            
+            // Force set cookies manually for middleware access
+            const cookieName = `sb-${process.env.NEXT_PUBLIC_SUPABASE_URL?.split('//')[1]?.split('.')[0]}-auth-token`;
+            const cookieValue = JSON.stringify(signInData.session);
+            document.cookie = `${cookieName}=${cookieValue}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
+            console.log('Manually set auth cookie with session:', cookieName);
           }
         } catch (confirmError) {
           console.error('Dev email confirmation failed:', confirmError);
@@ -149,18 +207,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem('pendingVerificationEmail', email);
         console.log('Email verification required, redirecting to verification page');
         window.location.href = `/verify-email?email=${encodeURIComponent(email)}`;
-      }
-      
-      // Update auth state
-      setSession(data.session);
-      setUser(data.user);
-      
-      // Force set cookies manually for middleware access
-      if (data.session?.access_token) {
-        const cookieName = `sb-${process.env.NEXT_PUBLIC_SUPABASE_URL?.split('//')[1]?.split('.')[0]}-auth-token`;
-        const cookieValue = JSON.stringify(data.session);
-        document.cookie = `${cookieName}=${cookieValue}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
-        console.log('Manually set auth cookie:', cookieName);
+        
+        // Update auth state if we have a session (unlikely in production before email verification)
+        if (data.session) {
+          setSession(data.session);
+          setUser(data.user);
+          
+          // Force set cookies manually for middleware access
+          const cookieName = `sb-${process.env.NEXT_PUBLIC_SUPABASE_URL?.split('//')[1]?.split('.')[0]}-auth-token`;
+          const cookieValue = JSON.stringify(data.session);
+          document.cookie = `${cookieName}=${cookieValue}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
+          console.log('Manually set auth cookie:', cookieName);
+        }
       }
     }
     

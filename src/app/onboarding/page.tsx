@@ -47,14 +47,21 @@ export default function SettingsPage() {
     if (user) {
       loadProfile();
     } else {
-      // In development mode, if no user but we're on onboarding, try to get the latest user
-      if (process.env.NODE_ENV === 'development' && window.location.hostname === 'localhost') {
-        console.log('DEV MODE: No user session found, loading latest user for onboarding');
-        loadLatestUserProfile();
-      } else {
-        setLoading(false);
-        setError('No user session found. Please log in.');
-      }
+      // Wait a bit for the auth state to initialize
+      const timer = setTimeout(() => {
+        if (!user) {
+          // In development mode, if no user but we're on onboarding, try to get the latest user as fallback
+          if (process.env.NODE_ENV === 'development' && window.location.hostname === 'localhost') {
+            console.log('DEV MODE: No user session found after waiting, loading latest user for onboarding');
+            loadLatestUserProfile();
+          } else {
+            setLoading(false);
+            setError('No user session found. Please log in.');
+          }
+        }
+      }, 2000); // Wait 2 seconds for auth to initialize
+      
+      return () => clearTimeout(timer);
     }
   }, [user]);
 
@@ -137,8 +144,31 @@ export default function SettingsPage() {
     setSuccess(false);
 
     try {
-      // In development mode, use our dev API that bypasses RLS
-      if (process.env.NODE_ENV === 'development' && window.location.hostname === 'localhost') {
+      // Prefer using authenticated user session if available
+      if (user) {
+        // Use regular Supabase client with authenticated user
+        const { error } = await supabase
+          .from('user_profiles')
+          .update({
+            first_name: firstName,
+            last_name: lastName,
+            social_media_handles: socialHandles,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('user_id', user.id);
+
+        if (error) {
+          console.error('Error updating profile:', error);
+          setError('Failed to update profile');
+        } else {
+          setSuccess(true);
+          setTimeout(() => {
+            window.location.href = '/canvas';
+          }, 2000);
+        }
+      } else if (process.env.NODE_ENV === 'development' && window.location.hostname === 'localhost') {
+        // Fallback to dev API only if no session in dev mode
+        console.log('DEV MODE: Using dev API to update profile (no session available)');
         const response = await fetch('/api/dev/update-profile', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -163,26 +193,8 @@ export default function SettingsPage() {
           }, 2000);
         }
       } else {
-        // Production mode - use regular Supabase client (requires auth)
-        const { error } = await supabase
-          .from('user_profiles')
-          .update({
-            first_name: firstName,
-            last_name: lastName,
-            social_media_handles: socialHandles,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('user_id', profile.user_id);
-
-        if (error) {
-          console.error('Error updating profile:', error);
-          setError('Failed to update profile');
-        } else {
-          setSuccess(true);
-          setTimeout(() => {
-            window.location.href = '/canvas';
-          }, 2000);
-        }
+        // Production mode without session - shouldn't happen
+        setError('No user session found. Please log in.');
       }
     } catch (err) {
       console.error('Profile update error:', err);

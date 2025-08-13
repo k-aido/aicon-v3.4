@@ -163,7 +163,7 @@ export default function SettingsPage() {
         } else {
           setSuccess(true);
           setTimeout(() => {
-            window.location.href = '/canvas';
+            window.location.href = '/dashboard';
           }, 2000);
         }
       } else if (process.env.NODE_ENV === 'development' && window.location.hostname === 'localhost') {
@@ -189,7 +189,7 @@ export default function SettingsPage() {
           setSuccess(true);
           // Redirect to canvas after successful profile setup
           setTimeout(() => {
-            window.location.href = '/canvas';
+            window.location.href = '/dashboard';
           }, 2000);
         }
       } else {

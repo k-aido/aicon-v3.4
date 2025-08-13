@@ -125,8 +125,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { error };
       }
       
-      // Profile is complete, redirect to canvas
-      window.location.href = '/canvas';
+      // Profile is complete, redirect to dashboard
+      window.location.href = '/dashboard';
     }
     
     return { error };

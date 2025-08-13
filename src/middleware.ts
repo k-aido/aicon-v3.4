@@ -60,7 +60,7 @@ export async function middleware(request: NextRequest) {
     console.log('DEV MODE: Bypassing auth checks for localhost');
   } else {
     // Protected routes (only in production or non-localhost)
-    const protectedRoutes = ['/canvas', '/settings', '/onboarding'];
+    const protectedRoutes = ['/dashboard', '/canvas', '/settings', '/onboarding'];
     const isProtectedRoute = protectedRoutes.some(route => pathname.startsWith(route));
     
     if (isProtectedRoute) {
@@ -81,7 +81,7 @@ export async function middleware(request: NextRequest) {
 
   // Redirect logged-in users away from login
   if (pathname === '/login' && session) {
-    return NextResponse.redirect(new URL('/canvas', request.url))
+    return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 
   // Redirect root to login if not authenticated
@@ -89,9 +89,9 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  // Redirect root to canvas if authenticated
+  // Redirect root to dashboard if authenticated
   if (pathname === '/' && session) {
-    return NextResponse.redirect(new URL('/canvas', request.url))
+    return NextResponse.redirect(new URL('/dashboard', request.url))
   }
   
   return response

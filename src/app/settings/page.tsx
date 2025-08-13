@@ -105,9 +105,9 @@ export default function SettingsPage() {
         setError('Failed to update profile');
       } else {
         setSuccess(true);
-        // Redirect to canvas after successful save (for new user onboarding)
+        // Redirect to dashboard after successful save (for new user onboarding)
         setTimeout(() => {
-          window.location.href = '/canvas';
+          window.location.href = '/dashboard';
         }, 1500);
       }
     } catch (err) {

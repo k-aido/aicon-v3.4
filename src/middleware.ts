@@ -25,7 +25,9 @@ export async function middleware(request: NextRequest) {
   // Skip auth checks for static assets and API routes that don't need auth
   const pathname = request.nextUrl.pathname
   const isStaticAsset = pathname.match(/\.(ico|png|jpg|jpeg|svg|gif|webp|css|js|woff|woff2|ttf|otf)$/i)
-  const isPublicApiRoute = pathname.startsWith('/api/auth') || pathname.startsWith('/api/dev')
+  const isPublicApiRoute = pathname.startsWith('/api/auth') || 
+                          pathname.startsWith('/api/dev') ||
+                          pathname.startsWith('/api/webhooks') // Webhooks should not require auth
   
   if (isStaticAsset || isPublicApiRoute) {
     return response

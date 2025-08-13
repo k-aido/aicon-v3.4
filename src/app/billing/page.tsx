@@ -163,6 +163,36 @@ export default function BillingPage() {
     }
   };
 
+  const handleCancelSubscription = async () => {
+    const confirmed = confirm(
+      'Are you sure you want to cancel your subscription?\n\n' +
+      'Your subscription will remain active until the end of your current billing period, ' +
+      'and you\'ll keep access to all features until then.'
+    );
+    
+    if (!confirmed) return;
+
+    try {
+      const response = await fetch('/api/billing/cancel-subscription', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cancelImmediately: false }),
+      });
+
+      const responseData = await response.json();
+
+      if (response.ok) {
+        alert('Your subscription has been canceled and will end at the current billing period.');
+        await loadBillingData(); // Refresh to show cancellation status
+      } else {
+        alert('Failed to cancel subscription: ' + responseData.error);
+      }
+    } catch (error) {
+      console.error('Error canceling subscription:', error);
+      alert('Error canceling subscription. Please try again.');
+    }
+  };
+
   const handleManageSubscription = async () => {
     try {
       const response = await fetch('/api/billing/manage-subscription', {
@@ -283,19 +313,34 @@ export default function BillingPage() {
           {/* Current Subscription */}
           {subscription && (
             <div className="mt-6 pt-6 border-t">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between mb-4">
                 <div>
                   <p className="text-sm text-gray-600">Current Plan</p>
                   <p className="text-lg font-semibold">
                     {PLANS.find(p => p.priceId === subscription.stripe_price_id)?.name || 'Custom Plan'}
                   </p>
+                  {subscription.cancel_at_period_end && (
+                    <p className="text-sm text-orange-600 mt-1">
+                      Cancels at end of billing period
+                    </p>
+                  )}
                 </div>
-                <button
-                  onClick={handleManageSubscription}
-                  className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
-                >
-                  Manage Subscription
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleManageSubscription}
+                    className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    Manage Subscription
+                  </button>
+                  {!subscription.cancel_at_period_end && (
+                    <button
+                      onClick={handleCancelSubscription}
+                      className="px-4 py-2 border border-red-300 rounded-md text-sm font-medium text-red-700 hover:bg-red-50"
+                    >
+                      Cancel Subscription
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           )}

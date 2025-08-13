@@ -16,6 +16,9 @@ import {
 } from 'lucide-react';
 import { PLANS } from '@/lib/stripe/plans';
 import { BillingUsage, BillingSubscription } from '@/types/billing';
+import { useToast } from '@/components/Modal/ToastContainer';
+import ConfirmationModal from '@/components/Modal/ConfirmationModal';
+import PlanChangeModal from '@/components/Modal/PlanChangeModal';
 
 // Initialize Stripe
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
@@ -24,12 +27,20 @@ export default function BillingPage() {
   const { user } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { showSuccess, showError, showWarning } = useToast();
+  
   const [loading, setLoading] = useState(true);
   const [subscribing, setSubscribing] = useState<string | null>(null);
   const [usage, setUsage] = useState<BillingUsage | null>(null);
   const [subscription, setSubscription] = useState<BillingSubscription | null>(null);
   const [account, setAccount] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
+  
+  // Modal states
+  const [showPlanChangeModal, setShowPlanChangeModal] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState<typeof PLANS[0] | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -98,21 +109,22 @@ export default function BillingPage() {
   };
 
   const handleChangePlan = async (planId: string, lookupKey: string) => {
-    // Get plan details for confirmation
     const plan = PLANS.find(p => p.id === planId);
     if (!plan) return;
 
-    // Confirm plan change
-    const confirmed = confirm(
-      `Are you sure you want to switch to the ${plan.name} plan ($${plan.price}/month)?\n\n` +
-      `You'll be charged/credited the prorated difference immediately.`
-    );
-    
-    if (!confirmed) return;
+    setSelectedPlan(plan);
+    setShowPlanChangeModal(true);
+  };
 
-    setSubscribing(planId);
+  const confirmPlanChange = async () => {
+    if (!selectedPlan) return;
+    
+    setIsProcessing(true);
+    const lookupKey = getLookupKey(selectedPlan.id);
+    if (!lookupKey) return;
+
     try {
-      console.log('Changing to plan:', planId, 'with lookup key:', lookupKey);
+      console.log('Changing to plan:', selectedPlan.id, 'with lookup key:', lookupKey);
       
       const response = await fetch('/api/billing/change-plan', {
         method: 'POST',
@@ -124,7 +136,8 @@ export default function BillingPage() {
       console.log('API response:', responseData);
 
       if (response.ok) {
-        console.log('Plan changed successfully, refreshing data...');
+        setShowPlanChangeModal(false);
+        showSuccess('Plan Changed!', `Successfully switched to ${selectedPlan.name} plan.`);
         
         // Poll for updates until the plan change is reflected
         const pollForUpdate = async (attempts = 0) => {
@@ -135,13 +148,12 @@ export default function BillingPage() {
           
           await loadBillingData();
           
-          // Check if the plan has updated (we can check by looking at the expected credits)
-          const expectedCredits = plan.credits;
+          // Check if the plan has updated
+          const expectedCredits = selectedPlan.credits;
           const currentData = await fetch('/api/billing/usage').then(r => r.json());
           
           if (currentData.account?.monthly_credit_allocation === expectedCredits) {
             console.log('Plan update detected!');
-            alert(`Successfully switched to ${plan.name} plan!`);
             return;
           }
           
@@ -152,25 +164,23 @@ export default function BillingPage() {
         // Start polling after a short delay
         setTimeout(() => pollForUpdate(), 1500);
       } else {
-        console.error('Failed to change plan:', responseData.error);
-        alert('Failed to change plan: ' + responseData.error);
+        showError('Plan Change Failed', responseData.error || 'Failed to change plan');
       }
     } catch (error) {
       console.error('Error changing plan:', error);
-      alert('Error changing plan. Please try again.');
+      showError('Plan Change Failed', 'An unexpected error occurred. Please try again.');
     } finally {
-      setSubscribing(null);
+      setIsProcessing(false);
+      setSelectedPlan(null);
     }
   };
 
-  const handleCancelSubscription = async () => {
-    const confirmed = confirm(
-      'Are you sure you want to cancel your subscription?\n\n' +
-      'Your subscription will remain active until the end of your current billing period, ' +
-      'and you\'ll keep access to all features until then.'
-    );
-    
-    if (!confirmed) return;
+  const handleCancelSubscription = () => {
+    setShowCancelModal(true);
+  };
+
+  const confirmCancelSubscription = async () => {
+    setIsProcessing(true);
 
     try {
       const response = await fetch('/api/billing/cancel-subscription', {
@@ -182,14 +192,17 @@ export default function BillingPage() {
       const responseData = await response.json();
 
       if (response.ok) {
-        alert('Your subscription has been canceled and will end at the current billing period.');
+        setShowCancelModal(false);
+        showWarning('Subscription Canceled', 'Your subscription will end at the current billing period.');
         await loadBillingData(); // Refresh to show cancellation status
       } else {
-        alert('Failed to cancel subscription: ' + responseData.error);
+        showError('Cancellation Failed', responseData.error || 'Failed to cancel subscription');
       }
     } catch (error) {
       console.error('Error canceling subscription:', error);
-      alert('Error canceling subscription. Please try again.');
+      showError('Cancellation Failed', 'An unexpected error occurred. Please try again.');
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -430,7 +443,7 @@ export default function BillingPage() {
                           handleSubscribe(plan.id, plan.priceId);
                         }
                       }}
-                      disabled={subscribing === plan.id}
+                      disabled={subscribing === plan.id || isProcessing}
                       className={`w-full px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                         plan.highlighted
                           ? 'bg-blue-600 text-white hover:bg-blue-700'
@@ -476,6 +489,34 @@ export default function BillingPage() {
           </div>
         </div>
       </div>
+
+      {/* Plan Change Modal */}
+      {selectedPlan && (
+        <PlanChangeModal
+          isOpen={showPlanChangeModal}
+          onClose={() => {
+            setShowPlanChangeModal(false);
+            setSelectedPlan(null);
+          }}
+          onConfirm={confirmPlanChange}
+          currentPlan={subscription ? PLANS.find(p => p.priceId === subscription.stripe_price_id) || null : null}
+          newPlan={selectedPlan}
+          isLoading={isProcessing}
+        />
+      )}
+
+      {/* Cancel Subscription Modal */}
+      <ConfirmationModal
+        isOpen={showCancelModal}
+        onClose={() => setShowCancelModal(false)}
+        onConfirm={confirmCancelSubscription}
+        title="Cancel Subscription"
+        message="Are you sure you want to cancel your subscription? Your subscription will remain active until the end of your current billing period, and you'll keep access to all features until then."
+        confirmText="Cancel Subscription"
+        cancelText="Keep Subscription"
+        type="warning"
+        isLoading={isProcessing}
+      />
     </div>
   );
 }

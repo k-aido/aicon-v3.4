@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import { AuthProvider } from '@/components/providers/auth-provider'
-import { ToastProvider } from '@/components/ui/Toast'
+import { ToastProvider } from '@/components/Modal/ToastContainer'
 
 export const metadata: Metadata = {
   title: 'Aicon Canvas',

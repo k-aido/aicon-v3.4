@@ -1,10 +1,48 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies });
+    // Get session from cookies
+    const cookieStore = await cookies();
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+    
+    // Look for the auth token in cookies
+    const authTokenKey = `sb-${supabaseUrl.split('//')[1]?.split('.')[0]}-auth-token`;
+    const authToken = cookieStore.get(authTokenKey);
+    
+    let userId = null;
+    let accessToken = null;
+    
+    if (authToken?.value) {
+      try {
+        const tokenData = JSON.parse(authToken.value);
+        userId = tokenData.user?.id;
+        accessToken = tokenData.access_token;
+      } catch (e) {
+        console.error('[SaveBeacon] Failed to parse auth token:', e);
+      }
+    }
+    
+    if (!userId || !accessToken) {
+      console.error('[SaveBeacon] No valid session found');
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    
+    // Create authenticated client
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false
+      },
+      global: {
+        headers: {
+          Authorization: `Bearer ${accessToken}`
+        }
+      }
+    });
     
     // Parse the beacon data
     const data = await request.json();
@@ -12,13 +50,7 @@ export async function POST(request: NextRequest) {
     
     console.log('[SaveBeacon] Received unmount save request for workspace:', workspaceId);
     console.log('[SaveBeacon] Elements to save:', elements?.length);
-    
-    // Get the current user
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      console.error('[SaveBeacon] No session found');
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    console.log('[SaveBeacon] User ID:', userId);
     
     // Validate elements before saving
     const validatedElements = elements?.map((el: any) => {
@@ -59,7 +91,7 @@ export async function POST(request: NextRequest) {
         updated_at: new Date().toISOString()
       })
       .eq('id', workspaceId)
-      .eq('user_id', session.user.id);
+      .eq('user_id', userId);
     
     if (error) {
       console.error('[SaveBeacon] Error saving canvas:', error);

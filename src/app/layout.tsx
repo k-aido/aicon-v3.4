@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import { AuthProvider } from '@/components/providers/auth-provider'
+import { ToastProvider } from '@/components/ui/Toast'
 
 export const metadata: Metadata = {
   title: 'Aicon Canvas',
@@ -15,9 +16,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <AuthProvider>
-          {children}
-        </AuthProvider>
+        <ToastProvider>
+          <AuthProvider>
+            {children}
+          </AuthProvider>
+        </ToastProvider>
       </body>
     </html>
   )

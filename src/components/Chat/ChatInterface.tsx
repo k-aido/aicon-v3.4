@@ -364,6 +364,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
             <button
               onClick={(e) => {
                 e.stopPropagation();
+                console.log('🗑️ [ChatInterface] Delete button clicked:', { elementId: element.id });
                 onDelete(element.id);
               }}
               onMouseDown={(e) => e.stopPropagation()}

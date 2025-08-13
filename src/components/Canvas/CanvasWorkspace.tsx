@@ -1,5 +1,6 @@
 import React, { useState, useRef, useCallback, useMemo } from 'react';
 import { ContentPieceComponent } from './ContentPieceComponent';
+import { CreatorContentElement } from './CreatorContentElement';
 import { FolderComponent } from './FolderComponent';
 import { ChatInterface } from '@/components/Chat/ChatInterface';
 import { ContextMenu, useContextMenu } from './ContextMenu';
@@ -483,21 +484,42 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
             const isSelected = selectedElementIds.includes(element.id);
 
             if (element.type === 'content') {
-              return (
-                <ContentPieceComponent
-                  key={element.id}
-                  element={element as ContentPiece}
-                  selected={isSelected}
-                  connecting={connecting}
-                  connections={connections}
-                  onSelect={() => selectElement(element.id)}
-                  onUpdate={handleElementUpdate}
-                  onDelete={handleElementDelete}
-                  onConnectionStart={handleConnectionStart}
-                  onOpenDetails={handleOpenContentDetails}
-                  onAnalyze={handleAnalyzeContent}
-                />
-              );
+              // Check if this is a creator content element (has creatorId in metadata)
+              const isCreatorContent = (element as any).metadata?.creatorId;
+              
+              if (isCreatorContent) {
+                return (
+                  <CreatorContentElement
+                    key={element.id}
+                    element={element as any}
+                    selected={isSelected}
+                    connecting={connecting}
+                    connections={connections}
+                    onSelect={() => selectElement(element.id)}
+                    onUpdate={(id: string, updates: any) => handleElementUpdate(id, updates)}
+                    onDelete={handleElementDelete}
+                    onConnectionStart={handleConnectionStart}
+                    onOpenDetails={(elem: any) => handleOpenContentDetails(elem)}
+                    onAnalyze={(elem: any) => handleAnalyzeContent(elem)}
+                  />
+                );
+              } else {
+                return (
+                  <ContentPieceComponent
+                    key={element.id}
+                    element={element as ContentPiece}
+                    selected={isSelected}
+                    connecting={connecting}
+                    connections={connections}
+                    onSelect={() => selectElement(element.id)}
+                    onUpdate={handleElementUpdate}
+                    onDelete={handleElementDelete}
+                    onConnectionStart={handleConnectionStart}
+                    onOpenDetails={handleOpenContentDetails}
+                    onAnalyze={handleAnalyzeContent}
+                  />
+                );
+              }
             }
 
             if (element.type === 'folder') {

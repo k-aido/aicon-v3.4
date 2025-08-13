@@ -4,6 +4,7 @@ import { CanvasNavigation } from './Canvas/CanvasNavigation';
 import { CanvasSidebar } from './Canvas/CanvasSidebar';
 import { AnalysisPanel } from './Canvas/AnalysisPanel';
 import { SocialMediaModal } from './Modal/SocialMediaModal';
+import { CreatorSearchPanel } from './Canvas/CreatorSearchPanel';
 import { useCanvasStore } from '@/store/canvasStore';
 import { ContentElement, CanvasElement as ImportedCanvasElement, Connection as ImportedConnection } from '@/types';
 import { canvasPersistence } from '@/services/canvasPersistence';
@@ -48,6 +49,9 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
   const [socialMediaModal, setSocialMediaModal] = useState<{ isOpen: boolean; platform?: string }>({
     isOpen: false,
     platform: undefined
+  });
+  const [creatorSearchPanel, setCreatorSearchPanel] = useState<{ isOpen: boolean }>({
+    isOpen: false
   });
   const [isLoading, setIsLoading] = useState(true);
   const [hasLoadedInitialData, setHasLoadedInitialData] = useState(false);
@@ -521,6 +525,44 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
     setSocialMediaModal({ isOpen: false, platform: undefined });
   };
 
+  const handleOpenCreatorSearch = () => {
+    setCreatorSearchPanel({ isOpen: true });
+  };
+
+  const handleCloseCreatorSearch = () => {
+    setCreatorSearchPanel({ isOpen: false });
+  };
+
+  const handleAddCreatorContentToCanvas = (content: any) => {
+    // Convert creator content to canvas element
+    const newElement = {
+      id: `creator-content-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+      type: 'content' as const,
+      x: Math.random() * 400 + 100,
+      y: Math.random() * 300 + 100,
+      width: 320,
+      height: 280,
+      title: content.caption?.substring(0, 50) + '...' || 'Instagram Content',
+      url: content.content_url,
+      platform: 'instagram',
+      thumbnail: content.thumbnail_url,
+      metadata: {
+        creatorId: content.creator_id,
+        likes: content.likes,
+        comments: content.comments,
+        views: content.views,
+        postedDate: content.posted_date,
+        duration: content.duration_seconds,
+        rawData: content.raw_data
+      }
+    };
+
+    addElement(newElement);
+    
+    // Optional: Close the panel after adding
+    // handleCloseCreatorSearch();
+  };
+
   if (isLoading) {
     return (
       <div className="h-screen flex items-center justify-center bg-gray-50">
@@ -537,7 +579,10 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
       <CanvasNavigation lastSaved={lastSaved} />
       
       <div className="flex-1 flex relative">
-        <CanvasSidebar onOpenSocialMediaModal={handleOpenSocialMediaModal} />
+        <CanvasSidebar 
+          onOpenSocialMediaModal={handleOpenSocialMediaModal}
+          onOpenCreatorSearch={handleOpenCreatorSearch}
+        />
         
         {/* Error notification only */}
         {saveStatus === 'error' && (
@@ -580,6 +625,14 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
         isOpen={socialMediaModal.isOpen}
         onClose={handleCloseSocialMediaModal}
         platform={socialMediaModal.platform}
+      />
+
+      {/* Creator Search Panel */}
+      <CreatorSearchPanel
+        isOpen={creatorSearchPanel.isOpen}
+        onClose={handleCloseCreatorSearch}
+        onAddContentToCanvas={handleAddCreatorContentToCanvas}
+        viewport={viewport}
       />
     </div>
   );

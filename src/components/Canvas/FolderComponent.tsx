@@ -194,7 +194,13 @@ export const FolderComponent: React.FC<FolderComponentProps> = React.memo(({
         showHandle={selected || isHovered}
         className={`rounded-lg shadow-lg ${
           selected ? 'ring-2 ring-blue-500 shadow-xl' : ''
-        } ${connecting === folder.id ? 'ring-2 ring-purple-500' : ''}`}
+        }`}
+        style={{
+          ...(connecting === folder.id && { 
+            outline: '2px solid #E1622B',
+            outlineOffset: '-2px'
+          })
+        }}
       >
         <div
           className="w-full h-full"
@@ -206,7 +212,7 @@ export const FolderComponent: React.FC<FolderComponentProps> = React.memo(({
         >
         <ConnectionPoint
           position="right"
-          isVisible={isHovered || hasConnections}
+          isVisible={true}
           onClick={handleConnectionClick}
         />
         

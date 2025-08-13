@@ -6,6 +6,7 @@ import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { ConnectionLine } from './ConnectionLine';
 import { ContentElement } from './ContentElement';
 import { ChatElement } from './ChatElement';
+import { FolderComponent } from './FolderComponent';
 import { useCanvasStore } from '@/store/canvasStore';
 import { useTheme } from '@/contexts/ThemeContext';
 import Image from 'next/image';
@@ -227,30 +228,54 @@ const CanvasComponent: React.FC<CanvasProps> = ({
       const x = (e.clientX - rect.left - viewport.x) / viewport.zoom;
       const y = (e.clientY - rect.top - viewport.y) / viewport.zoom;
       
-      // Create new element
-      const newElement: CanvasElement = tool.type === 'chat' ? {
-        id: generateUniqueId(),
-        type: 'chat' as const,
-        x: x - 400,
-        y: y - 450,
-        width: 800,
-        height: 900,
-        messages: []
-      } : {
-        id: generateUniqueId(),
-        type: 'content' as const,
-        x: x - 150,
-        y: y - 100,
-        width: 300,
-        height: 350,
-        platform: (tool.platform || 'unknown') as Platform,
-        title: `New ${tool.label} Content`,
-        url: 'https://example.com',
-        thumbnail: 'https://via.placeholder.com/300x200'
-      };
+      // Create new element based on tool type
+      let newElement: CanvasElement;
+      
+      if (tool.type === 'chat') {
+        newElement = {
+          id: generateUniqueId(),
+          type: 'chat' as const,
+          x: x - 400,
+          y: y - 450,
+          width: 800,
+          height: 900,
+          messages: []
+        };
+      } else if (tool.type === 'folder') {
+        newElement = {
+          id: generateUniqueId(),
+          type: 'folder' as const,
+          x: x - 175,
+          y: y - 125,
+          width: 350,
+          height: 250,
+          title: `New ${tool.label}`,
+          name: `New ${tool.label}`,
+          description: 'Drop social components here',
+          color: tool.color || '#F59E0B',
+          childIds: [],
+          isExpanded: true,
+          zIndex: 1
+        } as any;
+      } else {
+        newElement = {
+          id: generateUniqueId(),
+          type: 'content' as const,
+          x: x - 150,
+          y: y - 100,
+          width: 300,
+          height: 350,
+          platform: (tool.platform || 'unknown') as Platform,
+          title: `New ${tool.label} Content`,
+          url: 'https://example.com',
+          thumbnail: 'https://via.placeholder.com/300x200'
+        };
+      }
       
       if (tool.type === 'chat') {
         console.log('💬 [Canvas] Creating AI Chat element from drag/drop:', { tool, newElement });
+      } else if (tool.type === 'folder') {
+        console.log('📁 [Canvas] Creating Collections folder from drag/drop:', { tool, newElement });
       }
       console.log('🛠️ [Canvas] Creating element from drag/drop:', { tool, newElement });
       setElements(prev => {
@@ -583,9 +608,9 @@ const CanvasComponent: React.FC<CanvasProps> = ({
         <svg className="absolute inset-0 pointer-events-none" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
           <defs>
             <linearGradient id="connectionGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.3" />
-              <stop offset="50%" stopColor="#8b5cf6" stopOpacity="1" />
-              <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0.3" />
+              <stop offset="0%" stopColor="#E1622B" stopOpacity="0.3" />
+              <stop offset="50%" stopColor="#E1622B" stopOpacity="1" />
+              <stop offset="100%" stopColor="#E1622B" stopOpacity="0.3" />
             </linearGradient>
           </defs>
           
@@ -604,7 +629,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
             <g>
               <path
                 d={connectionPreview}
-                stroke="#8b5cf6"
+                stroke="#E1622B"
                 strokeWidth="2"
                 fill="none"
                 strokeDasharray="5 3"
@@ -615,7 +640,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
                 cx={mousePos.x}
                 cy={mousePos.y}
                 r="8"
-                fill="#8b5cf6"
+                fill="#E1622B"
                 fillOpacity="0.5"
                 className="pointer-events-none connection-dot"
               />
@@ -657,6 +682,80 @@ const CanvasComponent: React.FC<CanvasProps> = ({
                 onUpdate={handleElementUpdate}
                 onDelete={handleElementDelete}
                 onConnectionStart={handleConnectionStart}
+              />
+            );
+          } else if (element.type === 'folder') {
+            // Convert flat structure to nested structure for FolderComponent
+            const folderElement = {
+              ...element,
+              position: { x: element.x, y: element.y },
+              dimensions: { width: element.width, height: element.height },
+              id: element.id.toString(),
+              childIds: (element as any).childIds || [],
+              name: (element as any).name || element.title || 'Unnamed Folder',
+              description: (element as any).description || '',
+              color: (element as any).color || '#F59E0B',
+              isExpanded: (element as any).isExpanded !== false,
+              zIndex: (element as any).zIndex || 1
+            };
+
+            // Convert elements to string-keyed record for FolderComponent
+            const elementsRecord = elements.reduce((acc, el) => {
+              acc[el.id.toString()] = {
+                ...el,
+                id: el.id.toString(),
+                position: { x: el.x, y: el.y },
+                dimensions: { width: el.width, height: el.height }
+              };
+              return acc;
+            }, {} as Record<string, any>);
+
+            // Convert connections format for FolderComponent
+            const folderConnections = connections.map(conn => ({
+              source: { elementId: conn.from.toString() },
+              target: { elementId: conn.to.toString() }
+            }));
+
+            return (
+              <FolderComponent
+                key={`folder-${element.id}`}
+                folder={folderElement}
+                elements={elementsRecord}
+                selected={selectedElementIds.includes(element.id)}
+                connecting={connecting?.toString() || null}
+                connections={folderConnections}
+                onSelect={(folder) => handleElementSelect(element)}
+                onUpdate={(id, updates) => {
+                  const numericId = parseInt(id);
+                  const flatUpdates: any = {};
+                  if (updates.position) {
+                    flatUpdates.x = updates.position.x;
+                    flatUpdates.y = updates.position.y;
+                  }
+                  if (updates.dimensions) {
+                    flatUpdates.width = updates.dimensions.width;
+                    flatUpdates.height = updates.dimensions.height;
+                  }
+                  // Pass through other updates
+                  Object.keys(updates).forEach(key => {
+                    if (key !== 'position' && key !== 'dimensions') {
+                      flatUpdates[key] = updates[key as keyof typeof updates];
+                    }
+                  });
+                  handleElementUpdate(numericId, flatUpdates);
+                }}
+                onDelete={(id) => handleElementDelete(parseInt(id))}
+                onDeleteWithContents={(folderId, contentIds) => {
+                  // Delete folder and all its contents
+                  const numericFolderId = parseInt(folderId);
+                  const numericContentIds = contentIds.map(id => parseInt(id));
+                  handleMultipleElementDelete([numericFolderId, ...numericContentIds]);
+                }}
+                onConnectionStart={(elementId) => handleConnectionStart(parseInt(elementId))}
+                onUpdateChildPosition={(childId, position) => {
+                  const numericChildId = parseInt(childId);
+                  handleElementUpdate(numericChildId, { x: position.x, y: position.y });
+                }}
               />
             );
           }

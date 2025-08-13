@@ -302,11 +302,17 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
         showHandle={selected || isHovered}
         className={`bg-gray-800 rounded-lg shadow-lg border-2 ${getStatusBorderColor(element)} ${
           selected ? 'ring-2 ring-blue-500 shadow-xl' : ''
-        } ${connecting === element.id ? 'ring-2 ring-purple-500' : ''}`}
+        }`}
+        style={{
+          ...(connecting === element.id && { 
+            outline: '2px solid #E1622B',
+            outlineOffset: '-2px'
+          })
+        }}
       >
         <ConnectionPoint
           position="right"
-          isVisible={isHovered || hasConnections}
+          isVisible={true}
           onClick={handleConnectionClick}
         />
         

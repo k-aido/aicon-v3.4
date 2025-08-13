@@ -52,18 +52,37 @@ const WebsiteIcon = ({ className = '', size = 24 }: { className?: string; size?:
   <ThemeIcon name="website" className={className} size={size} />
 );
 
+const CollectionsIcon = ({ className = '', size = 24 }: { className?: string; size?: number }) => {
+  const { isDarkMode } = useTheme();
+  const variant = isDarkMode ? 'darkmode' : 'lightmode';
+  
+  return (
+    <Image 
+      src={`/icons/collection-${variant}.png`}
+      alt="collection"
+      width={size}
+      height={size}
+      className={className}
+      onError={(e) => {
+        console.error('Failed to load collection icon:', `/icons/collection-${variant}.png`);
+      }}
+    />
+  );
+};
+
 interface Tool {
   id: string;
   icon: React.ComponentType<any>;
   label: string;
   color: string;
-  type: 'chat' | 'content' | 'creator-search' | 'theme';
+  type: 'chat' | 'content' | 'creator-search' | 'folder' | 'theme';
   platform?: string;
 }
 
 const tools: Tool[] = [
   { id: 'ai-chat', icon: AIChatIcon, label: 'AI Chat', color: '#8B5CF6', type: 'chat' },
   { id: 'creator-search', icon: SearchCreatorIcon, label: 'Search Creators', color: '#10B981', type: 'creator-search' },
+  { id: 'collections', icon: CollectionsIcon, label: 'Collections', color: '#F59E0B', type: 'folder' },
   { id: 'instagram', icon: InstagramIcon, label: 'Instagram', color: '#E4405F', type: 'content', platform: 'instagram' },
   { id: 'tiktok', icon: TikTokIcon, label: 'TikTok', color: '#000000', type: 'content', platform: 'tiktok' },
   { id: 'youtube', icon: YouTubeIcon, label: 'YouTube', color: '#FF0000', type: 'content', platform: 'youtube' },
@@ -182,6 +201,30 @@ export const CanvasSidebar: React.FC<CanvasSidebarProps> = ({ onOpenSocialMediaM
       };
       console.log('💬 [CanvasSidebar] Creating AI Chat element (fixed format):', { toolId: tool.id, chatElement });
       addElement(chatElement);
+    } else if (tool.type === 'folder') {
+      const folderElement = {
+        id: baseElement.id,
+        type: 'folder' as const,
+        position: { x: baseElement.x, y: baseElement.y },
+        dimensions: { width: 350, height: 250 },
+        x: baseElement.x,        // Legacy compatibility
+        y: baseElement.y,        // Legacy compatibility
+        width: 350,              // Legacy compatibility
+        height: 250,             // Legacy compatibility
+        title: baseElement.title,
+        name: baseElement.title,
+        description: 'Drop social components here',
+        color: tool.color,
+        childIds: [],
+        isExpanded: true,
+        zIndex: 1,
+        isVisible: true,
+        isLocked: false,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+      console.log('📁 [CanvasSidebar] Creating Collections folder element:', { toolId: tool.id, folderElement });
+      addElement(folderElement);
     } else {
       addElement({
         ...baseElement,

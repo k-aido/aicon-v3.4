@@ -100,12 +100,12 @@ export const StyledFolderComponent: React.FC<StyledFolderComponentProps> = ({
         {/* Connection Points */}
         <ConnectionPoint
           position="left"
-          isVisible={isHovered || selected}
+          isVisible={true}
           onClick={handleConnectionClick}
         />
         <ConnectionPoint
           position="right"
-          isVisible={isHovered || selected}
+          isVisible={true}
           onClick={handleConnectionClick}
         />
 

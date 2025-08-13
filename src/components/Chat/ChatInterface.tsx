@@ -271,9 +271,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   };
 
   return (
-    <div className="h-full flex overflow-hidden rounded-lg bg-white">
+    <div className="h-full flex overflow-hidden border border-gray-300 rounded-lg bg-white">
       {/* Collapsible Conversation Sidebar */}
-      <div className={`${isSidebarOpen ? 'w-60' : 'w-0'} transition-all duration-300 bg-gray-900 border-r border-gray-700 overflow-hidden`}>
+      <div className={`${isSidebarOpen ? 'w-60' : 'w-0'} transition-all duration-300 bg-gray-900 overflow-hidden`}>
         <div className="w-60 h-full flex flex-col">
           {/* New Chat Button */}
           <div className="p-3 border-b border-gray-700">
@@ -349,14 +349,11 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         </button>
         
         {/* Header */}
-        <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between" style={{ paddingLeft: '3.5rem' }}>
+        <div className="bg-white px-4 py-3 flex items-center justify-between" style={{ paddingLeft: '3.5rem' }}>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
               <MessageSquare className={`w-5 h-5 ${currentModel.provider === 'openai' ? 'text-green-600' : 'text-purple-600'}`} />
               <span className="font-medium text-gray-900">{activeConversation?.title || 'AI Assistant'}</span>
-              <span className={`text-xs px-2 py-1 rounded-full bg-gray-100 ${providerColor}`}>
-                {providerBrand}
-              </span>
             </div>
           </div>
           
@@ -393,13 +390,21 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 key={message.id} 
                 className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
-                <div className={`max-w-[80%] p-4 rounded-2xl ${
-                  message.role === 'user' 
-                    ? 'bg-purple-600 text-white' 
-                    : 'bg-white border border-gray-200 text-gray-900 shadow-sm'
-                }`}>
-                  {message.content}
-                </div>
+                {message.role === 'user' ? (
+                  <div className="max-w-[80%] p-4 bg-purple-600 text-white rounded-2xl">
+                    {message.content}
+                  </div>
+                ) : (
+                  <div className="max-w-[80%]">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span style={{ color: '#E1622B' }} className="font-semibold">AICON</span>
+                      <span className="text-xs text-gray-500">{currentModel.name}</span>
+                    </div>
+                    <div className="text-gray-800">
+                      {message.content}
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
             {isLoading && (
@@ -412,7 +417,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         </div>
 
         {/* Input Area - Container allows drag */}
-        <div className="border-t border-gray-200 bg-white p-4">
+        <div className="bg-white p-4">
           <div className="space-y-3">
             <div className="flex gap-3">
               <input

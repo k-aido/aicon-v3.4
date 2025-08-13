@@ -86,6 +86,23 @@ export async function POST(request: NextRequest) {
           break;
         }
 
+        // Check if this customer already has an active subscription (upgrade scenario)
+        const { data: existingSubscriptions } = await supabase
+          .from('billing_subscriptions')
+          .select('id, stripe_subscription_id')
+          .eq('billing_customer_id', customer.id)
+          .eq('status', 'active');
+
+        // If there are existing active subscriptions, mark them as canceled
+        if (existingSubscriptions && existingSubscriptions.length > 0) {
+          console.log('Found existing active subscriptions, marking as canceled for upgrade');
+          await supabase
+            .from('billing_subscriptions')
+            .update({ status: 'canceled', updated_at: new Date().toISOString() })
+            .eq('billing_customer_id', customer.id)
+            .eq('status', 'active');
+        }
+
         // Get the plan details
         const priceId = subscription.items.data[0]?.price.id;
         const { data: plan } = await supabase
@@ -120,10 +137,18 @@ export async function POST(request: NextRequest) {
 
         // Update account with subscription and credits
         if (plan) {
+          // Get the subscription record we just created
+          const { data: newSubRecord } = await supabase
+            .from('billing_subscriptions')
+            .select('id')
+            .eq('stripe_subscription_id', subscription.id)
+            .single();
+
           const { error: accountError } = await supabase
             .from('accounts')
             .update({
-              subscription_id: subscription.id,
+              subscription_id: newSubRecord?.id,
+              stripe_subscription_id: subscription.id,
               monthly_credit_allocation: plan.monthly_credits,
               monthly_credits_remaining: plan.monthly_credits,
               credits_reset_date: new Date().toISOString().split('T')[0],
@@ -199,8 +224,11 @@ export async function POST(request: NextRequest) {
               const { error: accountError } = await supabase
                 .from('accounts')
                 .update({
+                  subscription_id: existingSub.id,
+                  stripe_subscription_id: subscription.id,
                   monthly_credit_allocation: newPlan.monthly_credits,
-                  // Don't reset remaining credits on plan change mid-cycle
+                  monthly_credits_remaining: newPlan.monthly_credits, // Reset credits on plan change
+                  credits_reset_date: new Date().toISOString().split('T')[0],
                 })
                 .eq('id', customer.account_id);
 
@@ -258,7 +286,7 @@ export async function POST(request: NextRequest) {
           const { error: accountError } = await supabase
             .from('accounts')
             .update({
-              subscription_id: null,
+              stripe_subscription_id: null,
               monthly_credit_allocation: 0,
               monthly_credits_remaining: 0,
             })

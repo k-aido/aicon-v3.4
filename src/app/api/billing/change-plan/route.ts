@@ -1,0 +1,133 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+import { stripe } from '@/lib/stripe/client';
+import { cookies } from 'next/headers';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
+export async function POST(request: NextRequest) {
+  try {
+    const { newPriceLookupKey } = await request.json();
+
+    if (!newPriceLookupKey) {
+      return NextResponse.json({ error: 'Price lookup key is required' }, { status: 400 });
+    }
+
+    // Get session from cookies
+    const cookieStore = await cookies();
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    const authTokenKey = `sb-${supabaseUrl.split('//')[1]?.split('.')[0]}-auth-token`;
+    const authToken = cookieStore.get(authTokenKey);
+    
+    let userId = null;
+    
+    if (authToken?.value) {
+      try {
+        const tokenData = JSON.parse(authToken.value);
+        userId = tokenData.user?.id;
+      } catch (e) {
+        console.error('Failed to parse auth token:', e);
+      }
+    }
+    
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Get user's account and subscription
+    const { data: userData } = await supabase
+      .from('users')
+      .select('account_id')
+      .eq('id', userId)
+      .single();
+
+    if (!userData?.account_id) {
+      return NextResponse.json({ error: 'Account not found' }, { status: 404 });
+    }
+
+    // Get current subscription
+    const { data: account } = await supabase
+      .from('accounts')
+      .select('stripe_subscription_id')
+      .eq('id', userData.account_id)
+      .single();
+
+    if (!account?.stripe_subscription_id) {
+      return NextResponse.json({ error: 'No active subscription found' }, { status: 404 });
+    }
+
+    // Get the new price using lookup key
+    console.log('Looking up price with key:', newPriceLookupKey);
+    const prices = await stripe.prices.list({
+      lookup_keys: [newPriceLookupKey],
+      expand: ['data.product']
+    });
+
+    console.log('Found prices:', prices.data.length);
+    if (prices.data.length === 0) {
+      console.error('No price found for lookup key:', newPriceLookupKey);
+      return NextResponse.json({ error: 'Invalid plan selected' }, { status: 400 });
+    }
+
+    const newPrice = prices.data[0];
+    console.log('New price details:', { id: newPrice.id, lookup_key: newPrice.lookup_key });
+
+    // Get current subscription from Stripe
+    console.log('Retrieving subscription:', account.stripe_subscription_id);
+    const subscription = await stripe.subscriptions.retrieve(account.stripe_subscription_id);
+    
+    console.log('Current subscription items:', subscription.items.data.map(item => ({
+      id: item.id,
+      price_id: item.price.id,
+      lookup_key: item.price.lookup_key
+    })));
+    
+    // Check if already on this plan
+    if (subscription.items.data[0].price.id === newPrice.id) {
+      console.log('Already on this plan');
+      return NextResponse.json({ error: 'Already subscribed to this plan' }, { status: 400 });
+    }
+    
+    // Update the subscription with the new price
+    console.log('Updating subscription with new price...');
+    const updatedSubscription = await stripe.subscriptions.update(account.stripe_subscription_id, {
+      items: [{
+        id: subscription.items.data[0].id,
+        price: newPrice.id,
+      }],
+      proration_behavior: 'create_prorations', // This creates prorated charges/credits
+    });
+
+    console.log('Subscription updated successfully:', {
+      id: updatedSubscription.id,
+      status: updatedSubscription.status,
+      new_price: updatedSubscription.items.data[0].price.id,
+      new_lookup_key: updatedSubscription.items.data[0].price.lookup_key
+    });
+
+    return NextResponse.json({ 
+      success: true,
+      subscription: {
+        id: updatedSubscription.id,
+        status: updatedSubscription.status,
+        price_id: updatedSubscription.items.data[0].price.id
+      }
+    });
+
+  } catch (error: any) {
+    console.error('Error changing plan:', error);
+    
+    // Handle specific Stripe errors
+    if (error.type === 'StripeCardError') {
+      return NextResponse.json({ error: 'Payment failed. Please update your payment method.' }, { status: 400 });
+    }
+    
+    return NextResponse.json(
+      { error: error.message || 'Failed to change plan' },
+      { status: 500 }
+    );
+  }
+}

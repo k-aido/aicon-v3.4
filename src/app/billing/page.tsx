@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/components/providers/auth-provider';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { loadStripe } from '@stripe/stripe-js';
 import { 
   CreditCard, 
@@ -21,17 +22,42 @@ const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!
 
 export default function BillingPage() {
   const { user } = useAuth();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [subscribing, setSubscribing] = useState<string | null>(null);
   const [usage, setUsage] = useState<BillingUsage | null>(null);
   const [subscription, setSubscription] = useState<BillingSubscription | null>(null);
   const [account, setAccount] = useState<any>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     if (user) {
       loadBillingData();
     }
   }, [user]);
+
+  // Handle return from Stripe (success or cancel)
+  useEffect(() => {
+    const success = searchParams.get('success');
+    const canceled = searchParams.get('canceled');
+    
+    if (success === 'true' || canceled === 'true') {
+      // Clean up URL
+      router.replace('/billing');
+      
+      // Refresh data after a short delay to allow webhook processing
+      if (success === 'true') {
+        setRefreshing(true);
+        // Give webhooks time to process
+        setTimeout(() => {
+          loadBillingData().then(() => {
+            setRefreshing(false);
+          });
+        }, 2000);
+      }
+    }
+  }, [searchParams, router]);
 
   const loadBillingData = async () => {
     try {
@@ -66,6 +92,72 @@ export default function BillingPage() {
       }
     } catch (error) {
       console.error('Error creating checkout session:', error);
+    } finally {
+      setSubscribing(null);
+    }
+  };
+
+  const handleChangePlan = async (planId: string, lookupKey: string) => {
+    // Get plan details for confirmation
+    const plan = PLANS.find(p => p.id === planId);
+    if (!plan) return;
+
+    // Confirm plan change
+    const confirmed = confirm(
+      `Are you sure you want to switch to the ${plan.name} plan ($${plan.price}/month)?\n\n` +
+      `You'll be charged/credited the prorated difference immediately.`
+    );
+    
+    if (!confirmed) return;
+
+    setSubscribing(planId);
+    try {
+      console.log('Changing to plan:', planId, 'with lookup key:', lookupKey);
+      
+      const response = await fetch('/api/billing/change-plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newPriceLookupKey: lookupKey }),
+      });
+
+      const responseData = await response.json();
+      console.log('API response:', responseData);
+
+      if (response.ok) {
+        console.log('Plan changed successfully, refreshing data...');
+        
+        // Poll for updates until the plan change is reflected
+        const pollForUpdate = async (attempts = 0) => {
+          if (attempts >= 10) {
+            console.log('Max polling attempts reached, stopping');
+            return;
+          }
+          
+          await loadBillingData();
+          
+          // Check if the plan has updated (we can check by looking at the expected credits)
+          const expectedCredits = plan.credits;
+          const currentData = await fetch('/api/billing/usage').then(r => r.json());
+          
+          if (currentData.account?.monthly_credit_allocation === expectedCredits) {
+            console.log('Plan update detected!');
+            alert(`Successfully switched to ${plan.name} plan!`);
+            return;
+          }
+          
+          // Try again in 1 second
+          setTimeout(() => pollForUpdate(attempts + 1), 1000);
+        };
+        
+        // Start polling after a short delay
+        setTimeout(() => pollForUpdate(), 1500);
+      } else {
+        console.error('Failed to change plan:', responseData.error);
+        alert('Failed to change plan: ' + responseData.error);
+      }
+    } catch (error) {
+      console.error('Error changing plan:', error);
+      alert('Error changing plan. Please try again.');
     } finally {
       setSubscribing(null);
     }
@@ -114,10 +206,28 @@ export default function BillingPage() {
 
   const totalCredits = (account?.promotional_credits || 0) + (account?.monthly_credits_remaining || 0);
   const currentPlanId = subscription?.plan_id;
+  
+  // Map plan IDs to lookup keys
+  const getLookupKey = (planId: string) => {
+    const lookupMap: Record<string, string> = {
+      'basic': 'basic_monthly',
+      'pro': 'pro_monthly', 
+      'agency': 'agency_monthly'
+    };
+    return lookupMap[planId];
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Refreshing notification */}
+        {refreshing && (
+          <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center">
+            <Loader2 className="h-5 w-5 animate-spin mr-3 text-blue-600" />
+            <p className="text-blue-800">Updating subscription information...</p>
+          </div>
+        )}
+        
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Billing & Subscription</h1>
@@ -263,7 +373,18 @@ export default function BillingPage() {
                     </button>
                   ) : (
                     <button
-                      onClick={() => handleSubscribe(plan.id, plan.priceId)}
+                      onClick={() => {
+                        if (subscription) {
+                          // Existing subscriber: change plan via API
+                          const lookupKey = getLookupKey(plan.id);
+                          if (lookupKey) {
+                            handleChangePlan(plan.id, lookupKey);
+                          }
+                        } else {
+                          // New subscriber: use checkout
+                          handleSubscribe(plan.id, plan.priceId);
+                        }
+                      }}
                       disabled={subscribing === plan.id}
                       className={`w-full px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                         plan.highlighted

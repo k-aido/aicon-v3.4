@@ -62,13 +62,24 @@ export async function GET(request: NextRequest) {
       .lte('billing_period_end', endOfMonth.toISOString().split('T')[0])
       .single();
 
-    // Get subscription info
-    const { data: subscription } = await supabase
-      .from('billing_subscriptions')
-      .select('*, billing_plans(*)')
-      .eq('billing_customer_id', userData.account_id)
-      .eq('status', 'active')
+    // Get billing customer first
+    const { data: billingCustomer } = await supabase
+      .from('billing_customers')
+      .select('id')
+      .eq('account_id', userData.account_id)
       .single();
+
+    // Get subscription info
+    let subscription = null;
+    if (billingCustomer) {
+      const { data: subData } = await supabase
+        .from('billing_subscriptions')
+        .select('*, billing_plans(*)')
+        .eq('billing_customer_id', billingCustomer.id)
+        .eq('status', 'active')
+        .single();
+      subscription = subData;
+    }
 
     return NextResponse.json({
       account: {

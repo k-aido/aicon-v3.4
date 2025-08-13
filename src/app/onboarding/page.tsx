@@ -161,6 +161,38 @@ export default function SettingsPage() {
           console.error('Error updating profile:', error);
           setError('Failed to update profile');
         } else {
+          // Create Stripe customer after successful profile update
+          try {
+            // Get the account ID for this user
+            const { data: userData } = await supabase
+              .from('users')
+              .select('account_id')
+              .eq('id', user.id)
+              .single();
+
+            if (userData?.account_id) {
+              const response = await fetch('/api/billing/create-customer', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  userId: user.id,
+                  email: user.email,
+                  accountId: userData.account_id,
+                }),
+              });
+
+              if (!response.ok) {
+                console.error('Failed to create billing customer, but continuing...');
+              } else {
+                const result = await response.json();
+                console.log('Billing customer created:', result.customerId);
+              }
+            }
+          } catch (billingError) {
+            console.error('Error creating billing customer:', billingError);
+            // Don't block onboarding if billing setup fails
+          }
+
           setSuccess(true);
           setTimeout(() => {
             window.location.href = '/dashboard';

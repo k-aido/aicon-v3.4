@@ -7,6 +7,55 @@ import { ConnectionLine } from './ConnectionLine';
 import { ContentElement } from './ContentElement';
 import { ChatElement } from './ChatElement';
 import { useCanvasStore } from '@/store/canvasStore';
+import { useTheme } from '@/contexts/ThemeContext';
+import Image from 'next/image';
+
+// Theme-aware PNG icon component
+const ThemeIcon = ({ 
+  name, 
+  className = '', 
+  size = 24 
+}: { 
+  name: string; 
+  className?: string; 
+  size?: number;
+}) => {
+  const { isDarkMode } = useTheme();
+  const variant = isDarkMode ? 'darkmode' : 'lightmode';
+  
+  return (
+    <Image 
+      src={`/icons/${name}-${variant}.png`}
+      alt={name}
+      width={size}
+      height={size}
+      className={className}
+    />
+  );
+};
+
+// Credit icon with flipped association
+const CreditIcon = ({ 
+  className = '', 
+  size = 24 
+}: { 
+  className?: string; 
+  size?: number;
+}) => {
+  const { isDarkMode } = useTheme();
+  // Flip the association: light mode uses darkmode variant, dark mode uses lightmode variant
+  const variant = isDarkMode ? 'lightmode' : 'darkmode';
+  
+  return (
+    <Image 
+      src={`/icons/credit-${variant}.png`}
+      alt="credit"
+      width={size}
+      height={size}
+      className={className}
+    />
+  );
+};
 
 // Generate truly unique numeric IDs for canvas elements
 let idCounter = Math.floor(Math.random() * 1000000); // Start with random base to avoid conflicts
@@ -49,9 +98,12 @@ const CanvasComponent: React.FC<CanvasProps> = ({
 }) => {
   const canvasRef = useRef<HTMLDivElement>(null);
   const { viewport, setViewport } = useCanvasStore();
+  const { isDarkMode, toggleTheme } = useTheme();
   const [mousePos, setMousePos] = useState<Position>({ x: 0, y: 0 });
   const [selectedElementIds, setSelectedElementIds] = useState<number[]>([]);
   const [lastClickedElementId, setLastClickedElementId] = useState<number | null>(null);
+  const [userCredits, setUserCredits] = useState<number | null>(null);
+  const [showCreditTooltip, setShowCreditTooltip] = useState(false);
   
   // Focus canvas on mount
   useEffect(() => {
@@ -59,6 +111,22 @@ const CanvasComponent: React.FC<CanvasProps> = ({
       canvasRef.current.focus();
     }
   }, []);
+
+  // Fetch user credits on mount
+  useEffect(() => {
+    fetchUserCredits();
+  }, []);
+
+  const fetchUserCredits = async () => {
+    try {
+      const response = await fetch('/api/user/credits');
+      const data = await response.json();
+      setUserCredits(data.credits);
+    } catch (error) {
+      console.error('Failed to fetch credits:', error);
+      setUserCredits(0);
+    }
+  };
 
   // Canvas drag handling
   const { isDragging, handleMouseDown } = useCanvasDrag({
@@ -470,7 +538,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
   return (
     <div 
       ref={canvasRef}
-      className="flex-1 bg-gray-50 relative overflow-hidden"
+      className="flex-1 bg-[#fbf9f5] dark:bg-[#262624] relative overflow-hidden"
       data-canvas="true"
       tabIndex={0}
       onWheel={handleWheel}
@@ -487,8 +555,8 @@ const CanvasComponent: React.FC<CanvasProps> = ({
         className={`absolute inset-0 canvas-background ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
         onMouseDown={handleCanvasClick}
         style={{
-          // Keep dots visible until very low zoom levels
-          opacity: viewport.zoom < 0.25 ? 0 : viewport.zoom < 0.4 ? (viewport.zoom - 0.25) * 6.67 : 1,
+          // Keep dots visible until very low zoom levels, tone down in dark mode
+          opacity: viewport.zoom < 0.25 ? 0 : viewport.zoom < 0.4 ? (viewport.zoom - 0.25) * 6.67 : (isDarkMode ? 0.5 : 1),
           // Use consistent dot appearance
           backgroundImage: viewport.zoom < 0.25 
             ? 'none'
@@ -498,7 +566,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
             ? '40px 40px'  // Fixed larger grid when zoomed out
             : `${20 * viewport.zoom}px ${20 * viewport.zoom}px`, // Scale with zoom when zoomed in
           backgroundPosition: `${viewport.x}px ${viewport.y}px`,
-          backgroundColor: '#fafafa',
+          backgroundColor: isDarkMode ? '#262624' : '#fbf9f5', // Theme-aware background
           transition: 'opacity 0.15s ease-out'
         }}
       />
@@ -598,22 +666,32 @@ const CanvasComponent: React.FC<CanvasProps> = ({
         })}
       </div>
       
-      {/* Top-Right Canvas Controls */}
-      <div className="absolute top-4 right-4 bg-white rounded-lg shadow-lg p-2 flex gap-2">
-        <button 
-          onClick={() => {
-            if (selectedElementIds.length > 0) {
-              handleMultipleElementDelete(selectedElementIds);
-            }
-          }}
-          className={`px-3 py-2 hover:bg-gray-100 rounded text-xs font-medium outline-none focus:outline-none ${
-            selectedElementIds.length > 0 ? 'bg-red-500 text-white hover:bg-red-600' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-          }`}
-          title="Delete Selected"
-          disabled={selectedElementIds.length === 0}
+      {/* Credit Counter */}
+      <div className="fixed top-4 right-4 bg-white dark:bg-[#323230] rounded-lg shadow-lg z-50 p-2 w-auto transition-colors duration-200 border border-[#e5e3df] dark:border-[#3e3e3c]">
+        <div 
+          className="flex items-center gap-1 relative"
+          onMouseEnter={() => setShowCreditTooltip(true)}
+          onMouseLeave={() => setShowCreditTooltip(false)}
         >
-          Delete ({selectedElementIds.length})
-        </button>
+          <button className="p-4 rounded-md cursor-default">
+            <CreditIcon size={32} />
+          </button>
+          
+          <div className="p-4 pl-1">
+            <span className="text-xl font-bold text-gray-900 dark:text-gray-100">{userCredits?.toLocaleString() || '1,000'}</span>
+          </div>
+
+          {/* Credit Tooltip */}
+          {showCreditTooltip && (
+            <div className="absolute top-full right-0 mt-2 w-80 bg-gray-800 dark:bg-gray-200 text-white dark:text-gray-800 text-sm p-3 rounded-lg shadow-lg pointer-events-none z-60">
+              <div className="text-left">
+                Everytime you chat with the AICON, credits are used, based on the responses you receive. The more conversations, the more credits used. Unused credits do not roll over to the next month.
+              </div>
+              {/* Arrow pointing up */}
+              <div className="absolute bottom-full right-4 w-0 h-0 border-l-4 border-r-4 border-b-4 border-l-transparent border-r-transparent border-b-gray-800 dark:border-b-gray-200"></div>
+            </div>
+          )}
+        </div>
       </div>
       
       {/* Debug Info - Selection State */}

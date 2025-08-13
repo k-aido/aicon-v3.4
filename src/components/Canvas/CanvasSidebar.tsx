@@ -1,24 +1,74 @@
 import React, { useState } from 'react';
-import { Globe, UserSearch } from 'lucide-react';
-import { AIChatIcon, InstagramIcon, TikTokIcon, YouTubeIcon } from '@/components/icons/PngIcons';
 import { useCanvasStore } from '@/store/canvasStore';
+import { useTheme } from '@/contexts/ThemeContext';
+import Image from 'next/image';
+
+// Theme-aware PNG icon component
+const ThemeIcon = ({ 
+  name, 
+  className = '', 
+  size = 24 
+}: { 
+  name: string; 
+  className?: string; 
+  size?: number;
+}) => {
+  const { isDarkMode } = useTheme();
+  const variant = isDarkMode ? 'darkmode' : 'lightmode';
+  
+  return (
+    <Image 
+      src={`/icons/${name}-${variant}.png`}
+      alt={name}
+      width={size}
+      height={size}
+      className={className}
+    />
+  );
+};
+
+// Custom PNG icon components
+const AIChatIcon = ({ className = '', size = 24 }: { className?: string; size?: number }) => (
+  <ThemeIcon name="aichat" className={className} size={size} />
+);
+
+const InstagramIcon = ({ className = '', size = 24 }: { className?: string; size?: number }) => (
+  <ThemeIcon name="instagram" className={className} size={size} />
+);
+
+const TikTokIcon = ({ className = '', size = 24 }: { className?: string; size?: number }) => (
+  <ThemeIcon name="tiktok" className={className} size={size} />
+);
+
+const YouTubeIcon = ({ className = '', size = 24 }: { className?: string; size?: number }) => (
+  <ThemeIcon name="youtube" className={className} size={size} />
+);
+
+const SearchCreatorIcon = ({ className = '', size = 24 }: { className?: string; size?: number }) => (
+  <ThemeIcon name="searchcreator" className={className} size={size} />
+);
+
+const WebsiteIcon = ({ className = '', size = 24 }: { className?: string; size?: number }) => (
+  <ThemeIcon name="website" className={className} size={size} />
+);
 
 interface Tool {
   id: string;
   icon: React.ComponentType<any>;
   label: string;
   color: string;
-  type: 'chat' | 'content' | 'creator-search';
+  type: 'chat' | 'content' | 'creator-search' | 'theme';
   platform?: string;
 }
 
 const tools: Tool[] = [
   { id: 'ai-chat', icon: AIChatIcon, label: 'AI Chat', color: '#8B5CF6', type: 'chat' },
-  { id: 'creator-search', icon: UserSearch, label: 'Search Creators', color: '#10B981', type: 'creator-search' },
+  { id: 'creator-search', icon: SearchCreatorIcon, label: 'Search Creators', color: '#10B981', type: 'creator-search' },
   { id: 'instagram', icon: InstagramIcon, label: 'Instagram', color: '#E4405F', type: 'content', platform: 'instagram' },
   { id: 'tiktok', icon: TikTokIcon, label: 'TikTok', color: '#000000', type: 'content', platform: 'tiktok' },
   { id: 'youtube', icon: YouTubeIcon, label: 'YouTube', color: '#FF0000', type: 'content', platform: 'youtube' },
-  { id: 'website', icon: Globe, label: 'Website URL', color: '#3B82F6', type: 'content', platform: 'website' }
+  { id: 'website', icon: WebsiteIcon, label: 'Website URL', color: '#3B82F6', type: 'content', platform: 'website' },
+  { id: 'theme-toggle', icon: () => null, label: 'Toggle Theme', color: '#6B7280', type: 'theme' }
 ];
 
 interface CanvasSidebarProps {
@@ -31,6 +81,7 @@ export const CanvasSidebar: React.FC<CanvasSidebarProps> = ({ onOpenSocialMediaM
   const [activeTool, setActiveTool] = useState<string | null>(null);
   const [hoveredTool, setHoveredTool] = useState<string | null>(null);
   const { addElement, elements } = useCanvasStore();
+  const { isDarkMode, toggleTheme } = useTheme();
 
   const handleDragStart = (e: React.DragEvent, tool: Tool) => {
     setDraggingTool(tool);
@@ -54,6 +105,14 @@ export const CanvasSidebar: React.FC<CanvasSidebarProps> = ({ onOpenSocialMediaM
 
   const handleToolClick = (tool: Tool) => {
     console.log('[CanvasSidebar] Tool clicked:', tool.id, tool.type);
+    
+    // Handle theme toggle
+    if (tool.id === 'theme-toggle') {
+      toggleTheme();
+      setActiveTool(tool.id);
+      setTimeout(() => setActiveTool(null), 300);
+      return;
+    }
     
     // Handle creator search
     if (tool.id === 'creator-search' && onOpenCreatorSearch) {
@@ -139,33 +198,56 @@ export const CanvasSidebar: React.FC<CanvasSidebarProps> = ({ onOpenSocialMediaM
 
   return (
     <div
-      className="fixed left-4 top-1/2 -translate-y-1/2 bg-white rounded-lg shadow-lg z-30 p-1.5"
+      className="fixed left-4 top-1/2 -translate-y-1/2 bg-white dark:bg-[#323230] rounded-lg shadow-lg z-30 p-2 transition-colors duration-200 border border-[#e5e3df] dark:border-[#3e3e3c]"
       data-toolbar
     >
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-2">
         {tools.map((tool) => {
           const Icon = tool.icon;
           return (
             <div key={tool.id} className="relative">
               <button
-                draggable
-                onDragStart={(e) => handleDragStart(e, tool)}
-                onDragEnd={handleDragEnd}
+                draggable={tool.id !== 'theme-toggle'}
+                onDragStart={tool.id !== 'theme-toggle' ? (e) => handleDragStart(e, tool) : undefined}
+                onDragEnd={tool.id !== 'theme-toggle' ? handleDragEnd : undefined}
                 onClick={() => handleToolClick(tool)}
                 onMouseEnter={() => setHoveredTool(tool.id)}
                 onMouseLeave={() => setHoveredTool(null)}
-                className={`relative p-2.5 rounded-md transition-all duration-150 cursor-pointer hover:bg-gray-100 active:scale-95 ${
-                  activeTool === tool.id ? 'bg-gray-100' : ''
+                className={`relative p-4 rounded-md transition-all duration-150 cursor-pointer hover:bg-[#f0ede8] dark:hover:bg-[#3e3e3c] active:scale-95 ${
+                  activeTool === tool.id ? 'bg-[#f0ede8] dark:bg-[#3e3e3c]' : ''
                 } ${draggingTool?.id === tool.id ? 'opacity-50' : ''}`}
               >
-                <Icon className="w-6 h-6" size={24} style={{ color: tool.color }} />
+                {tool.id === 'theme-toggle' ? (
+                  isDarkMode ? (
+                    <Image 
+                      src="/icons/sun-darkmode.png"
+                      alt="Switch to Light Mode"
+                      width={32}
+                      height={32}
+                      className="w-8 h-8"
+                    />
+                  ) : (
+                    <Image 
+                      src="/icons/moon-lightmode.png"
+                      alt="Switch to Dark Mode"
+                      width={32}
+                      height={32}
+                      className="w-8 h-8"
+                    />
+                  )
+                ) : (
+                  <Icon className="w-8 h-8" size={32} style={{ color: tool.color }} />
+                )}
               </button>
               
               {/* Tooltip */}
               {hoveredTool === tool.id && (
                 <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 pointer-events-none z-50">
-                  <div className="bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
-                    {tool.label}
+                  <div className="bg-gray-800 dark:bg-gray-200 text-white dark:text-gray-800 text-xs px-2 py-1 rounded whitespace-nowrap">
+                    {tool.id === 'theme-toggle' 
+                      ? (isDarkMode ? 'Light Mode' : 'Dark Mode')
+                      : tool.label
+                    }
                   </div>
                 </div>
               )}

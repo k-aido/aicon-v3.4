@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Search, Loader2, Plus, Heart, MessageCircle, Eye, AlertCircle, Clock, CheckCircle, XCircle } from 'lucide-react';
+import { X, Search, Loader2, Plus, Heart, MessageCircle, Eye, AlertCircle, Clock, CheckCircle, XCircle, Play } from 'lucide-react';
 import type { CreatorSearchRequest, CreatorSearchResponse, CreatorContent } from '@/types/creator-search';
 import { addCreatorContentToCanvas } from '../../../lib/canvas/creatorContentHelpers';
 import { useToast } from '@/components/ui/Toast';
@@ -135,6 +135,10 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
       if (data.status === 'completed' && data.content) {
         console.log('Search API Response:', data);
         console.log('Content sample:', data.content[0]);
+        
+        // Debug: Log thumbnail URLs in received data
+        console.log('Received thumbnail URLs:', data.content.slice(0, 5).map(c => c.thumbnail_url));
+        
         setSearchState({
           searchId: data.searchId,
           status: 'completed',
@@ -261,7 +265,7 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
       
       {/* Panel */}
       <div 
-        className={`fixed right-0 top-0 h-full w-[450px] bg-gray-900 shadow-2xl transform transition-transform duration-300 ease-out z-50 ${
+        className={`fixed right-0 top-0 h-full w-[450px] bg-white dark:bg-[#323230] shadow-2xl transform transition-transform duration-300 ease-out z-50 border-l border-[#e5e3df] dark:border-[#3e3e3c] ${
           isOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
@@ -422,15 +426,33 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
                   {searchState.results.slice(0, displayedResults).map((content, index) => (
                     <div key={content.id} className="group relative bg-gray-800 rounded-lg overflow-hidden hover:bg-gray-750 transition-colors">
                       {/* Thumbnail */}
-                      <div className="relative aspect-square">
-                        <img
-                          src={content.thumbnail_url || 'https://via.placeholder.com/300x300?text=No+Image'}
-                          alt="Content thumbnail"
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).src = 'https://via.placeholder.com/300x300?text=No+Image';
-                          }}
-                        />
+                      <div className="relative aspect-square bg-gray-800">
+                        {content.thumbnail_url ? (
+                          <img
+                            src={content.thumbnail_url}
+                            alt={`${content.platform || 'instagram'} content`}
+                            className="w-full h-full object-cover"
+                            loading="lazy"
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement;
+                              target.onerror = null; // Prevent infinite loop
+                              target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="300" height="300"%3E%3Crect width="300" height="300" fill="%23374151"/%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" dy=".3em" fill="%239CA3AF" font-family="sans-serif" font-size="14"%3ENo Image%3C/text%3E%3C/svg%3E';
+                            }}
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center bg-gray-700">
+                            <span className="text-gray-400 text-sm">No Image</span>
+                          </div>
+                        )}
+                        
+                        {/* Video indicator if it's video content */}
+                        {content.video_url && (
+                          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
+                            <div className="w-12 h-12 bg-black bg-opacity-60 rounded-full flex items-center justify-center">
+                              <Play className="w-6 h-6 text-white ml-0.5" />
+                            </div>
+                          </div>
+                        )}
                         
                         {/* Add to Canvas Button */}
                         <button

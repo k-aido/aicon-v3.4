@@ -408,10 +408,11 @@ export async function POST(request: NextRequest) {
       try {
         // Use the provided chatInterfaceId or create one if needed
         chatInterfaceUuid = chatInterfaceId;
+        let projectIdToUse = projectId; // Declare in outer scope
         
         if (!chatInterfaceUuid && chatElementId) {
           // Use the provided projectId if available, otherwise get the first project
-          let projectIdToUse = projectId;
+          projectIdToUse = projectId;
           
           if (!projectIdToUse) {
             const { data: projects, error: projectError } = await supabase
@@ -585,21 +586,16 @@ export async function POST(request: NextRequest) {
           });
 
         // Also log in message_usage_records for billing tracking
-        // Note: We need to get the actual project_id from the canvas/workspace
-        // For now, we'll check if a valid project exists, otherwise skip this logging
-        const { data: project } = await supabase
-          .from('projects')
-          .select('id')
-          .eq('account_id', userData.account_id)
-          .single();
+        // Use the projectId we already have from earlier
+        const projectIdForTracking = projectId || projectIdToUse;
         
-        if (project) {
+        if (projectIdForTracking) {
           await supabase
             .from('message_usage_records')
             .insert({
               message_id: crypto.randomUUID(), // Generate a UUID for the message
               account_id: userData.account_id,
-              project_id: project.id, // Use actual project ID
+              project_id: projectIdForTracking, // Use the actual project ID from the request
               model: model,
               prompt_tokens: promptTokens,
               completion_tokens: completionTokens,

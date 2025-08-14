@@ -4,6 +4,7 @@ import { ContentElement as ContentElementType, Connection, Platform } from '@/ty
 import { ConnectionPoint } from './ConnectionPoint';
 import { useElementDrag } from '@/hooks/useElementDrag';
 import { SimpleResize } from './SimpleResize';
+import { useContentScraping } from '@/hooks/useContentScraping';
 
 interface ContentElementProps {
   element: ContentElementType;
@@ -31,20 +32,27 @@ const PlatformIcon: React.FC<{ platform: string }> = ({ platform }) => {
   }
 };
 
-// Get status border color based on analysis state
+// Get status border color based on scraping/analysis state
 const getStatusBorderColor = (element: ContentElementType): string => {
-  // Check for analysis error first
-  if ((element as any).metadata?.analysisError) {
+  const metadata = (element as any).metadata;
+  
+  // Check for scraping/analysis errors first
+  if (metadata?.scrapingError || metadata?.analysisError) {
     return 'border-red-500'; // Error state
   }
   
+  // If scraping, show pulsing animation with platform color
+  if (metadata?.isScraping) {
+    return 'border-blue-500 animate-pulse'; // Scraping in progress
+  }
+  
   // If analyzing, show yellow regardless of platform
-  if ((element as any).metadata?.isAnalyzing) {
+  if (metadata?.isAnalyzing) {
     return 'border-yellow-500'; // Analyzing
   }
   
   // If analyzed, show platform-specific colors
-  if ((element as any).metadata?.isAnalyzed) {
+  if (metadata?.isAnalyzed) {
     switch (element.platform.toLowerCase()) {
       case 'youtube':
         return 'border-red-500'; // YouTube red
@@ -401,7 +409,24 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
           
           {/* Thumbnail */}
           <div className="bg-gray-900 rounded-lg overflow-hidden mb-3 flex-1 min-h-[100px] relative">
-            {analysisError ? (
+            {(element as any).metadata?.scrapingError ? (
+              <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center">
+                <AlertCircle className="w-8 h-8 text-red-500 mb-2" />
+                <p className="text-red-400 text-xs mb-2">Scraping Failed</p>
+                <p className="text-gray-400 text-xs leading-tight">{(element as any).metadata?.scrapingError}</p>
+                <button
+                  onClick={() => {/* TODO: Retry scraping */}}
+                  className="mt-2 px-2 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded transition-colors"
+                >
+                  Retry
+                </button>
+              </div>
+            ) : (element as any).metadata?.isScraping ? (
+              <div className="w-full h-full flex flex-col items-center justify-center">
+                <Loader2 className="w-8 h-8 text-blue-500 animate-spin mb-2" />
+                <p className="text-blue-400 text-xs">Scraping content...</p>
+              </div>
+            ) : analysisError ? (
               <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center">
                 <AlertCircle className="w-8 h-8 text-red-500 mb-2" />
                 <p className="text-red-400 text-xs mb-2">Analysis Failed</p>

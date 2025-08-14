@@ -26,6 +26,7 @@
     "@supabase/auth-helpers-nextjs": "^0.10.0",
     "@supabase/supabase-js": "^2.52.1",
     "@tailwindcss/postcss": "^4.1.11",
+    "apify-client": "^2.15.0",
     "cheerio": "^1.1.2",
     "date-fns": "^4.1.0",
     "dotenv": "^17.2.1",

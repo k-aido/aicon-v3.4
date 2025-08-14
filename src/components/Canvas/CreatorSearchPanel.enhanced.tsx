@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import type { CreatorSearchRequest, CreatorSearchResponse, CreatorContent } from '@/types/creator-search';
 import { addCreatorContentToCanvas } from '../../../lib/canvas/creatorContentHelpers';
-import { useToast } from '@/components/ui/Toast';
+import { useToast } from '@/components/Modal/ToastContainer';
 import { useCreatorSearchRateLimit } from '../../../lib/rateLimit';
 import { useSearchCache } from '../../../lib/searchCache';
 import { 
@@ -56,7 +56,7 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
   onAddContentToCanvas,
   viewport
 }) => {
-  const { addToast } = useToast();
+  const { showSuccess, showError, showInfo } = useToast();
   const rateLimit = useCreatorSearchRateLimit();
   const searchCache = useSearchCache();
   const { retry, retryCount, isRetrying, resetRetry } = useRetryLogic();
@@ -191,12 +191,7 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
             CreatorSearchAnalytics.trackSearch(searchInput, selectedFilter, results.length);
             
             if (results.length > 0) {
-              addToast({
-                type: 'success',
-                title: 'Search Complete',
-                message: `Found ${results.length} content pieces`,
-                duration: 3000
-              });
+              showSuccess('Search Complete', `Found ${results.length} content pieces`);
             }
             
           } else if (data.status === 'failed') {
@@ -225,7 +220,7 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
     return () => {
       if (pollInterval) clearInterval(pollInterval);
     };
-  }, [searchState.searchId, searchState.status, searchInput, selectedFilter, addToast, searchCache]);
+  }, [searchState.searchId, searchState.status, searchInput, selectedFilter, showSuccess, searchCache]);
 
   const handleSearch = useCallback(async () => {
     // Validate input
@@ -243,12 +238,7 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
 
     // Check for recent duplicate
     if (rateLimit.wasRecentlySearched(searchInput, 1)) {
-      addToast({
-        type: 'info',
-        title: 'Recent Search',
-        message: 'You searched for this creator recently. Results may be cached.',
-        duration: 3000
-      });
+      showInfo('Recent Search', 'You searched for this creator recently. Results may be cached.');
     }
 
     // Record the search attempt
@@ -271,12 +261,7 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
         isRetrying: false
       });
       
-      addToast({
-        type: 'info',
-        title: 'Cached Results',
-        message: 'Showing recent search results',
-        duration: 2000
-      });
+      showInfo('Cached Results', 'Showing recent search results');
       return;
     }
 
@@ -335,12 +320,7 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
 
       if (data.status === 'completed') {
         // Handle immediate results from cache
-        addToast({
-          type: 'success',
-          title: 'Search Complete',
-          message: 'Found cached results',
-          duration: 3000
-        });
+        showSuccess('Search Complete', 'Found cached results');
       }
 
     } catch (error: any) {
@@ -366,7 +346,7 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
         setTimeoutId(null);
       }
     }
-  }, [searchInput, selectedFilter, validation, rateLimit, searchCache, addToast]);
+  }, [searchInput, selectedFilter, validation, rateLimit, searchCache, showInfo, showSuccess]);
 
   const handleRetry = useCallback(async () => {
     resetRetry();
@@ -401,12 +381,7 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
         CreatorSearchAnalytics.trackContentAdded(searchInput, content.content_url);
         
         // Success feedback with animation
-        addToast({
-          type: 'success',
-          title: 'Content Added',
-          message: `Added @${creatorHandle}'s content to canvas`,
-          duration: 3000
-        });
+        showSuccess('Content Added', `Added @${creatorHandle}'s content to canvas`);
 
         // Tutorial completion
         if (showTutorial) {
@@ -425,14 +400,9 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
     } catch (error: any) {
       console.error('Failed to add content to canvas:', error);
       
-      addToast({
-        type: 'error',
-        title: 'Failed to Add Content',
-        message: error.message || 'Could not add content to canvas',
-        duration: 4000
-      });
+      showError('Failed to Add Content', error.message || 'Could not add content to canvas');
     }
-  }, [validation.handle, viewport, onAddContentToCanvas, searchInput, showTutorial, addToast, onClose]);
+  }, [validation.handle, viewport, onAddContentToCanvas, searchInput, showTutorial, showSuccess, showError, onClose]);
 
   const formatCount = (count: number): string => {
     if (count >= 1000000) {

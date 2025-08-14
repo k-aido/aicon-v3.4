@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Search, Loader2, Plus, Heart, MessageCircle, Eye, AlertCircle, Clock, CheckCircle, XCircle } from 'lucide-react';
 import type { CreatorSearchRequest, CreatorSearchResponse, CreatorContent } from '@/types/creator-search';
 import { addCreatorContentToCanvas } from '../../../lib/canvas/creatorContentHelpers';
-import { useToast } from '@/components/ui/Toast';
+import { useToast } from '@/components/Modal/ToastContainer';
 
 interface CreatorSearchPanelProps {
   isOpen: boolean;
@@ -38,7 +38,7 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
   onAddContentToCanvas,
   viewport
 }) => {
-  const { addToast } = useToast();
+  const { showSuccess, showError, showInfo } = useToast();
   const [selectedPlatform, setSelectedPlatform] = useState('instagram');
   const [searchInput, setSearchInput] = useState('');
   const [selectedFilter, setSelectedFilter] = useState<'top_likes' | 'top_comments' | 'top_views' | 'most_recent'>('top_likes');
@@ -190,12 +190,7 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
 
       if (result.success) {
         // Show success toast
-        addToast({
-          type: 'success',
-          title: 'Content Added',
-          message: `Added @${creatorHandle}'s content to canvas`,
-          duration: 3000
-        });
+        showSuccess('Content Added', `Added @${creatorHandle}'s content to canvas`);
 
         // Close the panel after successful add
         setTimeout(() => {
@@ -208,12 +203,7 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
       console.error('Failed to add content to canvas:', error);
       
       // Show error toast
-      addToast({
-        type: 'error',
-        title: 'Failed to Add Content',
-        message: error.message || 'Could not add content to canvas',
-        duration: 4000
-      });
+      showError('Failed to Add Content', error.message || 'Could not add content to canvas');
     }
   };
 

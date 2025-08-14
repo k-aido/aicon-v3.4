@@ -7,7 +7,7 @@ import {
 import type { CreatorContentElementType } from '../../../lib/canvas/creatorContentHelpers';
 import { formatMetric, getTimeAgo } from '../../../lib/canvas/creatorContentHelpers';
 import { useElementDrag } from '@/hooks/useElementDrag';
-import { useToast } from '@/components/ui/Toast';
+import { useToast } from '@/components/Modal/ToastContainer';
 
 interface CreatorContentElementProps {
   element: CreatorContentElementType;
@@ -160,7 +160,7 @@ export const CreatorContentElement: React.FC<CreatorContentElementProps> = ({
   onOpenDetails,
   onAnalyze
 }) => {
-  const { addToast } = useToast();
+  const { showSuccess, showError } = useToast();
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(element.title);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -234,12 +234,7 @@ export const CreatorContentElement: React.FC<CreatorContentElementProps> = ({
       if (onAnalyze) {
         await onAnalyze(element);
         
-        addToast({
-          type: 'success',
-          title: 'Analysis Complete',
-          message: 'Content analysis finished successfully',
-          duration: 3000
-        });
+        showSuccess('Analysis Complete', 'Content analysis finished successfully');
       }
     } catch (error: any) {
       console.error('Analysis failed:', error);
@@ -254,14 +249,9 @@ export const CreatorContentElement: React.FC<CreatorContentElementProps> = ({
         updatedAt: new Date()
       });
 
-      addToast({
-        type: 'error',
-        title: 'Analysis Failed',
-        message: error.message || 'Content analysis failed. Click the error indicator to retry.',
-        duration: 4000
-      });
+      showError('Analysis Failed', error.message || 'Content analysis failed. Click the error indicator to retry.');
     }
-  }, [element, onAnalyze, onUpdate, addToast, analysisStatus]);
+  }, [element, onAnalyze, onUpdate, showSuccess, showError, analysisStatus]);
 
   const handleImageRetry = useCallback(() => {
     setImageLoadState('loading');

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { stripe } from '@/lib/stripe/client';
 import { cookies } from 'next/headers';
+import Stripe from 'stripe';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -57,7 +58,7 @@ export async function POST(request: NextRequest) {
 
     console.log('Canceling subscription:', account.stripe_subscription_id, 'immediately:', cancelImmediately);
 
-    let canceledSubscription;
+    let canceledSubscription: Stripe.Subscription;
 
     if (cancelImmediately) {
       // Cancel immediately
@@ -71,13 +72,22 @@ export async function POST(request: NextRequest) {
       console.log('Subscription set to cancel at period end');
     }
 
+    // Get current period end from subscription items
+    let current_period_end = null;
+    if (canceledSubscription.items && canceledSubscription.items.data && canceledSubscription.items.data.length > 0) {
+      const item = canceledSubscription.items.data[0];
+      if (item.current_period_end) {
+        current_period_end = item.current_period_end;
+      }
+    }
+
     return NextResponse.json({ 
       success: true,
       subscription: {
         id: canceledSubscription.id,
         status: canceledSubscription.status,
         cancel_at_period_end: canceledSubscription.cancel_at_period_end,
-        current_period_end: canceledSubscription.current_period_end,
+        current_period_end: current_period_end,
         canceled_at: canceledSubscription.canceled_at
       }
     });

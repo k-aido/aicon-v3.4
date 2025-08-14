@@ -46,10 +46,10 @@ async function getUserIdFromCookies(): Promise<string | null> {
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { scrapeId: string } }
+  { params }: { params: Promise<{ scrapeId: string }> }
 ) {
   try {
-    const scrapeId = params.scrapeId;
+    const { scrapeId } = await params;
     const { addToLibrary = false } = await request.json();
 
     if (!scrapeId) {

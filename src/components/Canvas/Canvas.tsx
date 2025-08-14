@@ -159,7 +159,14 @@ const CanvasComponent: React.FC<CanvasProps> = ({
       const x = (e.clientX - rect.left - viewport.x) / viewport.zoom;
       const y = (e.clientY - rect.top - viewport.y) / viewport.zoom;
       
-      // Create new element
+      // Check if it's a social media platform that needs URL input
+      const socialMediaPlatforms = ['instagram', 'tiktok', 'youtube'];
+      if (tool.type === 'content' && socialMediaPlatforms.includes(tool.id) && onOpenSocialMediaModal) {
+        onOpenSocialMediaModal(tool.platform);
+        return; // Don't create element yet, modal will handle it
+      }
+      
+      // Create new element for other types
       const newElement: CanvasElement = tool.type === 'chat' ? {
         id: generateUniqueId(),
         type: 'chat' as const,

@@ -53,8 +53,6 @@ export const CanvasSidebar: React.FC<CanvasSidebarProps> = ({ onOpenSocialMediaM
   };
 
   const handleToolClick = (tool: Tool) => {
-    console.log('[CanvasSidebar] Tool clicked:', tool.id, tool.type);
-    
     // Handle creator search
     if (tool.id === 'creator-search' && onOpenCreatorSearch) {
       onOpenCreatorSearch();
@@ -67,6 +65,8 @@ export const CanvasSidebar: React.FC<CanvasSidebarProps> = ({ onOpenSocialMediaM
     const socialMediaPlatforms = ['instagram', 'tiktok', 'youtube'];
     if (socialMediaPlatforms.includes(tool.id) && onOpenSocialMediaModal) {
       onOpenSocialMediaModal(tool.platform);
+      setActiveTool(tool.id);
+      setTimeout(() => setActiveTool(null), 300);
       return;
     }
     
@@ -121,9 +121,9 @@ export const CanvasSidebar: React.FC<CanvasSidebarProps> = ({ onOpenSocialMediaM
         createdAt: new Date(),
         updatedAt: new Date()
       };
-      console.log('💬 [CanvasSidebar] Creating AI Chat element (fixed format):', { toolId: tool.id, chatElement });
       addElement(chatElement);
     } else {
+      // For non-chat, non-social media content types, create directly
       addElement({
         ...baseElement,
         type: 'content' as const,

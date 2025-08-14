@@ -35,10 +35,10 @@ async function getUserIdFromCookies(): Promise<string | null> {
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const scrapeId = params.id;
+    const { id: scrapeId } = await params;
 
     if (!scrapeId) {
       return NextResponse.json(

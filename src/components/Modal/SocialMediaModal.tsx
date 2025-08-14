@@ -18,7 +18,7 @@ export const SocialMediaModal: React.FC<SocialMediaModalProps> = ({ isOpen, onCl
   const [url, setUrl] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { addElement, elements } = useCanvasStore();
+  const { addElement, elements, updateElement } = useCanvasStore();
 
   // Detect platform and content type from URL
   const detectContentInfo = (inputUrl: string) => {
@@ -56,6 +56,95 @@ export const SocialMediaModal: React.FC<SocialMediaModalProps> = ({ isOpen, onCl
     return `${timestamp}-${random}`;
   };
 
+  // Poll for scraping completion
+  const pollForCompletion = async (elementId: string, scrapeId: string, projectId: string) => {
+    const maxAttempts = 60; // 60 seconds timeout
+    let attempts = 0;
+
+    const checkStatus = async () => {
+      try {
+        // Check scraping status
+        const statusResponse = await fetch(`/api/content/scrape/${scrapeId}/status`);
+        const statusData = await statusResponse.json();
+
+        if (statusData.status === 'completed') {
+          // Update element with scraped data
+          updateElement(elementId, {
+            title: statusData.processedData?.title || 'Content loaded',
+            thumbnail: statusData.processedData?.thumbnailUrl || undefined,
+            metadata: {
+              isScraping: false,
+              isAnalyzing: true,
+              scrapeId: scrapeId,
+              processedData: statusData.processedData
+            }
+          });
+
+          // Start analysis
+          const analyzeResponse = await fetch(`/api/content/analyze/${scrapeId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ addToLibrary: true })
+          });
+
+          if (analyzeResponse.ok) {
+            const analysisData = await analyzeResponse.json();
+            updateElement(elementId, {
+              metadata: {
+                isAnalyzing: false,
+                isAnalyzed: true,
+                analysis: analysisData.analysis,
+                processedData: statusData.processedData
+              }
+            });
+          } else {
+            updateElement(elementId, {
+              metadata: {
+                isAnalyzing: false,
+                analysisError: 'Failed to analyze content'
+              }
+            });
+          }
+          return;
+        }
+
+        if (statusData.status === 'failed') {
+          updateElement(elementId, {
+            metadata: {
+              isScraping: false,
+              scrapingError: statusData.error || 'Scraping failed'
+            }
+          });
+          return;
+        }
+
+        // Continue polling if still processing
+        attempts++;
+        if (attempts < maxAttempts) {
+          setTimeout(checkStatus, 1000);
+        } else {
+          updateElement(elementId, {
+            metadata: {
+              isScraping: false,
+              scrapingError: 'Scraping timeout'
+            }
+          });
+        }
+      } catch (error) {
+        console.error('Error polling for completion:', error);
+        updateElement(elementId, {
+          metadata: {
+            isScraping: false,
+            scrapingError: 'Failed to check status'
+          }
+        });
+      }
+    };
+
+    // Start polling
+    setTimeout(checkStatus, 1000);
+  };
+
   const handleSubmit = async () => {
     setError(null);
     
@@ -67,12 +156,19 @@ export const SocialMediaModal: React.FC<SocialMediaModalProps> = ({ isOpen, onCl
     setIsSubmitting(true);
     
     const { platform: detectedPlatform, scope } = detectContentInfo(url);
-    const webhookToken = `svc_webhook_${Date.now()}_${Math.random().toString(36).substring(7)}`;
     const elementId = generateId();
 
     try {
+      // Get the current project ID from the URL
+      const projectId = window.location.pathname.split('/canvas/')[1];
+      
+      if (!projectId) {
+        setError('No project selected');
+        setIsSubmitting(false);
+        return;
+      }
 
-      // Create social media element with pending state
+      // Create social media element with scraping state
       const newElement = {
         id: elementId,
         type: 'content' as const,
@@ -80,62 +176,63 @@ export const SocialMediaModal: React.FC<SocialMediaModalProps> = ({ isOpen, onCl
         y: Math.random() * 300 + 100,
         width: 320,
         height: 280,
-        title: `${detectedPlatform} ${scope === 'profile' ? 'Profile' : 'Content'} Analysis`,
+        title: `Loading ${detectedPlatform} content...`,
         url: url.trim(),
         platform: detectedPlatform,
+        thumbnail: `https://via.placeholder.com/300x200?text=${detectedPlatform}&bg=666&color=fff`,
         metadata: {
-          webhookToken,
+          isScraping: true,
           contentScope: scope,
-          jobStatus: 'creating',
-          jobId: null,
-          error: null,
           startedAt: new Date().toISOString()
         }
       };
 
-      console.log('📱 [SocialMediaModal] Adding social element:', { platform: detectedPlatform, scope, newElement });
       addElement(newElement);
 
-      // Call webhook API to create job
-      const response = await fetch('/api/webhooks/make', {
+      // Start scraping process
+      const response = await fetch('/api/content/scrape', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${webhookToken}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          action: 'job.create',
-          timestamp: new Date().toISOString(),
-          execution_id: `manual_${Date.now()}`,
-          scenario_id: 'manual_analysis',
-          content: {
-            url: url.trim(),
-            platform: detectedPlatform,
-            metadata: {
-              content_scope: scope,
-              source: 'canvas_tool',
-              element_id: newElement.id
-            }
-          }
+          url: url.trim(),
+          projectId: projectId
         })
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to create analysis job');
+        
+        // Update element to show error
+        const canvasStore = useCanvasStore.getState();
+        canvasStore.updateElement(newElement.id, {
+          metadata: {
+            isScraping: false,
+            scrapingError: errorData.error || 'Failed to scrape content'
+          }
+        });
+        
+        throw new Error(errorData.error || 'Failed to scrape content');
       }
 
       const result = await response.json();
       
-      // Update element with job ID
-      const canvasStore = useCanvasStore.getState();
-      canvasStore.updateElement(newElement.id, {
-        metadata: {
-          ...newElement.metadata,
-          jobId: result.job_id,
-          jobStatus: 'pending'
-        }
-      });
+      // Start polling for scrape completion
+      if (result.success && result.scrapeId) {
+        // Update element with scrape ID
+        const canvasStore = useCanvasStore.getState();
+        canvasStore.updateElement(newElement.id, {
+          metadata: {
+            ...newElement.metadata,
+            scrapeId: result.scrapeId,
+            status: result.status
+          }
+        });
+        
+        // Start polling in the background
+        pollForCompletion(newElement.id, result.scrapeId, projectId);
+      }
 
       // Close modal and reset
       onClose();

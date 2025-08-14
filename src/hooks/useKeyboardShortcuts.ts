@@ -7,7 +7,6 @@ interface UseKeyboardShortcutsProps {
   enabled?: boolean;
   onCopy?: (elements: CanvasElement[]) => void;
   onCut?: (elements: CanvasElement[]) => void;
-  onPaste?: () => void;
   onDelete?: (elementIds: string[]) => void;
   onUndo?: () => void;
   onRedo?: () => void;
@@ -30,7 +29,6 @@ export const useKeyboardShortcuts = ({
   enabled = true,
   onCopy,
   onCut,
-  onPaste,
   onDelete,
   onUndo,
   onRedo,
@@ -105,11 +103,6 @@ export const useKeyboardShortcuts = ({
       return;
     }
 
-    // Paste (Ctrl/Cmd + V)
-    if (ctrlOrCmd && key === 'v' && !shift && !alt && onPaste) {
-      preventDefaultAndProcess(() => onPaste());
-      return;
-    }
 
     // Delete (Delete or Backspace)
     if ((key === 'delete' || key === 'backspace') && !ctrlOrCmd && !shift && !alt && onDelete) {
@@ -176,8 +169,7 @@ export const useKeyboardShortcuts = ({
     getModifierKey,
     onCopy,
     onCut,
-    onPaste,
-    onDelete,
+      onDelete,
     onSelectAll,
     onDuplicate,
     onUndo,
@@ -210,11 +202,6 @@ export const useKeyboardShortcuts = ({
       const selected = getSelectedElements();
       if (selected.length > 0 && onCut) {
         onCut(selected);
-      }
-    },
-    paste: () => {
-      if (onPaste) {
-        onPaste();
       }
     },
     deleteSelected: () => {

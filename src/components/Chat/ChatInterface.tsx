@@ -4,7 +4,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Loader2, MessageSquare, Plus, Send, X, ChevronLeft, ChevronRight, Lightbulb, FileText, Upload, ChevronDown, Bot, User, Link2, Trash2 } from 'lucide-react';
 import { ChatElement, Connection, ContentElement, Message, Model } from '@/types';
 import { useChatStore } from '@/store/chatStore';
-// import { supabase } from '@/lib/supabase'; // Temporarily disabled
+import { useCanvasStore } from '@/store/canvasStore';
+import { supabase } from '@/lib/supabase';
 
 interface ChatInterfaceProps {
   element: ChatElement;
@@ -62,6 +63,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const providerBrand = currentModel.provider === 'openai' ? 'OpenAI GPT-5' : 'Anthropic Claude 4';
   const providerColor = currentModel.provider === 'openai' ? 'text-green-400' : 'text-purple-400';
   
+  // Get workspace ID from canvas store for localStorage namespacing
+  const { workspaceId } = useCanvasStore();
+  
   // Persistent chat store
   const { 
     getConversations, 
@@ -90,43 +94,164 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         }))
       } : conv
     );
-    setStoreConversations(element.id, updatedConversations);
+    setStoreConversations(element.id, updatedConversations, workspaceId || undefined);
   };
   
   const modelDropdownRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
-  // Load conversations from localStorage on mount
-  useEffect(() => {
-    console.log(`[ChatInterface] Loading conversations for element ${element.id}`);
-    loadFromLocalStorage(element.id);
-    const activeId = getActiveConversation(element.id);
-    setActiveConversationId(activeId);
-  }, [element.id, loadFromLocalStorage, getActiveConversation]);
+  // Don't automatically load from localStorage - wait for database check
+  // This will be handled in the loadConversations effect below
   
   // Save active conversation when it changes
   useEffect(() => {
     setActiveConversation(element.id, activeConversationId);
   }, [activeConversationId, element.id, setActiveConversation]);
 
-  // Load conversations from database on mount - TEMPORARILY DISABLED
-  /*
+  // Load conversations from database on mount, fall back to localStorage only if no DB
   useEffect(() => {
     const loadConversations = async () => {
       try {
-        // Database loading temporarily disabled
-        // Will be restored when Supabase environment is configured
+        // Check if we have a database ID in metadata
+        const chatInterfaceId = element.metadata?.dbId;
+        
+        if (!chatInterfaceId) {
+          console.log(`[ChatInterface] No database ID found for element ${element.id}, checking localStorage`);
+          // Only load from localStorage if this is an old element without DB integration
+          loadFromLocalStorage(element.id, workspaceId || undefined);
+          const activeId = getActiveConversation(element.id);
+          setActiveConversationId(activeId);
+          return;
+        }
+        
+        // Verify the chat interface record exists
+        const { data: chatInterface, error: chatError } = await supabase
+          .from('chat_interfaces')
+          .select('id')
+          .eq('id', chatInterfaceId)
+          .single();
+
+        if (chatError || !chatInterface) {
+          console.log(`[ChatInterface] Database record not found for ID ${chatInterfaceId}, using local storage only`);
+          return;
+        }
+
+        // Load threads for this chat interface
+        const { data: threads, error: threadsError } = await supabase
+          .from('chat_threads')
+          .select(`
+            id,
+            title,
+            created_at,
+            updated_at,
+            chat_messages (
+              id,
+              role,
+              content,
+              created_at,
+              model,
+              prompt_tokens,
+              completion_tokens,
+              total_tokens
+            )
+          `)
+          .eq('chat_interface_id', chatInterface.id)
+          .order('updated_at', { ascending: false });
+
+        if (threadsError) {
+          console.error('Error loading threads:', threadsError);
+          return;
+        }
+
+        if (threads && threads.length > 0) {
+          // Convert database threads to local format
+          const conversations = threads.map(thread => ({
+            id: thread.id,
+            title: thread.title || 'New Chat',
+            messages: thread.chat_messages?.map((msg: any) => ({
+              id: msg.id,
+              role: msg.role as 'user' | 'assistant',
+              content: msg.content,
+              timestamp: new Date(msg.created_at),
+              model: msg.model
+            })) || [],
+            createdAt: new Date(thread.created_at),
+            lastMessageAt: new Date(thread.updated_at)
+          }));
+
+          setStoreConversations(element.id, conversations, workspaceId || undefined);
+          if (conversations.length > 0 && !activeConversationId) {
+            setActiveConversationId(conversations[0].id);
+          }
+        }
       } catch (error) {
         console.error('Error in loadConversations:', error);
       }
     };
 
     loadConversations();
-  }, [element.id]);
-  */
+  }, [element.id, element.metadata?.dbId, setStoreConversations]);
 
   const sendMessage = async () => {
     if (!input.trim() || isLoading) return;
+    
+    // Get project info
+    const chatInterfaceId = element.metadata?.dbId; // Database ID if exists
+    let accountId = (window as any).accountId || process.env.NEXT_PUBLIC_DEMO_ACCOUNT_ID;
+    let projectId = (window as any).projectId || element.metadata?.projectId;
+    
+    // If we have a chat interface, get the project and account info
+    if (chatInterfaceId && !projectId) {
+      try {
+        const { data: chatInterface } = await supabase
+          .from('chat_interfaces')
+          .select('project_id, project:projects(id, account_id)')
+          .eq('id', chatInterfaceId)
+          .single();
+          
+        if (chatInterface?.project_id) {
+          projectId = chatInterface.project_id;
+          if (chatInterface.project?.account_id) {
+            accountId = chatInterface.project.account_id;
+          }
+        }
+      } catch (err) {
+        console.error('Failed to get project info:', err);
+      }
+    }
+    
+    // Ensure we have an active thread ID
+    let threadId = activeConversationId;
+    
+    // Create or get thread in database if we have a chat interface
+    if (chatInterfaceId && (!threadId || threadId === 'default')) {
+      try {
+        const { data: thread, error } = await supabase
+          .from('chat_threads')
+          .insert({
+            chat_interface_id: chatInterfaceId,
+            title: 'New Chat'
+          })
+          .select()
+          .single();
+          
+        if (!error && thread) {
+          threadId = thread.id;
+          // Update local state with new thread
+          const newConversation = {
+            id: thread.id,
+            title: 'New Chat',
+            messages: [],
+            createdAt: new Date(),
+            lastMessageAt: new Date()
+          };
+          setStoreConversations(element.id, [...conversations, newConversation], workspaceId || undefined);
+          setActiveConversationId(thread.id);
+        }
+      } catch (err) {
+        console.error('Failed to create thread:', err);
+      }
+    }
     
     // Create user message
     const userMessage = {
@@ -143,14 +268,48 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         ? { ...conv, messages: updatedMessages, lastMessageAt: new Date() }
         : conv
     );
-    setStoreConversations(element.id, updatedConversations);
+    setStoreConversations(element.id, updatedConversations, workspaceId || undefined);
     
     // Clear input
     setInput('');
     setIsLoading(true);
     
+    // Save user message to database if we have a thread
+    let userMessageId: string | undefined;
+    if (chatInterfaceId && threadId && threadId !== 'default') {
+      try {
+        const { data: dbMessage, error } = await supabase
+          .from('chat_messages')
+          .insert({
+            thread_id: threadId,
+            role: 'user',
+            content: userMessage.content,
+            model: null
+          })
+          .select()
+          .single();
+          
+        if (!error && dbMessage) {
+          userMessageId = dbMessage.id;
+        }
+      } catch (err) {
+        console.error('Failed to save user message:', err);
+      }
+    }
+    
     try {
-      // Call real AI API - no mock responses
+      // Generate a message ID for the AI response
+      const aiMessageId = crypto.randomUUID();
+      
+      console.log('[ChatInterface] Sending chat request with tracking:', {
+        accountId,
+        projectId,
+        chatInterfaceId,
+        threadId,
+        messageId: aiMessageId
+      });
+      
+      // Call real AI API with tracking info
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -160,7 +319,13 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
             content: m.content 
           })),
           model: selectedModel,
-          connectedContent: [] // No connected content in basic chat
+          connectedContent: [], // No connected content in basic chat
+          // Add tracking fields
+          accountId,
+          projectId,
+          chatInterfaceId,
+          threadId,
+          messageId: aiMessageId
         })
       });
 
@@ -178,8 +343,42 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         id: Date.now() + 1,
         role: 'assistant' as const,
         content: data.content || 'No response received',
-        timestamp: new Date()
+        timestamp: new Date(),
+        model: data.model || selectedModel
       };
+      
+      // Save AI message to database with token info
+      if (chatInterfaceId && threadId && threadId !== 'default') {
+        try {
+          const { error } = await supabase
+            .from('chat_messages')
+            .insert({
+              id: data.messageId || undefined,
+              thread_id: threadId,
+              role: 'assistant',
+              content: aiMessage.content,
+              model: data.model || selectedModel,
+              prompt_tokens: data.usage?.prompt_tokens || 0,
+              completion_tokens: data.usage?.completion_tokens || 0,
+              total_tokens: data.usage?.total_tokens || 0
+            });
+            
+          if (error) {
+            console.error('Failed to save AI message:', error);
+          }
+          
+          // Update thread title if this is the first exchange
+          if (activeConversation?.title === 'New Chat') {
+            const newTitle = generateConversationTitle([userMessage]);
+            await supabase
+              .from('chat_threads')
+              .update({ title: newTitle })
+              .eq('id', threadId);
+          }
+        } catch (err) {
+          console.error('Failed to save AI response:', err);
+        }
+      }
       
       const finalMessages = [...updatedMessages, aiMessage];
       
@@ -194,7 +393,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
             }
           : conv
       );
-      setStoreConversations(element.id, finalConversations);
+      setStoreConversations(element.id, finalConversations, workspaceId || undefined);
     } catch (error) {
       console.error('Error calling AI API:', error);
       const errorMessage = {
@@ -214,7 +413,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
             }
           : conv
       );
-      setStoreConversations(element.id, finalConversations);
+      setStoreConversations(element.id, finalConversations, workspaceId || undefined);
     } finally {
       setIsLoading(false);
     }
@@ -227,7 +426,40 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   };
 
   // New conversation management
-  const createNewConversation = () => {
+  const createNewConversation = async () => {
+    const chatInterfaceId = element.metadata?.dbId;
+    
+    // If we have a database chat interface, create thread in database
+    if (chatInterfaceId) {
+      try {
+        const { data: thread, error } = await supabase
+          .from('chat_threads')
+          .insert({
+            chat_interface_id: chatInterfaceId,
+            title: 'New Chat'
+          })
+          .select()
+          .single();
+          
+        if (!error && thread) {
+          const newConversation = {
+            id: thread.id,
+            title: thread.title || 'New Chat',
+            messages: [],
+            createdAt: new Date(thread.created_at),
+            lastMessageAt: new Date(thread.updated_at)
+          };
+          const updatedConversations = [...conversations, newConversation];
+          setStoreConversations(element.id, updatedConversations, workspaceId || undefined);
+          setActiveConversationId(thread.id);
+          return;
+        }
+      } catch (err) {
+        console.error('Failed to create thread in database:', err);
+      }
+    }
+    
+    // Fallback to local-only conversation
     const newConversation = {
       id: Date.now().toString(),
       title: 'New Chat',
@@ -236,7 +468,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       lastMessageAt: new Date()
     };
     const updatedConversations = [...conversations, newConversation];
-    setStoreConversations(element.id, updatedConversations);
+    setStoreConversations(element.id, updatedConversations, workspaceId || undefined);
     setActiveConversationId(newConversation.id);
   };
 
@@ -250,8 +482,26 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   };
 
   // Delete conversation
-  const deleteConversation = (id: string) => {
+  const deleteConversation = async (id: string) => {
     if (conversations.length === 1) return; // Keep at least one
+    
+    // Try to delete from database first
+    const chatInterfaceId = element.metadata?.dbId;
+    if (chatInterfaceId && id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+      try {
+        // Database will cascade delete messages due to foreign key
+        const { error } = await supabase
+          .from('chat_threads')
+          .delete()
+          .eq('id', id);
+          
+        if (error) {
+          console.error('Failed to delete thread from database:', error);
+        }
+      } catch (err) {
+        console.error('Error deleting thread:', err);
+      }
+    }
     
     // If deleting active conversation, switch to another
     if (id === activeConversationId) {
@@ -260,7 +510,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
     
     const updatedConversations = conversations.filter(c => c.id !== id);
-    setStoreConversations(element.id, updatedConversations);
+    setStoreConversations(element.id, updatedConversations, workspaceId || undefined);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {

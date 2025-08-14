@@ -2,9 +2,9 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Canvas } from './Canvas/Canvas';
 import { CanvasNavigation } from './Canvas/CanvasNavigation';
 import { CanvasSidebar } from './Canvas/CanvasSidebar';
-import { AnalysisPanel } from './Canvas/AnalysisPanel';
 import { SocialMediaModal } from './Modal/SocialMediaModal';
 import { CreatorSearchPanel } from './Canvas/CreatorSearchPanel';
+import { ContentAnalysisPanel } from './Sidebar/ContentAnalysisPanel';
 import { useCanvasStore } from '@/store/canvasStore';
 import { ContentElement, CanvasElement as ImportedCanvasElement, Connection as ImportedConnection } from '@/types';
 import { canvasPersistence } from '@/services/canvasPersistence';
@@ -42,16 +42,16 @@ interface AiconCanvasAppProps {
 const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
   const [selectedElement, setSelectedElement] = useState<Element | null>(null);
   const [connecting, setConnecting] = useState<string | number | null>(null);
-  const [analysisPanel, setAnalysisPanel] = useState<{ isOpen: boolean; content: ContentElement | null }>({
-    isOpen: false,
-    content: null
-  });
   const [socialMediaModal, setSocialMediaModal] = useState<{ isOpen: boolean; platform?: string }>({
     isOpen: false,
     platform: undefined
   });
   const [creatorSearchPanel, setCreatorSearchPanel] = useState<{ isOpen: boolean }>({
     isOpen: false
+  });
+  const [contentAnalysisPanel, setContentAnalysisPanel] = useState<{ isOpen: boolean; content: ContentElement | null }>({
+    isOpen: false,
+    content: null
   });
   const [isLoading, setIsLoading] = useState(true);
   const [hasLoadedInitialData, setHasLoadedInitialData] = useState(false);
@@ -509,16 +509,17 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
     }
   };
 
-  const handleOpenAnalysisPanel = (content: ContentElement) => {
-    setAnalysisPanel({ isOpen: true, content });
-  };
-
-  const handleCloseAnalysisPanel = () => {
-    setAnalysisPanel({ isOpen: false, content: null });
-  };
 
   const handleOpenSocialMediaModal = (platform?: string) => {
     setSocialMediaModal({ isOpen: true, platform });
+  };
+
+  const handleOpenAnalysisPanel = (content: ContentElement) => {
+    setContentAnalysisPanel({ isOpen: true, content });
+  };
+
+  const handleCloseAnalysisPanel = () => {
+    setContentAnalysisPanel({ isOpen: false, content: null });
   };
 
   const handleCloseSocialMediaModal = () => {
@@ -613,18 +614,20 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
         />
       </div>
 
-      {/* Analysis Panel */}
-      <AnalysisPanel
-        isOpen={analysisPanel.isOpen}
-        content={analysisPanel.content}
-        onClose={handleCloseAnalysisPanel}
-      />
 
       {/* Social Media Modal */}
       <SocialMediaModal
         isOpen={socialMediaModal.isOpen}
         onClose={handleCloseSocialMediaModal}
         platform={socialMediaModal.platform}
+      />
+
+      {/* Content Analysis Panel */}
+      <ContentAnalysisPanel
+        isOpen={contentAnalysisPanel.isOpen}
+        onClose={handleCloseAnalysisPanel}
+        contentId={(contentAnalysisPanel.content as any)?.metadata?.contentId || null}
+        content={contentAnalysisPanel.content}
       />
 
       {/* Creator Search Panel */}

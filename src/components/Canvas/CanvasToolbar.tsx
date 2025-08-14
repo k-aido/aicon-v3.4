@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { Globe, UserSearch } from 'lucide-react';
-import { AIChatIcon, InstagramIcon, TikTokIcon, YouTubeIcon, ProfilesIcon } from '@/components/icons/PngIcons';
+import { Globe, UserSearch, Folder, MessageSquare, Instagram, Video, Youtube } from 'lucide-react';
 import { ContentPiece, ChatData, FolderData } from '@/types/canvas';
 
 // Generate truly unique string IDs for canvas elements
@@ -20,12 +19,16 @@ interface Tool {
   platform?: string;
 }
 
+// COLLECTIONS DISABLED VERSION 3.0 - COMING SOON ONLY
+console.log('🚨 COLLECTIONS DISABLED v3.0 - Should not create folders!');
+
 const tools: Tool[] = [
-  { id: 'ai-chat', icon: AIChatIcon, label: 'AI Chat', color: '#8B5CF6', type: 'chat' },
+  { id: 'ai-chat', icon: MessageSquare, label: 'AI Chat', color: '#8B5CF6', type: 'chat' },
+  { id: 'collections', icon: Folder, label: 'Collections - DISABLED', color: '#F59E0B', type: 'folder' },
   { id: 'creator-search', icon: UserSearch, label: 'Search Creators', color: '#10B981', type: 'creator-search' },
-  { id: 'instagram', icon: InstagramIcon, label: 'Instagram', color: '#E4405F', type: 'content', platform: 'instagram' },
-  { id: 'tiktok', icon: TikTokIcon, label: 'TikTok', color: '#000000', type: 'content', platform: 'tiktok' },
-  { id: 'youtube', icon: YouTubeIcon, label: 'YouTube', color: '#FF0000', type: 'content', platform: 'youtube' },
+  { id: 'instagram', icon: Instagram, label: 'Instagram', color: '#E4405F', type: 'content', platform: 'instagram' },
+  { id: 'tiktok', icon: Video, label: 'TikTok', color: '#000000', type: 'content', platform: 'tiktok' },
+  { id: 'youtube', icon: Youtube, label: 'YouTube', color: '#FF0000', type: 'content', platform: 'youtube' },
   { id: 'website', icon: Globe, label: 'Website URL', color: '#3B82F6', type: 'content', platform: 'unknown' }
 ];
 
@@ -37,29 +40,9 @@ interface CanvasToolbarProps {
 }
 
 export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({ onAddElement, viewport, onOpenSocialMediaModal, onOpenCreatorSearch }) => {
-  const [draggingTool, setDraggingTool] = useState<Tool | null>(null);
   const [activeTool, setActiveTool] = useState<string | null>(null);
   const [hoveredTool, setHoveredTool] = useState<string | null>(null);
 
-  const handleDragStart = (e: React.DragEvent, tool: Tool) => {
-    setDraggingTool(tool);
-    e.dataTransfer.effectAllowed = 'copy';
-    e.dataTransfer.setData('tool', JSON.stringify(tool));
-    
-    // Create ghost image
-    const dragImage = document.createElement('div');
-    dragImage.className = 'bg-white rounded-lg shadow-lg p-3 flex items-center gap-2';
-    dragImage.innerHTML = `<span style="color: ${tool.color}">${tool.label}</span>`;
-    dragImage.style.position = 'absolute';
-    dragImage.style.top = '-1000px';
-    document.body.appendChild(dragImage);
-    e.dataTransfer.setDragImage(dragImage, 0, 0);
-    setTimeout(() => document.body.removeChild(dragImage), 0);
-  };
-
-  const handleDragEnd = () => {
-    setDraggingTool(null);
-  };
 
   const createElement = (tool: Tool, x: number, y: number) => {
     // Generate string ID to match CanvasWorkspace pattern
@@ -104,7 +87,7 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({ onAddElement, view
         y: y,
         width: 350,
         height: 250,
-        name: 'New Profile Collection',
+        name: 'New Collection',
         description: '',
         color: tool.color,
         childIds: [],
@@ -146,6 +129,15 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({ onAddElement, view
   const handleToolClick = (tool: Tool) => {
     console.log('🔨 [CanvasToolbar] Tool clicked:', tool.id, tool.type);
     
+    // Handle collections - coming soon (do nothing)
+    if (tool.id === 'collections') {
+      console.log('📁 [CanvasToolbar] Collections clicked - Coming Soon!');
+      alert('Collections feature is coming soon!');
+      setActiveTool(tool.id);
+      setTimeout(() => setActiveTool(null), 300);
+      return;
+    }
+    
     // Handle creator search
     if (tool.id === 'creator-search' && onOpenCreatorSearch) {
       onOpenCreatorSearch();
@@ -176,33 +168,11 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({ onAddElement, view
     setTimeout(() => setActiveTool(null), 300);
   };
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    const toolData = e.dataTransfer.getData('tool');
-    if (!toolData) return;
-
-    try {
-      const tool = JSON.parse(toolData) as Tool;
-      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-      
-      // Calculate drop position relative to viewport
-      const x = (e.clientX - rect.left - viewport.x) / viewport.zoom;
-      const y = (e.clientY - rect.top - viewport.y) / viewport.zoom;
-      
-      const newElement = createElement(tool, x - 160, y - 120);
-      console.log('🎯 [CanvasToolbar] Drag/drop element creation:', { toolId: tool.id, toolType: tool.type, toolPlatform: tool.platform, newElement });
-      onAddElement(newElement);
-    } catch (error) {
-      console.error('Failed to create element from drop:', error);
-    }
-  };
 
   return (
     <div
       className="fixed left-4 top-1/2 -translate-y-1/2 bg-white rounded-lg shadow-lg z-30 p-1"
       data-toolbar
-      onDrop={handleDrop}
-      onDragOver={(e) => e.preventDefault()}
     >
       <div className="flex flex-col gap-1">
         {tools.map((tool, index) => {
@@ -210,15 +180,13 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({ onAddElement, view
           return (
             <div key={tool.id} className="relative">
               <button
-                draggable
-                onDragStart={(e) => handleDragStart(e, tool)}
-                onDragEnd={handleDragEnd}
+                draggable={false}
                 onClick={() => handleToolClick(tool)}
                 onMouseEnter={() => setHoveredTool(tool.id)}
                 onMouseLeave={() => setHoveredTool(null)}
                 className={`relative p-2 rounded-md transition-all duration-150 cursor-pointer hover:bg-gray-100 active:scale-95 ${
                   activeTool === tool.id ? 'bg-gray-100' : ''
-                } ${draggingTool?.id === tool.id ? 'opacity-50' : ''}`}
+                }`}
               >
                 <Icon className="w-5 h-5" size={20} style={{ color: tool.color }} />
               </button>
@@ -227,7 +195,14 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({ onAddElement, view
               {hoveredTool === tool.id && (
                 <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 pointer-events-none z-50">
                   <div className="bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
-                    {tool.label}
+                    {tool.id === 'collections' ? (
+                      <div className="text-center">
+                        <div>Collections</div>
+                        <div className="text-gray-300 text-xs">Coming Soon</div>
+                      </div>
+                    ) : (
+                      tool.label
+                    )}
                   </div>
                 </div>
               )}

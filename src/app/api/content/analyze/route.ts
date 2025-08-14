@@ -1,251 +1,498 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@supabase/supabase-js';
+import { cookies } from 'next/headers';
 import OpenAI from 'openai';
+import { transcriptionService } from '@/services/transcriptionService';
+import { ContentAnalysis, AnalysisRequest, AnalysisResponse } from '@/types/analysis';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-interface AnalysisRequest {
-  elementId: string;
-  contentUrl: string;
-  platform: string;
-  caption?: string;
-  thumbnail?: string;
-  metrics: {
-    likes: number;
-    comments: number;
-    views: number;
-  };
-  duration?: number;
-}
-
-interface ContentAnalysis {
-  keyTopics: string[];
-  contentStructure: {
-    hook: string;
-    body: string[];
-    cta: string;
-  };
-  engagementTactics: string[];
-  sentiment: string;
-  complexity: string;
-  analyzedAt: Date;
+interface EnhancedAnalysisRequest {
+  contentId: string;
+  forceReanalysis?: boolean;
 }
 
 export async function POST(request: NextRequest) {
+  const startTime = Date.now();
+  
   try {
-    const body: AnalysisRequest = await request.json();
-    const { elementId, contentUrl, platform, caption, metrics, duration } = body;
-
+    // Check if we're in demo mode
+    const isDemoMode = process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
+    const enableAuth = process.env.NEXT_PUBLIC_ENABLE_AUTH !== 'false';
+    
+    // Use service role client for demo mode to bypass RLS
+    const supabase = isDemoMode 
+      ? createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.SUPABASE_SERVICE_ROLE_KEY!,
+          {
+            auth: {
+              autoRefreshToken: false,
+              persistSession: false
+            }
+          }
+        )
+      : createRouteHandlerClient({ cookies });
+    
+    let user = null;
+    
+    if (enableAuth && !isDemoMode) {
+      // Get the authenticated user in production mode
+      const { data: userData, error: authError } = await supabase.auth.getUser();
+      
+      if (authError || !userData.user) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+      
+      user = userData.user;
+    } else {
+      // Demo mode - create a mock user
+      console.log('[Enhanced Analysis] Demo mode - using mock user');
+      user = {
+        id: process.env.NEXT_PUBLIC_DEMO_USER_ID || '550e8400-e29b-41d4-a716-446655440002',
+        email: 'demo@example.com'
+      };
+    }
+    
+    const body: EnhancedAnalysisRequest = await request.json();
+    const { contentId, forceReanalysis = false } = body;
+    
     // Validate required fields
-    if (!elementId || !contentUrl || !platform) {
+    if (!contentId) {
       return NextResponse.json({ 
-        error: 'Missing required fields: elementId, contentUrl, platform' 
+        error: 'Missing required field: contentId' 
       }, { status: 400 });
     }
-
-    console.log(`[Content Analysis] Analyzing ${platform} content: ${elementId}`);
-
-    // Prepare content for analysis
-    const contentData = {
-      platform,
-      url: contentUrl,
-      caption: caption || '',
-      metrics: {
-        likes: metrics.likes || 0,
-        comments: metrics.comments || 0,
-        views: metrics.views || 0
-      },
-      duration: duration || 0,
-      engagementRate: metrics.views > 0 ? ((metrics.likes + metrics.comments) / metrics.views * 100).toFixed(2) + '%' : 'Unknown'
-    };
-
-    // Create analysis prompt
-    const analysisPrompt = createAnalysisPrompt(contentData);
-
-    try {
-      // Call OpenAI for analysis
-      const completion = await openai.chat.completions.create({
-        model: 'gpt-4',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are an expert social media content analyst. Analyze content for marketing insights, engagement tactics, and structural elements. Provide actionable insights and specific recommendations.'
-          },
-          {
-            role: 'user',
-            content: analysisPrompt
-          }
-        ],
-        temperature: 0.3,
-        max_tokens: 1500
-      });
-
-      const analysisText = completion.choices[0]?.message?.content;
-      if (!analysisText) {
-        throw new Error('No analysis returned from OpenAI');
-      }
-
-      // Parse the structured analysis
-      const analysis = parseAnalysisResponse(analysisText);
-      
-      // Add metadata
-      analysis.analyzedAt = new Date();
-
-      console.log(`[Content Analysis] Analysis completed for ${elementId}`);
-
-      return NextResponse.json({
-        success: true,
-        elementId,
-        analysis
-      });
-
-    } catch (openaiError: any) {
-      console.error('[Content Analysis] OpenAI API error:', openaiError);
-      
-      // Fallback to mock analysis if OpenAI fails
-      const mockAnalysis = createMockAnalysis(contentData);
+    
+    console.log(`[Enhanced Analysis] Starting analysis for content ${contentId}`);
+    
+    // Get content from database
+    console.log(`[Enhanced Analysis] Querying database for contentId: ${contentId}`);
+    const { data: content, error: fetchError } = await supabase
+      .from('creator_content')
+      .select('*')
+      .eq('id', contentId)
+      .single();
+    
+    console.log(`[Enhanced Analysis] Database query result:`, {
+      contentId,
+      found: !!content,
+      error: fetchError?.message,
+      content: content ? { id: content.id, platform: content.platform, url: content.content_url } : null
+    });
+    
+    if (fetchError || !content) {
+      console.error(`[Enhanced Analysis] Content not found:`, { contentId, fetchError });
+      return NextResponse.json({ 
+        error: 'Content not found',
+        details: fetchError?.message 
+      }, { status: 404 });
+    }
+    
+    // Check if analysis already exists and not forcing reanalysis
+    if (!forceReanalysis && content.analysis_status === 'completed' && content.summary) {
+      console.log(`[Enhanced Analysis] Returning existing analysis for content ${contentId}`);
       
       return NextResponse.json({
         success: true,
-        elementId,
-        analysis: mockAnalysis,
-        note: 'Using fallback analysis due to API limitation'
+        contentId,
+        analysis: {
+          summary: content.summary,
+          hook: content.hook_analysis,
+          body: content.body_analysis,
+          cta: content.cta_analysis,
+          aiModel: content.ai_model_used,
+          analyzedAt: content.analyzed_at
+        },
+        cached: true
       });
     }
-
+    
+    // Update status to analyzing
+    await supabase
+      .from('creator_content')
+      .update({ 
+        analysis_status: 'analyzing',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', contentId);
+    
+    let transcript = content.transcript;
+    
+    // Get transcript if not available
+    if (!transcript) {
+      console.log(`[Enhanced Analysis] No transcript found, starting transcription for ${contentId}`);
+      
+      // Update status to transcribing
+      await supabase
+        .from('creator_content')
+        .update({ 
+          analysis_status: 'transcribing',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', contentId);
+      
+      // Transcribe the video
+      const transcriptionResult = await transcriptionService.transcribeVideo({
+        contentId,
+        videoUrl: content.video_url || content.content_url,
+        platform: content.platform as 'youtube' | 'tiktok' | 'instagram'
+      });
+      
+      if (transcriptionResult.success && transcriptionResult.transcript) {
+        transcript = transcriptionResult.transcript.text;
+        
+        // Save transcript to database
+        await supabase
+          .from('creator_content')
+          .update({ 
+            transcript,
+            analysis_status: 'analyzing',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', contentId);
+      } else {
+        console.warn(`[Enhanced Analysis] Transcription failed for ${contentId}, using caption as fallback`);
+        transcript = content.caption || 'No transcript or caption available';
+      }
+    }
+    
+    // Perform AI analysis
+    const analysisResult = await performEnhancedAnalysis({
+      contentId,
+      transcript,
+      metadata: {
+        platform: content.platform,
+        duration: content.duration_seconds,
+        caption: content.caption,
+        views: content.views,
+        likes: content.likes,
+        comments: content.comments
+      }
+    });
+    
+    if (analysisResult.success && analysisResult.analysis) {
+      // Store analysis results in database
+      const { error: updateError } = await supabase
+        .from('creator_content')
+        .update({
+          summary: analysisResult.analysis.summary,
+          hook_analysis: JSON.stringify(analysisResult.analysis.hook),
+          body_analysis: JSON.stringify(analysisResult.analysis.body),
+          cta_analysis: JSON.stringify(analysisResult.analysis.cta),
+          analysis_status: 'completed',
+          analyzed_at: new Date().toISOString(),
+          ai_model_used: analysisResult.analysis.metadata.aiModel,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', contentId);
+      
+      if (updateError) {
+        console.error('[Enhanced Analysis] Failed to update content with analysis:', updateError);
+        return NextResponse.json({ 
+          error: 'Failed to save analysis results' 
+        }, { status: 500 });
+      }
+      
+      const processingTime = Date.now() - startTime;
+      
+      console.log(`[Enhanced Analysis] Analysis completed for ${contentId} in ${processingTime}ms`);
+      
+      return NextResponse.json({
+        success: true,
+        contentId,
+        analysis: analysisResult.analysis,
+        processingTime,
+        costCredits: analysisResult.costCredits
+      });
+      
+    } else {
+      // Update status to failed
+      await supabase
+        .from('creator_content')
+        .update({ 
+          analysis_status: 'failed',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', contentId);
+      
+      console.error(`[Enhanced Analysis] Analysis failed for ${contentId}:`, analysisResult.error);
+      
+      return NextResponse.json({
+        success: false,
+        contentId,
+        error: analysisResult.error || 'Analysis failed'
+      }, { status: 500 });
+    }
+    
   } catch (error: any) {
-    console.error('[Content Analysis] Unexpected error:', error);
+    console.error('[Enhanced Analysis] Unexpected error:', error);
     
     return NextResponse.json({
       success: false,
-      error: error.message || 'Failed to analyze content'
+      error: error.message || 'Internal server error'
     }, { status: 500 });
   }
 }
 
-function createAnalysisPrompt(contentData: any): string {
-  return `Analyze this ${contentData.platform} content:
-
-URL: ${contentData.url}
-Caption: ${contentData.caption || 'No caption provided'}
-Metrics: ${contentData.metrics.likes} likes, ${contentData.metrics.comments} comments, ${contentData.metrics.views} views
-Engagement Rate: ${contentData.engagementRate}
-Duration: ${contentData.duration ? `${contentData.duration} seconds` : 'Unknown'}
-
-Please provide a structured analysis in the following format:
-
-KEY TOPICS (3-5 main themes):
-- Topic 1
-- Topic 2
-- Topic 3
-
-CONTENT STRUCTURE:
-Hook: [Describe the opening/attention-grabbing element]
-Body: [List 2-4 main content points as bullet points]
-CTA: [Describe the call-to-action or desired outcome]
-
-ENGAGEMENT TACTICS (3-5 specific techniques used):
-- Tactic 1
-- Tactic 2
-- Tactic 3
-
-SENTIMENT: [positive/negative/neutral]
-COMPLEXITY: [simple/moderate/complex]
-
-Focus on actionable insights and specific marketing techniques that can be replicated.`;
-}
-
-function parseAnalysisResponse(analysisText: string): ContentAnalysis {
+async function performEnhancedAnalysis(request: AnalysisRequest): Promise<AnalysisResponse> {
+  const startTime = Date.now();
+  
   try {
-    // Extract sections using regex patterns (using [\s\S] instead of /s flag for compatibility)
-    const keyTopicsMatch = analysisText.match(/KEY TOPICS.*?:([\s\S]*?)(?=CONTENT STRUCTURE|$)/);
-    const contentStructureMatch = analysisText.match(/CONTENT STRUCTURE:([\s\S]*?)(?=ENGAGEMENT TACTICS|$)/);
-    const engagementMatch = analysisText.match(/ENGAGEMENT TACTICS.*?:([\s\S]*?)(?=SENTIMENT|$)/);
-    const sentimentMatch = analysisText.match(/SENTIMENT:\s*\[?(.*?)\]?(?=\n|COMPLEXITY|$)/);
-    const complexityMatch = analysisText.match(/COMPLEXITY:\s*\[?(.*?)\]?(?=\n|$)/);
+    const { transcript, metadata } = request;
+    
+    // Create enhanced analysis prompt
+    const analysisPrompt = createEnhancedAnalysisPrompt(transcript, metadata);
+    
+    // Call OpenAI GPT-4o-mini for analysis
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini', // Using GPT-4o-mini for cost efficiency
+      messages: [
+        {
+          role: 'system',
+          content: `You are an expert social media content analyst specializing in video content structure analysis. Your expertise includes:
 
-    // Parse key topics
-    const keyTopics = keyTopicsMatch 
-      ? keyTopicsMatch[1].split('\n').map(line => line.replace(/^-\s*/, '').trim()).filter(Boolean)
-      : ['Content analysis', 'Engagement strategy', 'Social media marketing'];
+1. HOOK ANALYSIS: Identifying attention-grabbing openings, measuring effectiveness, analyzing psychological triggers
+2. BODY ANALYSIS: Evaluating content flow, engagement maintenance, value delivery, storytelling techniques  
+3. CTA ANALYSIS: Assessing call-to-action clarity, placement, conversion potential, and persuasion techniques
 
-    // Parse content structure
-    let contentStructure = {
-      hook: 'Engaging opening that captures attention',
-      body: ['Main content points', 'Supporting information', 'Value proposition'],
-      cta: 'Clear call-to-action encouraging engagement'
-    };
-
-    if (contentStructureMatch) {
-      const structureText = contentStructureMatch[1];
-      const hookMatch = structureText.match(/Hook:\s*([\s\S]*?)(?=\nBody:|$)/);
-      const bodyMatch = structureText.match(/Body:\s*([\s\S]*?)(?=\nCTA:|$)/);
-      const ctaMatch = structureText.match(/CTA:\s*([\s\S]*?)(?=\n|$)/);
-
-      if (hookMatch) contentStructure.hook = hookMatch[1].trim();
-      if (bodyMatch) {
-        const bodyText = bodyMatch[1];
-        const bodyPoints = bodyText.split('\n').map(line => line.replace(/^-\s*/, '').trim()).filter(Boolean);
-        if (bodyPoints.length > 0) contentStructure.body = bodyPoints;
-      }
-      if (ctaMatch) contentStructure.cta = ctaMatch[1].trim();
+Provide detailed, actionable insights that content creators can use to improve their content performance. Focus on specific techniques, timing, and psychological principles that drive engagement.`
+        },
+        {
+          role: 'user',
+          content: analysisPrompt
+        }
+      ],
+      temperature: 0.2, // Lower temperature for more consistent analysis
+      max_tokens: 2000,
+      response_format: { type: "json_object" } // Request JSON response for easier parsing
+    });
+    
+    const analysisText = completion.choices[0]?.message?.content;
+    if (!analysisText) {
+      throw new Error('No analysis returned from OpenAI');
     }
-
-    // Parse engagement tactics
-    const engagementTactics = engagementMatch
-      ? engagementMatch[1].split('\n').map(line => line.replace(/^-\s*/, '').trim()).filter(Boolean)
-      : ['Visual storytelling', 'Emotional connection', 'Clear messaging', 'Social proof'];
-
-    // Parse sentiment and complexity
-    const sentiment = sentimentMatch ? sentimentMatch[1].trim().toLowerCase() : 'positive';
-    const complexity = complexityMatch ? complexityMatch[1].trim().toLowerCase() : 'moderate';
-
-    return {
-      keyTopics: keyTopics.slice(0, 5), // Limit to 5 topics
-      contentStructure,
-      engagementTactics: engagementTactics.slice(0, 5), // Limit to 5 tactics
-      sentiment,
-      complexity,
-      analyzedAt: new Date()
+    
+    // Parse the structured JSON analysis
+    const analysisData = JSON.parse(analysisText);
+    
+    // Structure the analysis according to our ContentAnalysis interface
+    const analysis: ContentAnalysis = {
+      summary: analysisData.summary || 'Content analysis completed',
+      hook: {
+        text: analysisData.hook?.text || 'Hook not identified',
+        analysis: analysisData.hook?.analysis || 'No hook analysis available',
+        effectiveness: analysisData.hook?.effectiveness || 'medium',
+        techniques: analysisData.hook?.techniques || []
+      },
+      body: {
+        mainPoints: analysisData.body?.mainPoints || [],
+        analysis: analysisData.body?.analysis || 'No body analysis available',
+        structure: analysisData.body?.structure || 'educational',
+        engagement: analysisData.body?.engagement || []
+      },
+      cta: {
+        text: analysisData.cta?.text || 'No clear CTA identified',
+        analysis: analysisData.cta?.analysis || 'No CTA analysis available',
+        type: analysisData.cta?.type || 'none',
+        clarity: analysisData.cta?.clarity || 'low'
+      },
+      metadata: {
+        aiModel: 'gpt-4o-mini',
+        analyzedAt: new Date(),
+        processingTime: Date.now() - startTime,
+        costCredits: estimateAnalysisCost(transcript.length)
+      }
     };
-
-  } catch (parseError) {
-    console.error('[Content Analysis] Failed to parse analysis:', parseError);
-    return createMockAnalysis({});
+    
+    return {
+      success: true,
+      contentId: request.contentId,
+      analysis,
+      processingTime: Date.now() - startTime,
+      costCredits: analysis.metadata.costCredits
+    };
+    
+  } catch (error: any) {
+    console.error('[Enhanced Analysis] Analysis error:', error);
+    
+    return {
+      success: false,
+      contentId: request.contentId,
+      error: error.message || 'Analysis failed',
+      processingTime: Date.now() - startTime
+    };
   }
 }
 
-function createMockAnalysis(contentData: any): ContentAnalysis {
-  const platform = contentData.platform || 'social media';
+function createEnhancedAnalysisPrompt(transcript: string, metadata: any): string {
+  // Check if this is a placeholder transcript (for platforms without audio extraction)
+  const isPlaceholderTranscript = transcript.includes('placeholder') || 
+                                  transcript.includes('will be implemented in a future update') ||
+                                  transcript.includes('Audio transcription for');
   
-  return {
-    keyTopics: [
-      `${platform.charAt(0).toUpperCase() + platform.slice(1)} marketing strategy`,
-      'Audience engagement',
-      'Content creation',
-      'Social media optimization',
-      'Brand storytelling'
-    ],
-    contentStructure: {
-      hook: `Strong opening that immediately captures ${platform} audience attention with compelling visual or statement`,
-      body: [
-        'Clear value proposition presented in an engaging manner',
-        'Supporting evidence or examples that build credibility',
-        'Emotional connection through relatable storytelling',
-        'Strategic use of platform-specific features and trends'
-      ],
-      cta: 'Clear call-to-action that encourages audience interaction and engagement'
-    },
-    engagementTactics: [
-      'Visual storytelling with high-quality imagery',
-      'Strategic use of trending hashtags and keywords',
-      'Direct audience addressing and question prompts',
-      'Timing optimization for peak engagement hours',
-      'Cross-platform content adaptation'
-    ],
-    sentiment: 'positive',
-    complexity: 'moderate',
-    analyzedAt: new Date()
-  };
+  const transcriptSection = isPlaceholderTranscript ? 
+    `**VIDEO TRANSCRIPT:**
+${transcript}
+
+**NOTE:** Since audio transcription is not yet available for ${metadata.platform}, this analysis will focus on platform-specific content patterns, typical engagement strategies for ${metadata.platform}, and general best practices based on the URL and metadata provided.` :
+    `**VIDEO TRANSCRIPT:**
+${transcript}`;
+
+  return `Analyze this ${metadata.platform} video content with the following data:
+
+${transcriptSection}
+
+**METADATA:**
+- Platform: ${metadata.platform}
+- Duration: ${metadata.duration ? `${metadata.duration} seconds` : 'Unknown'}
+- Views: ${metadata.views || 0}
+- Likes: ${metadata.likes || 0}  
+- Comments: ${metadata.comments || 0}
+- Caption: ${metadata.caption || 'None'}
+
+**ANALYSIS REQUIREMENTS:**
+${isPlaceholderTranscript ? 
+  `Since audio transcription is not available, provide a platform-specific analysis based on typical ${metadata.platform} content patterns and best practices. Focus on general recommendations and common strategies for ${metadata.platform} content creators.` :
+  'Provide a comprehensive analysis based on the actual transcript content.'
+}
+
+Provide analysis in JSON format with the following structure:
+
+{
+  "summary": "${isPlaceholderTranscript ? 
+    `General summary based on ${metadata.platform} content patterns and best practices` :
+    'Brief 2-3 sentence summary of the video content and its main value proposition'
+  }",
+  "hook": {
+    "text": "${isPlaceholderTranscript ? 
+      `Typical ${metadata.platform} hook strategies (since transcript unavailable)` :
+      'Exact text/description of the opening hook (first 3-5 seconds)'
+    }",
+    "analysis": "${isPlaceholderTranscript ?
+      `Analysis of effective hook strategies for ${metadata.platform} content` :
+      'Detailed analysis of hook effectiveness, techniques used, and psychological impact'
+    }",
+    "effectiveness": "high|medium|low",
+    "techniques": ["technique1", "technique2", "technique3"]
+  },
+  "body": {
+    "mainPoints": ["point1", "point2", "point3"],
+    "analysis": "${isPlaceholderTranscript ?
+      `Analysis of typical ${metadata.platform} content structure and engagement strategies` :
+      'Analysis of content structure, flow, value delivery, and engagement maintenance'
+    }",
+    "structure": "narrative|educational|entertainment|promotional",
+    "engagement": ["engagement_technique1", "engagement_technique2"]
+  },
+  "cta": {
+    "text": "${isPlaceholderTranscript ?
+      `Common ${metadata.platform} call-to-action patterns` :
+      'Exact call-to-action text or description'
+    }",
+    "analysis": "${isPlaceholderTranscript ?
+      `Analysis of effective CTA strategies for ${metadata.platform}` :
+      'Analysis of CTA placement, clarity, persuasion techniques, and conversion potential'
+    }",
+    "type": "subscribe|like|comment|visit|buy|follow|none",
+    "clarity": "high|medium|low"
+  }
+}
+
+**FOCUS AREAS:**
+1. Hook Analysis: Opening seconds, attention-grabbing techniques, curiosity gaps, pattern interrupts
+2. Body Analysis: Content flow, value delivery, storytelling, engagement maintenance, pacing
+3. CTA Analysis: Placement, clarity, urgency, social proof, conversion optimization
+4. Platform-specific optimizations and best practices
+5. Psychological triggers and persuasion techniques used
+
+Provide specific, actionable insights that can be applied to improve content performance.`;
+}
+
+function estimateAnalysisCost(transcriptLength: number): number {
+  // GPT-4o-mini pricing: ~$0.00015 per 1K input tokens, ~$0.0006 per 1K output tokens
+  // Rough estimate: ~0.75 tokens per character for input, ~500 tokens output
+  const inputTokens = Math.ceil(transcriptLength * 0.75);
+  const outputTokens = 500;
+  
+  const inputCost = (inputTokens / 1000) * 0.00015;
+  const outputCost = (outputTokens / 1000) * 0.0006;
+  
+  return Math.ceil((inputCost + outputCost) * 1000); // Return in micro-dollars for precision
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    // Check if we're in demo mode for GET requests too
+    const isDemoMode = process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
+    const enableAuth = process.env.NEXT_PUBLIC_ENABLE_AUTH !== 'false';
+    
+    // Use service role client for demo mode to bypass RLS
+    const supabase = isDemoMode 
+      ? createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.SUPABASE_SERVICE_ROLE_KEY!,
+          {
+            auth: {
+              autoRefreshToken: false,
+              persistSession: false
+            }
+          }
+        )
+      : createRouteHandlerClient({ cookies });
+    
+    let user = null;
+    
+    if (enableAuth && !isDemoMode) {
+      // Get the authenticated user in production mode
+      const { data: userData, error: authError } = await supabase.auth.getUser();
+      
+      if (authError || !userData.user) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+      
+      user = userData.user;
+    }
+    
+    const { searchParams } = new URL(request.url);
+    const contentId = searchParams.get('contentId');
+    
+    if (!contentId) {
+      return NextResponse.json({ error: 'contentId parameter required' }, { status: 400 });
+    }
+    
+    // Get analysis from database
+    const { data: content, error } = await supabase
+      .from('creator_content')
+      .select('id, summary, hook_analysis, body_analysis, cta_analysis, analysis_status, analyzed_at, ai_model_used')
+      .eq('id', contentId)
+      .single();
+    
+    if (error || !content) {
+      return NextResponse.json({ error: 'Content not found' }, { status: 404 });
+    }
+    
+    return NextResponse.json({
+      contentId: content.id,
+      analysis: {
+        summary: content.summary,
+        hook: content.hook_analysis ? JSON.parse(content.hook_analysis) : null,
+        body: content.body_analysis ? JSON.parse(content.body_analysis) : null,
+        cta: content.cta_analysis ? JSON.parse(content.cta_analysis) : null,
+        aiModel: content.ai_model_used,
+        analyzedAt: content.analyzed_at
+      },
+      status: content.analysis_status
+    });
+    
+  } catch (error: any) {
+    console.error('[Enhanced Analysis] Error fetching analysis:', error);
+    
+    return NextResponse.json({
+      error: error.message || 'Internal server error'
+    }, { status: 500 });
+  }
 }

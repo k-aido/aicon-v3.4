@@ -26,7 +26,6 @@ interface ContextMenuProps {
   onDelete: (elementId: string | string[]) => void;
   onCopy?: (elementId: string | string[]) => void;
   onCut?: (elementId: string | string[]) => void;
-  onPaste?: () => void;
   onDuplicate?: (elementId: string | string[]) => void;
   onGroup?: (elementIds: string[]) => void;
   onUngroup?: (elementId: string) => void;
@@ -46,7 +45,6 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
   onDelete,
   onCopy,
   onCut,
-  onPaste,
   onDuplicate,
   onGroup,
   onUngroup,
@@ -149,17 +147,6 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
     }
   }
 
-  if (onPaste) {
-    menuItems.push({
-      id: 'paste',
-      label: 'Paste',
-      icon: <Clipboard className="w-4 h-4" />,
-      onClick: () => {
-        onPaste();
-        onClose();
-      }
-    });
-  }
 
   // Duplicate
   if (hasSelection && onDuplicate) {

@@ -227,25 +227,6 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
     onCopy: (elements) => {
       setClipboard({ elements, connections: [] });
     },
-    onPaste: () => {
-      if (clipboard?.elements) {
-        const pastedElements: Record<string, CanvasElement> = {};
-        clipboard.elements.forEach(element => {
-          const newId = `${element.id}-copy-${Date.now()}`;
-          pastedElements[newId] = {
-            ...element,
-            id: newId,
-            position: {
-              x: element.position.x + 50,
-              y: element.position.y + 50
-            },
-            createdAt: new Date(),
-            updatedAt: new Date()
-          };
-        });
-        setElements(prev => ({ ...prev, ...pastedElements }));
-      }
-    },
     onDelete: handleElementDelete,
     onSelectAll: selectAll,
     onSave: () => {
@@ -279,84 +260,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
   }, [openContextMenu]);
 
   // Handle drop from toolbar
-  const handleCanvasDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    
-    const toolData = e.dataTransfer.getData('tool');
-    if (!toolData) return;
-    
-    try {
-      const tool = JSON.parse(toolData);
-      const rect = canvasRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      
-      // Calculate drop position relative to viewport
-      const x = (e.clientX - rect.left - viewport.x) / viewport.zoom;
-      const y = (e.clientY - rect.top - viewport.y) / viewport.zoom;
-      
-      // Create new element based on tool type
-      const id = `${tool.type}-${Date.now()}`;
-      const baseElement = {
-        id,
-        position: { x: x - 160, y: y - 120 }, // Center on cursor
-        zIndex: tool.type === 'folder' ? 0 : tool.type === 'chat' ? 2 : 1,
-        isVisible: true,
-        isLocked: false,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
 
-      let newElement: CanvasElement;
-
-      if (tool.type === 'chat') {
-        newElement = {
-          ...baseElement,
-          type: 'chat',
-          dimensions: { width: 600, height: 700 },
-          title: 'New AI Chat',
-          model: 'gpt-4',
-          messages: [],
-          connectedContentIds: [],
-          status: 'idle'
-        } as ChatData;
-      } else if (tool.type === 'folder') {
-        newElement = {
-          ...baseElement,
-          type: 'folder',
-          dimensions: { width: 350, height: 250 },
-          name: 'New Profile Collection',
-          description: '',
-          color: tool.color || '#3B82F6',
-          childIds: [],
-          isExpanded: true
-        } as FolderData;
-      } else {
-        // Content piece
-        newElement = {
-          ...baseElement,
-          type: 'content',
-          dimensions: { width: 320, height: 240 },
-          url: 'https://example.com',
-          title: `New ${tool.label} Content`,
-          thumbnail: `https://via.placeholder.com/320x240?text=${encodeURIComponent(tool.label)}&bg=${(tool.color || '#3B82F6').slice(1)}&color=ffffff`,
-          platform: tool.platform || 'unknown',
-          viewCount: Math.floor(Math.random() * 100000),
-          likeCount: Math.floor(Math.random() * 5000),
-          commentCount: Math.floor(Math.random() * 500),
-          tags: [tool.platform || 'content'].filter(Boolean)
-        } as ContentPiece;
-      }
-      
-      handleAddElement(newElement);
-    } catch (error) {
-      console.error('Failed to parse tool data:', error);
-    }
-  }, [viewport, handleAddElement]);
-
-  const handleCanvasDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'copy';
-  }, []);
 
   // Render connection lines
   const connectionLines = useMemo(() => {
@@ -431,8 +335,6 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
         className="flex-1 relative overflow-hidden"
         onClick={handleCanvasClick}
         onContextMenu={handleCanvasContextMenu}
-        onDrop={handleCanvasDrop}
-        onDragOver={handleCanvasDragOver}
         onMouseDown={(e) => {
           if (e.target === canvasRef.current || (e.target as HTMLElement).classList.contains('canvas-background')) {
             handlePanStart(e, viewport);
@@ -602,7 +504,6 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
         onClose={closeContextMenu}
         onDelete={handleElementDelete}
         onCopy={keyboardActions.copy}
-        onPaste={keyboardActions.paste}
         onDuplicate={keyboardActions.duplicate}
       />
 

@@ -1117,21 +1117,107 @@ class CanvasPersistenceService {
     try {
       console.log('[CanvasPersistence] Deleting workspace:', workspaceId);
       
-      // Delete the project (canvas_elements and canvas_connections will cascade delete if they exist)
-      const { error } = await this.supabase
+      // Validate workspaceId
+      if (!workspaceId || typeof workspaceId !== 'string') {
+        console.error('[CanvasPersistence] Invalid workspaceId:', workspaceId);
+        return false;
+      }
+      
+      // Check if it's a valid UUID format
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(workspaceId)) {
+        console.error('[CanvasPersistence] Invalid UUID format for workspaceId:', workspaceId);
+        return false;
+      }
+      
+      // First check if the workspace exists
+      const { data: existingProject, error: checkError } = await this.supabase
+        .from('projects')
+        .select('id, title')
+        .eq('id', workspaceId)
+        .single();
+      
+      if (checkError) {
+        console.error('[CanvasPersistence] Error checking workspace existence:', {
+          message: checkError.message || 'Unknown error',
+          details: checkError.details || 'No details',
+          hint: checkError.hint || 'No hint',
+          code: checkError.code || 'No code',
+          workspaceId
+        });
+        return false;
+      }
+      
+      if (!existingProject) {
+        console.error('[CanvasPersistence] Workspace not found:', workspaceId);
+        return false;
+      }
+      
+      console.log('[CanvasPersistence] Found workspace to delete:', existingProject);
+      
+      // Try to delete related records first to avoid foreign key constraints
+      console.log('[CanvasPersistence] Deleting related canvas_connections...');
+      const { error: connectionsError } = await this.supabase
+        .from('canvas_connections')
+        .delete()
+        .eq('workspace_id', workspaceId);
+      
+      if (connectionsError) {
+        console.warn('[CanvasPersistence] Warning deleting connections (might not exist):', {
+          message: connectionsError.message || 'Unknown error',
+          details: connectionsError.details || 'No details',
+          code: connectionsError.code || 'No code'
+        });
+      }
+      
+      console.log('[CanvasPersistence] Deleting related canvas_elements...');
+      const { error: elementsError } = await this.supabase
+        .from('canvas_elements')
+        .delete()
+        .eq('workspace_id', workspaceId);
+      
+      if (elementsError) {
+        console.warn('[CanvasPersistence] Warning deleting elements (might not exist):', {
+          message: elementsError.message || 'Unknown error',
+          details: elementsError.details || 'No details',
+          code: elementsError.code || 'No code'
+        });
+      }
+      
+      // Now delete the main project
+      console.log('[CanvasPersistence] Deleting main project...');
+      const { error: deleteError } = await this.supabase
         .from('projects')
         .delete()
         .eq('id', workspaceId);
       
-      if (error) {
-        console.error('[CanvasPersistence] Error deleting workspace:', error);
+      if (deleteError) {
+        console.error('[CanvasPersistence] Error deleting workspace:', {
+          message: deleteError.message || 'Unknown error',
+          details: deleteError.details || 'No details',
+          hint: deleteError.hint || 'No hint',
+          code: deleteError.code || 'No code',
+          workspaceId,
+          fullError: deleteError
+        });
+        
+        // Check if it's an RLS policy issue
+        if (deleteError.code === '42501' || deleteError.message?.includes('permission') || deleteError.message?.includes('policy')) {
+          console.error('[CanvasPersistence] RLS policy preventing deletion - user may not have DELETE permission');
+        }
+        
         return false;
       }
       
       console.log('[CanvasPersistence] Workspace deleted successfully:', workspaceId);
       return true;
     } catch (error) {
-      console.error('[CanvasPersistence] Error in deleteWorkspace:', error);
+      console.error('[CanvasPersistence] Unexpected error in deleteWorkspace:', {
+        message: error?.message || 'Unknown error',
+        stack: error?.stack || 'No stack trace',
+        workspaceId,
+        fullError: error
+      });
       return false;
     }
   }

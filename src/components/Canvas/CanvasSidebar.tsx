@@ -96,31 +96,11 @@ interface CanvasSidebarProps {
 }
 
 export const CanvasSidebar: React.FC<CanvasSidebarProps> = ({ onOpenSocialMediaModal, onOpenCreatorSearch }) => {
-  const [draggingTool, setDraggingTool] = useState<Tool | null>(null);
   const [activeTool, setActiveTool] = useState<string | null>(null);
   const [hoveredTool, setHoveredTool] = useState<string | null>(null);
   const { addElement, elements } = useCanvasStore();
   const { isDarkMode, toggleTheme } = useTheme();
 
-  const handleDragStart = (e: React.DragEvent, tool: Tool) => {
-    setDraggingTool(tool);
-    e.dataTransfer.effectAllowed = 'copy';
-    e.dataTransfer.setData('tool', JSON.stringify(tool));
-    
-    // Create ghost image
-    const dragImage = document.createElement('div');
-    dragImage.className = 'bg-white rounded-lg shadow-lg p-3 flex items-center gap-2';
-    dragImage.innerHTML = `<span style="color: ${tool.color}">${tool.label}</span>`;
-    dragImage.style.position = 'absolute';
-    dragImage.style.top = '-1000px';
-    document.body.appendChild(dragImage);
-    e.dataTransfer.setDragImage(dragImage, 0, 0);
-    setTimeout(() => document.body.removeChild(dragImage), 0);
-  };
-
-  const handleDragEnd = () => {
-    setDraggingTool(null);
-  };
 
   const handleToolClick = (tool: Tool) => {
     console.log('[CanvasSidebar] Tool clicked:', tool.id, tool.type);
@@ -250,15 +230,13 @@ export const CanvasSidebar: React.FC<CanvasSidebarProps> = ({ onOpenSocialMediaM
           return (
             <div key={tool.id} className="relative">
               <button
-                draggable={tool.id !== 'theme-toggle'}
-                onDragStart={tool.id !== 'theme-toggle' ? (e) => handleDragStart(e, tool) : undefined}
-                onDragEnd={tool.id !== 'theme-toggle' ? handleDragEnd : undefined}
+                draggable={false}
                 onClick={() => handleToolClick(tool)}
                 onMouseEnter={() => setHoveredTool(tool.id)}
                 onMouseLeave={() => setHoveredTool(null)}
                 className={`relative p-4 rounded-md transition-all duration-150 cursor-pointer hover:bg-[#f0ede8] dark:hover:bg-[#3e3e3c] active:scale-95 ${
                   activeTool === tool.id ? 'bg-[#f0ede8] dark:bg-[#3e3e3c]' : ''
-                } ${draggingTool?.id === tool.id ? 'opacity-50' : ''}`}
+                }`}
               >
                 {tool.id === 'theme-toggle' ? (
                   isDarkMode ? (

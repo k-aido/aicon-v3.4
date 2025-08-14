@@ -71,8 +71,52 @@ export const SocialMediaModal: React.FC<SocialMediaModalProps> = ({ isOpen, onCl
     const elementId = generateId();
 
     try {
+      // First create Supabase record
+      console.log('📱 [SocialMediaModal] Creating Supabase content record first');
+      console.log('📱 [SocialMediaModal] About to call fetch with:', {
+        url: '/api/content/create',
+        method: 'POST',
+        body: {
+          url: url.trim(),
+          platform: detectedPlatform.toLowerCase(),
+          title: `${detectedPlatform} ${scope === 'profile' ? 'Profile' : 'Content'} Analysis`,
+          thumbnail: `https://via.placeholder.com/320x280?text=${detectedPlatform}&bg=666&color=fff`,
+          canvasElementId: elementId
+        }
+      });
+      
+      const createResponse = await fetch('/api/content/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          url: url.trim(),
+          platform: detectedPlatform.toLowerCase(),
+          title: `${detectedPlatform} ${scope === 'profile' ? 'Profile' : 'Content'} Analysis`,
+          thumbnail: `https://via.placeholder.com/320x280?text=${detectedPlatform}&bg=666&color=fff`,
+          canvasElementId: elementId
+        }),
+      });
+      
+      console.log('📱 [SocialMediaModal] Fetch response received:', {
+        ok: createResponse.ok,
+        status: createResponse.status,
+        statusText: createResponse.statusText,
+        headers: createResponse.headers
+      });
 
-      // Create social media element with pending state
+      const createData = await createResponse.json();
+      console.log('📱 [SocialMediaModal] Response JSON parsed:', createData);
+
+      if (!createResponse.ok) {
+        console.error('📱 [SocialMediaModal] API call failed:', createData);
+        throw new Error(createData.error || 'Failed to create content record');
+      }
+
+      console.log('📱 [SocialMediaModal] ✅ Supabase content record created:', createData.contentId);
+
+      // Create social media element with Supabase contentId
       const newElement = {
         id: elementId,
         type: 'content' as const,
@@ -84,58 +128,53 @@ export const SocialMediaModal: React.FC<SocialMediaModalProps> = ({ isOpen, onCl
         url: url.trim(),
         platform: detectedPlatform,
         metadata: {
-          webhookToken,
+          contentId: createData.contentId,
           contentScope: scope,
-          jobStatus: 'creating',
-          jobId: null,
-          error: null,
+          isAnalyzing: false,
+          isAnalyzed: false,
+          analysisError: null,
           startedAt: new Date().toISOString()
         }
       };
 
-      console.log('📱 [SocialMediaModal] Adding social element:', { platform: detectedPlatform, scope, newElement });
+      console.log('📱 [SocialMediaModal] Adding social element with contentId:', { platform: detectedPlatform, scope, contentId: createData.contentId, newElement });
       addElement(newElement);
 
-      // Call webhook API to create job
-      const response = await fetch('/api/webhooks/make', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${webhookToken}`
-        },
-        body: JSON.stringify({
-          action: 'job.create',
-          timestamp: new Date().toISOString(),
-          execution_id: `manual_${Date.now()}`,
-          scenario_id: 'manual_analysis',
-          content: {
-            url: url.trim(),
-            platform: detectedPlatform,
-            metadata: {
-              content_scope: scope,
-              source: 'canvas_tool',
-              element_id: newElement.id
-            }
+      // Trigger content analysis after short delay
+      setTimeout(async () => {
+        try {
+          console.log('📱 [SocialMediaModal] Triggering content analysis for contentId:', createData.contentId);
+          const analysisResponse = await fetch('/api/content/analyze', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ 
+              contentId: createData.contentId,
+              forceReanalysis: true 
+            }),
+          });
+
+          const analysisData = await analysisResponse.json();
+          
+          if (analysisResponse.ok && analysisData.success) {
+            console.log('📱 [SocialMediaModal] Content analysis triggered successfully');
+            
+            // Update element to show analysis in progress
+            const canvasStore = useCanvasStore.getState();
+            canvasStore.updateElement(newElement.id, {
+              metadata: {
+                ...newElement.metadata,
+                isAnalyzing: true
+              }
+            });
+          } else {
+            console.error('📱 [SocialMediaModal] Failed to trigger analysis:', analysisData.error);
           }
-        })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to create analysis job');
-      }
-
-      const result = await response.json();
-      
-      // Update element with job ID
-      const canvasStore = useCanvasStore.getState();
-      canvasStore.updateElement(newElement.id, {
-        metadata: {
-          ...newElement.metadata,
-          jobId: result.job_id,
-          jobStatus: 'pending'
+        } catch (analysisError) {
+          console.error('📱 [SocialMediaModal] Error triggering analysis:', analysisError);
         }
-      });
+      }, 1000);
 
       // Close modal and reset
       onClose();

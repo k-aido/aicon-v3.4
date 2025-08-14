@@ -6,6 +6,7 @@ import type {
   Creator, 
   CreatorContent 
 } from '@/types/creator-search';
+import { randomUUID } from 'crypto';
 
 // Instagram handle/URL validation
 function validateInstagramInput(input: string): { isValid: boolean; handle: string; error?: string } {
@@ -65,6 +66,75 @@ async function getCachedContent(handle: string): Promise<{ creator: Creator | nu
   } catch (error) {
     console.error('Error checking cached content:', error);
     return { creator: null, content: [] };
+  }
+}
+
+// Download thumbnail and store in Supabase Storage
+async function downloadAndStoreThumbnail(thumbnailUrl: string, contentId: string, handle: string): Promise<string | null> {
+  if (!thumbnailUrl || !thumbnailUrl.startsWith('http')) {
+    console.log('⚠️ Invalid thumbnail URL:', thumbnailUrl);
+    return null;
+  }
+
+  try {
+    console.log('📥 Downloading thumbnail:', thumbnailUrl.substring(0, 80) + '...');
+    
+    // Download the image
+    const response = await fetch(thumbnailUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      }
+    });
+
+    if (!response.ok) {
+      console.error('❌ Failed to download thumbnail:', response.status, response.statusText);
+      return null;
+    }
+
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.startsWith('image/')) {
+      console.error('❌ Invalid content type:', contentType);
+      return null;
+    }
+
+    // Get file extension from content type
+    const extension = contentType.includes('jpeg') || contentType.includes('jpg') ? 'jpg' : 
+                     contentType.includes('png') ? 'png' : 
+                     contentType.includes('webp') ? 'webp' : 'jpg';
+
+    // Create unique filename
+    const filename = `thumbnails/${handle}/${contentId}_${Date.now()}.${extension}`;
+    
+    // Convert response to buffer
+    const imageBuffer = await response.arrayBuffer();
+    const imageData = new Uint8Array(imageBuffer);
+
+    // Upload to Supabase Storage
+    const { data, error } = await supabaseAdmin.storage
+      .from('creator-content')
+      .upload(filename, imageData, {
+        contentType: contentType,
+        cacheControl: '31536000', // Cache for 1 year
+        upsert: false
+      });
+
+    if (error) {
+      console.error('❌ Supabase storage upload failed:', error);
+      return null;
+    }
+
+    // Get public URL
+    const { data: publicUrlData } = supabaseAdmin.storage
+      .from('creator-content')
+      .getPublicUrl(filename);
+
+    const storedUrl = publicUrlData.publicUrl;
+    console.log('✅ Thumbnail stored:', storedUrl);
+    
+    return storedUrl;
+  } catch (error) {
+    console.error('❌ Error downloading/storing thumbnail:', error);
+    return null;
   }
 }
 
@@ -275,29 +345,63 @@ export async function POST(request: NextRequest) {
           creatorRecord = newCreator;
         }
 
-        // Process and insert content with proper type conversion
-        const contentRecords = scrapedContent.map((post: any) => ({
-          creator_id: creatorRecord!.id,
-          platform: 'instagram',
-          content_url: post.url || post.link || '',
-          thumbnail_url: post.displayUrl || post.thumbnailUrl || post.thumbnailSrc || '',
-          video_url: post.videoUrl || null,
-          caption: post.caption || post.text || '',
-          likes: safeParseInt(post.likesCount || post.likes),
-          comments: safeParseInt(post.commentsCount || post.comments),
-          views: safeParseInt(post.videoViewCount || post.views),
-          posted_date: safeParseTimestamp(post.timestamp),
-          duration_seconds: safeParseInt(post.videoDuration || post.duration),
-          cached_until: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // Cache for 30 days
-          raw_data: {
-            media_type: post.isVideo ? 'video' : (post.sidecarItems?.length > 1 ? 'carousel' : 'image'),
-            hashtags: post.hashtags || [],
-            mentions: post.mentions || [],
-            isVideo: post.isVideo,
-            sidecarItems: post.sidecarItems,
-            originalData: post // Store original for debugging
+        // Download and store thumbnails, then process content records
+        console.log('📥 Starting thumbnail downloads for', scrapedContent.length, 'posts...');
+        
+        const contentRecords = [];
+        let successfulDownloads = 0;
+        
+        for (let i = 0; i < scrapedContent.length; i++) {
+          const post = scrapedContent[i];
+          const originalThumbnailUrl = post.displayUrl || post.thumbnailUrl || post.thumbnailSrc || '';
+          
+          // Generate unique content ID for this post
+          const contentId = randomUUID();
+          
+          // Download and store thumbnail
+          let storedThumbnailUrl = null;
+          if (originalThumbnailUrl) {
+            storedThumbnailUrl = await downloadAndStoreThumbnail(originalThumbnailUrl, contentId, handle);
+            if (storedThumbnailUrl) {
+              successfulDownloads++;
+            }
           }
-        }));
+          
+          // Create content record with stored thumbnail URL
+          const contentRecord = {
+            id: contentId,
+            creator_id: creatorRecord!.id,
+            platform: 'instagram',
+            content_url: post.url || post.link || '',
+            thumbnail_url: storedThumbnailUrl || '', // Use stored thumbnail URL or empty string
+            video_url: post.videoUrl || null,
+            caption: post.caption || post.text || '',
+            likes: safeParseInt(post.likesCount || post.likes),
+            comments: safeParseInt(post.commentsCount || post.comments),
+            views: safeParseInt(post.videoViewCount || post.views),
+            posted_date: safeParseTimestamp(post.timestamp),
+            duration_seconds: safeParseInt(post.videoDuration || post.duration),
+            cached_until: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // Cache for 30 days
+            raw_data: {
+              media_type: post.isVideo ? 'video' : (post.sidecarItems?.length > 1 ? 'carousel' : 'image'),
+              hashtags: post.hashtags || [],
+              mentions: post.mentions || [],
+              isVideo: post.isVideo,
+              sidecarItems: post.sidecarItems,
+              originalThumbnailUrl: originalThumbnailUrl, // Keep original URL for reference
+              originalData: post // Store original for debugging
+            }
+          };
+          
+          contentRecords.push(contentRecord);
+          
+          // Progress logging
+          if ((i + 1) % 5 === 0 || i === scrapedContent.length - 1) {
+            console.log(`📊 Progress: ${i + 1}/${scrapedContent.length} posts processed, ${successfulDownloads} thumbnails downloaded`);
+          }
+        }
+        
+        console.log(`✅ Thumbnail download complete: ${successfulDownloads}/${scrapedContent.length} thumbnails stored successfully`);
 
         // Debug: Log processed content structure
         console.log('Sample processed content record:', JSON.stringify(contentRecords[0], null, 2));

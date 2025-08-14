@@ -19,13 +19,13 @@ interface ChatStore {
   activeConversations: Record<number, string>;
   
   getConversations: (elementId: number) => Conversation[];
-  setConversations: (elementId: number, conversations: Conversation[]) => void;
+  setConversations: (elementId: number, conversations: Conversation[], workspaceId?: string) => void;
   getActiveConversation: (elementId: number) => string;
   setActiveConversation: (elementId: number, conversationId: string) => void;
   
   // Persistence methods
-  saveToLocalStorage: (elementId: number) => void;
-  loadFromLocalStorage: (elementId: number) => void;
+  saveToLocalStorage: (elementId: number, workspaceId?: string) => void;
+  loadFromLocalStorage: (elementId: number, workspaceId?: string) => void;
 }
 
 export const useChatStore = create<ChatStore>((set, get) => ({
@@ -42,11 +42,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }];
   },
   
-  setConversations: (elementId, conversations) => {
+  setConversations: (elementId, conversations, workspaceId) => {
     set(state => ({
       conversations: { ...state.conversations, [elementId]: conversations }
     }));
-    get().saveToLocalStorage(elementId);
+    get().saveToLocalStorage(elementId, workspaceId);
   },
   
   getActiveConversation: (elementId) => {
@@ -59,21 +59,33 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }));
   },
   
-  saveToLocalStorage: (elementId) => {
+  saveToLocalStorage: (elementId, workspaceId) => {
     try {
       const conversations = get().conversations[elementId];
       if (conversations) {
-        console.log(`[ChatStore] Saving conversations for element ${elementId}:`, conversations.length);
-        localStorage.setItem(`chat-${elementId}`, JSON.stringify(conversations));
+        // Include workspace ID in key to prevent collisions
+        const key = workspaceId ? `chat-${workspaceId}-${elementId}` : `chat-${elementId}`;
+        console.log(`[ChatStore] Saving conversations for element ${elementId} with key ${key}:`, conversations.length);
+        localStorage.setItem(key, JSON.stringify(conversations));
       }
     } catch (e) {
       console.error('Failed to save conversations:', e);
     }
   },
   
-  loadFromLocalStorage: (elementId) => {
+  loadFromLocalStorage: (elementId, workspaceId) => {
     try {
-      const stored = localStorage.getItem(`chat-${elementId}`);
+      // Try workspace-specific key first
+      const workspaceKey = workspaceId ? `chat-${workspaceId}-${elementId}` : null;
+      const legacyKey = `chat-${elementId}`;
+      
+      let stored = workspaceKey ? localStorage.getItem(workspaceKey) : null;
+      
+      // Fall back to legacy key only if workspace key doesn't exist
+      if (!stored && !workspaceId) {
+        stored = localStorage.getItem(legacyKey);
+      }
+      
       if (stored) {
         console.log(`[ChatStore] Loading conversations for element ${elementId}`);
         const conversations = JSON.parse(stored, (key, value) => {

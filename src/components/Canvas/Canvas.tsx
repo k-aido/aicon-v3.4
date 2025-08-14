@@ -139,47 +139,6 @@ const CanvasComponent: React.FC<CanvasProps> = ({
     }
   });
 
-  // URL detection and smart clipboard functionality
-  const detectUrlType = (url: string): string | null => {
-    try {
-      const urlObj = new URL(url);
-      const domain = urlObj.hostname.toLowerCase();
-      
-      if (domain.includes('youtube.com') || domain.includes('youtu.be')) {
-        return 'YouTube';
-      }
-      if (domain.includes('tiktok.com')) {
-        return 'TikTok';
-      }
-      if (domain.includes('instagram.com')) {
-        return 'Instagram';
-      }
-      // For any other valid URL
-      return 'Website';
-    } catch {
-      return null;
-    }
-  };
-
-  const createElementFromUrl = useCallback(async (url: string, x: number, y: number) => {
-    const platform = detectUrlType(url);
-    if (!platform) return;
-
-    const newElement = {
-      id: generateUniqueId(),
-      type: 'content' as const,
-      x: x - 150,
-      y: y - 100,
-      width: 300,
-      height: 350,
-      platform: platform.toLowerCase() as Platform,
-      title: `New ${platform} Content`,
-      url: url,
-      thumbnail: 'https://via.placeholder.com/300x200'
-    };
-
-    setElements(prev => [...prev, newElement]);
-  }, [setElements]);
 
   // Handle zoom - works with Ctrl/Cmd key for better UX
   const handleWheel = (e: React.WheelEvent) => {
@@ -206,87 +165,6 @@ const CanvasComponent: React.FC<CanvasProps> = ({
     });
   };
 
-  // Handle drag over
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'copy';
-  };
-
-  // Handle drop
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    
-    const toolData = e.dataTransfer.getData('tool');
-    if (!toolData) return;
-    
-    try {
-      const tool = JSON.parse(toolData);
-      const rect = canvasRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      
-      // Calculate drop position relative to viewport
-      const x = (e.clientX - rect.left - viewport.x) / viewport.zoom;
-      const y = (e.clientY - rect.top - viewport.y) / viewport.zoom;
-      
-      // Create new element based on tool type
-      let newElement: CanvasElement;
-      
-      if (tool.type === 'chat') {
-        newElement = {
-          id: generateUniqueId(),
-          type: 'chat' as const,
-          x: x - 400,
-          y: y - 450,
-          width: 800,
-          height: 900,
-          messages: []
-        };
-      } else if (tool.type === 'folder') {
-        newElement = {
-          id: generateUniqueId(),
-          type: 'folder' as const,
-          x: x - 175,
-          y: y - 125,
-          width: 350,
-          height: 250,
-          title: `New ${tool.label}`,
-          name: `New ${tool.label}`,
-          description: 'Drop social components here',
-          color: tool.color || '#F59E0B',
-          childIds: [],
-          isExpanded: true,
-          zIndex: 1
-        } as any;
-      } else {
-        newElement = {
-          id: generateUniqueId(),
-          type: 'content' as const,
-          x: x - 150,
-          y: y - 100,
-          width: 300,
-          height: 350,
-          platform: (tool.platform || 'unknown') as Platform,
-          title: `New ${tool.label} Content`,
-          url: 'https://example.com',
-          thumbnail: 'https://via.placeholder.com/300x200'
-        };
-      }
-      
-      if (tool.type === 'chat') {
-        console.log('💬 [Canvas] Creating AI Chat element from drag/drop:', { tool, newElement });
-      } else if (tool.type === 'folder') {
-        console.log('📁 [Canvas] Creating Collections folder from drag/drop:', { tool, newElement });
-      }
-      console.log('🛠️ [Canvas] Creating element from drag/drop:', { tool, newElement });
-      setElements(prev => {
-        const updated = [...prev, newElement];
-        console.log('🛠️ [Canvas] Elements after drag/drop creation:', updated.map(e => ({ id: e.id, type: e.type, title: (e as any).title || 'N/A' })));
-        return updated;
-      });
-    } catch (error) {
-      console.error('Failed to parse tool data:', error);
-    }
-  };
 
   // Handle canvas background click
   const handleCanvasClick = (e: React.MouseEvent) => {
@@ -427,26 +305,6 @@ const CanvasComponent: React.FC<CanvasProps> = ({
     handleElementUpdate(element.id, updates);
   }, [handleElementUpdate]);
 
-  // Smart paste functionality
-  const handleSmartPaste = useCallback(async () => {
-    try {
-      const clipboardText = await navigator.clipboard.readText();
-      const urlType = detectUrlType(clipboardText);
-      
-      if (urlType) {
-        // Get canvas center position or mouse position
-        const rect = canvasRef.current?.getBoundingClientRect();
-        if (!rect) return;
-        
-        const centerX = (rect.width / 2 - viewport.x) / viewport.zoom;
-        const centerY = (rect.height / 2 - viewport.y) / viewport.zoom;
-        
-        await createElementFromUrl(clipboardText, centerX, centerY);
-      }
-    } catch (error) {
-      console.warn('Could not access clipboard:', error);
-    }
-  }, [viewport, createElementFromUrl]);
 
   // Convert elements to the format expected by keyboard shortcuts
   const elementsRecord = useMemo(() => {
@@ -475,7 +333,6 @@ const CanvasComponent: React.FC<CanvasProps> = ({
         handleMultipleElementDelete(ids);
       }
     },
-    onPaste: handleSmartPaste,
     onSelectAll: () => {
       setSelectedElementIds(elements.map(el => el.id));
     }
@@ -568,8 +425,6 @@ const CanvasComponent: React.FC<CanvasProps> = ({
       tabIndex={0}
       onWheel={handleWheel}
       onMouseMove={handleMouseMove}
-      onDragOver={handleDragOver}
-      onDrop={handleDrop}
       onFocus={(e) => {
         // Ensure canvas can receive keyboard events
         e.currentTarget.focus();

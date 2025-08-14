@@ -1,26 +1,35 @@
 import { createClient } from '@supabase/supabase-js'
 
-if (!process.env.SUPABASE_URL) {
-  throw new Error('Missing env.SUPABASE_URL')
+// Check for environment variables with fallback warnings
+const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+if (!supabaseUrl) {
+  console.warn('Warning: SUPABASE_URL not found in environment variables')
 }
-if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-  throw new Error('Missing env.SUPABASE_SERVICE_ROLE_KEY')
+if (!supabaseServiceKey) {
+  console.warn('Warning: SUPABASE_SERVICE_ROLE_KEY not found in environment variables')
+}
+if (!supabaseAnonKey) {
+  console.warn('Warning: NEXT_PUBLIC_SUPABASE_ANON_KEY not found in environment variables')
 }
 
 // Server-side Supabase client with service role key
-export const supabaseAdmin = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false
-    }
-  }
-)
+export const supabaseAdmin = supabaseUrl && supabaseServiceKey 
+  ? createClient(
+      supabaseUrl,
+      supabaseServiceKey,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false
+        }
+      }
+    )
+  : null
 
 // Client-side Supabase client (for use in components)
-export const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+export const supabase = supabaseUrl && supabaseAnonKey
+  ? createClient(supabaseUrl, supabaseAnonKey)
+  : null

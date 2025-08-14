@@ -136,8 +136,9 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
         console.log('Search API Response:', data);
         console.log('Content sample:', data.content[0]);
         
-        // Debug: Log thumbnail URLs in received data
-        console.log('Received thumbnail URLs:', data.content.slice(0, 5).map(c => c.thumbnail_url));
+        // Log successful search with stored thumbnails
+        const validThumbnails = data.content.filter(c => c.thumbnail_url && c.thumbnail_url.length > 0).length;
+        console.log(`✅ Search completed: ${data.content.length} posts, ${validThumbnails} with stored thumbnails`);
         
         setSearchState({
           searchId: data.searchId,
@@ -235,17 +236,17 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
 
   // Render skeleton cards during loading
   const renderSkeletonCards = () => (
-    <div className="grid grid-cols-2 gap-3 mb-4">
+    <div className="grid grid-cols-2 gap-6 mb-4">
       {Array.from({ length: 6 }).map((_, index) => (
-        <div key={index} className="bg-gray-800 rounded-lg overflow-hidden animate-pulse">
-          <div className="w-full h-32 bg-gray-700"></div>
-          <div className="p-3 space-y-2">
-            <div className="h-3 bg-gray-700 rounded w-3/4"></div>
-            <div className="h-3 bg-gray-700 rounded w-1/2"></div>
-            <div className="flex gap-2">
-              <div className="h-2 bg-gray-700 rounded w-12"></div>
-              <div className="h-2 bg-gray-700 rounded w-12"></div>
-              <div className="h-2 bg-gray-700 rounded w-12"></div>
+        <div key={index} className="bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden animate-pulse">
+          <div className="w-full h-48 bg-gray-200 dark:bg-gray-700"></div>
+          <div className="p-4 space-y-3">
+            <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4"></div>
+            <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/2"></div>
+            <div className="flex gap-3">
+              <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-16"></div>
+              <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-16"></div>
+              <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-16"></div>
             </div>
           </div>
         </div>
@@ -265,20 +266,20 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
       
       {/* Panel */}
       <div 
-        className={`fixed right-0 top-0 h-full w-[450px] bg-white dark:bg-[#323230] shadow-2xl transform transition-transform duration-300 ease-out z-50 border-l border-[#e5e3df] dark:border-[#3e3e3c] ${
+        className={`fixed right-0 top-0 h-full w-[600px] bg-white dark:bg-[#323230] shadow-2xl transform transition-transform duration-300 ease-out z-50 border-l border-[#e5e3df] dark:border-[#3e3e3c] ${
           isOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
         <div className="h-full flex flex-col">
           {/* Header */}
-          <div className="flex items-center justify-between p-6 border-b border-gray-800">
-            <h2 className="text-xl font-semibold text-white">Search Creators</h2>
+          <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-800">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Search Creators</h2>
             <button
               onClick={onClose}
-              className="p-2 hover:bg-gray-800 rounded-lg transition-colors"
+              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
               aria-label="Close panel"
             >
-              <X className="w-5 h-5 text-gray-400" />
+              <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
             </button>
           </div>
 
@@ -286,7 +287,7 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
           <div className="flex-1 overflow-y-auto p-6">
             {/* Platform Selector */}
             <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-300 mb-3">Platform</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Platform</label>
               <div className="grid grid-cols-3 gap-2">
                 {PLATFORMS.map((platform) => (
                   <div key={platform.id} className="relative">
@@ -297,15 +298,15 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
                         selectedPlatform === platform.id && platform.active
                           ? 'bg-blue-600 border-blue-600 text-white'
                           : platform.active
-                          ? 'border-gray-600 text-gray-300 hover:border-gray-500'
-                          : 'border-gray-700 text-gray-500 cursor-not-allowed'
+                          ? 'border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-500'
+                          : 'border-gray-300 dark:border-gray-700 text-gray-500 cursor-not-allowed'
                       }`}
                     >
                       {platform.name}
                     </button>
                     {platform.comingSoon && (
                       <div className="absolute inset-0 flex items-center justify-center">
-                        <span className="bg-gray-800 text-xs px-2 py-1 rounded text-gray-400">
+                        <span className="bg-gray-100 dark:bg-gray-800 text-xs px-2 py-1 rounded text-gray-600 dark:text-gray-400">
                           Soon
                         </span>
                       </div>
@@ -317,7 +318,7 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
 
             {/* Search Input */}
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-300 mb-2">Instagram Handle or URL</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Instagram Handle or URL</label>
               <div className="relative">
                 <input
                   type="text"
@@ -325,12 +326,12 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
                   onChange={(e) => setSearchInput(e.target.value)}
                   placeholder="@username or instagram.com/username"
                   disabled={selectedPlatform !== 'instagram'}
-                  className="w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
+                  className="w-full px-4 py-3 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
                   onKeyDown={(e) => e.key === 'Enter' && !isSearchDisabled && handleSearch()}
                 />
                 {selectedPlatform !== 'instagram' && (
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-gray-500 text-sm">Select Instagram to search</span>
+                    <span className="text-gray-600 dark:text-gray-500 text-sm">Select Instagram to search</span>
                   </div>
                 )}
               </div>
@@ -338,12 +339,14 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
 
             {/* Filter Dropdown */}
             <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-300 mb-2">Sort By</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Sort By (Highest to Lowest): <span className="font-semibold text-blue-600 dark:text-blue-400">{FILTERS.find(f => f.value === selectedFilter)?.label}</span>
+              </label>
               <select
                 value={selectedFilter}
                 onChange={(e) => setSelectedFilter(e.target.value as any)}
                 disabled={selectedPlatform !== 'instagram'}
-                className="w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
+                className="w-full px-4 py-3 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
               >
                 {FILTERS.map((filter) => (
                   <option key={filter.value} value={filter.value}>
@@ -357,7 +360,7 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
             <button
               onClick={handleSearch}
               disabled={isSearchDisabled}
-              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2 mb-6"
+              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 dark:disabled:bg-gray-700 disabled:cursor-not-allowed text-white disabled:text-gray-500 dark:disabled:text-gray-400 font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2 mb-6"
             >
               {searchState.status === 'searching' ? (
                 <>
@@ -374,36 +377,36 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
 
             {/* Search Status */}
             {searchState.status === 'searching' && (
-              <div className="mb-6 p-4 bg-blue-900/20 border border-blue-800 rounded-lg">
+              <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
                 <div className="flex items-center gap-3">
-                  <Clock className="w-5 h-5 text-blue-400" />
+                  <Clock className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                   <div>
-                    <p className="text-blue-400 font-medium">Scraping content...</p>
-                    <p className="text-gray-400 text-sm">This may take 1-2 minutes</p>
+                    <p className="text-blue-700 dark:text-blue-400 font-medium">Scraping content...</p>
+                    <p className="text-gray-600 dark:text-gray-400 text-sm">This may take 1-2 minutes</p>
                   </div>
                 </div>
               </div>
             )}
 
             {searchState.status === 'failed' && (
-              <div className="mb-6 p-4 bg-red-900/20 border border-red-800 rounded-lg">
+              <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
                 <div className="flex items-center gap-3">
-                  <XCircle className="w-5 h-5 text-red-400" />
+                  <XCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
                   <div>
-                    <p className="text-red-400 font-medium">Search failed</p>
-                    <p className="text-gray-400 text-sm">{searchState.error}</p>
+                    <p className="text-red-700 dark:text-red-400 font-medium">Search failed</p>
+                    <p className="text-gray-600 dark:text-gray-400 text-sm">{searchState.error}</p>
                   </div>
                 </div>
               </div>
             )}
 
             {searchState.status === 'completed' && searchState.resultsCount === 0 && (
-              <div className="mb-6 p-4 bg-yellow-900/20 border border-yellow-800 rounded-lg">
+              <div className="mb-6 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
                 <div className="flex items-center gap-3">
-                  <AlertCircle className="w-5 h-5 text-yellow-400" />
+                  <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
                   <div>
-                    <p className="text-yellow-400 font-medium">No content found</p>
-                    <p className="text-gray-400 text-sm">Try a different creator or check the handle</p>
+                    <p className="text-yellow-700 dark:text-yellow-400 font-medium">No content found</p>
+                    <p className="text-gray-600 dark:text-gray-400 text-sm">Try a different creator or check the handle</p>
                   </div>
                 </div>
               </div>
@@ -415,89 +418,117 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
             {searchState.status === 'completed' && searchState.results.length > 0 && (
               <div>
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-medium text-white">
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-white">
                     Results ({searchState.resultsCount})
                   </h3>
-                  <CheckCircle className="w-5 h-5 text-green-400" />
+                  <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
                 </div>
                 
                 {/* Content Grid */}
-                <div className="grid grid-cols-2 gap-3 mb-4">
+                <div className="grid grid-cols-2 gap-6 mb-4">
                   {searchState.results.slice(0, displayedResults).map((content, index) => (
-                    <div key={content.id} className="group relative bg-gray-800 rounded-lg overflow-hidden hover:bg-gray-750 transition-colors">
+                    <div key={content.id} className="group relative bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors">
                       {/* Thumbnail */}
-                      <div className="relative aspect-square bg-gray-800">
+                      <div className="relative w-full h-48 bg-gray-100 dark:bg-gray-800">
                         {content.thumbnail_url ? (
-                          <img
-                            src={content.thumbnail_url}
-                            alt={`${content.platform || 'instagram'} content`}
-                            className="w-full h-full object-cover"
-                            loading="lazy"
-                            onError={(e) => {
-                              const target = e.target as HTMLImageElement;
-                              target.onerror = null; // Prevent infinite loop
-                              target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="300" height="300"%3E%3Crect width="300" height="300" fill="%23374151"/%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" dy=".3em" fill="%239CA3AF" font-family="sans-serif" font-size="14"%3ENo Image%3C/text%3E%3C/svg%3E';
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const instagramUrl = content.content_url;
+                              window.open(instagramUrl, '_blank', 'noopener,noreferrer');
                             }}
-                          />
+                            className="w-full h-full group-hover:opacity-90 transition-opacity"
+                            title="Open Instagram post"
+                          >
+                            <img
+                              src={content.thumbnail_url}
+                              alt={`${content.platform || 'instagram'} content`}
+                              className="w-full h-full object-cover"
+                              loading="lazy"
+                              onError={(e) => {
+                                console.warn('❌ Stored thumbnail failed to load:', content.thumbnail_url?.substring(0, 80));
+                                const target = e.target as HTMLImageElement;
+                                target.src = 'https://via.placeholder.com/400x400/1f2937/9ca3af?text=Instagram+Post';
+                              }}
+                            />
+                          </button>
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center bg-gray-700">
-                            <span className="text-gray-400 text-sm">No Image</span>
-                          </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const instagramUrl = content.content_url;
+                              window.open(instagramUrl, '_blank', 'noopener,noreferrer');
+                            }}
+                            className="w-full h-full group-hover:opacity-90 transition-opacity"
+                            title="Open Instagram post"
+                          >
+                            <img
+                              src="https://via.placeholder.com/400x400/1f2937/9ca3af?text=Instagram+Post"
+                              alt={`${content.platform || 'instagram'} content`}
+                              className="w-full h-full object-cover"
+                              loading="lazy"
+                            />
+                          </button>
                         )}
                         
-                        {/* Video indicator if it's video content */}
+                        {/* Video indicator if it's video content - clickable to open original source */}
                         {content.video_url && (
-                          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
-                            <div className="w-12 h-12 bg-black bg-opacity-60 rounded-full flex items-center justify-center">
-                              <Play className="w-6 h-6 text-white ml-0.5" />
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              // Use the content_url which should be the actual Instagram post URL
+                              const instagramUrl = content.content_url;
+                              window.open(instagramUrl, '_blank', 'noopener,noreferrer');
+                            }}
+                            className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 hover:scale-110 transition-transform"
+                            title="Open Instagram post"
+                          >
+                            <div className="w-16 h-16 bg-black bg-opacity-60 hover:bg-opacity-80 rounded-full flex items-center justify-center">
+                              <Play className="w-8 h-8 text-white ml-0.5" />
                             </div>
-                          </div>
+                          </button>
                         )}
                         
                         {/* Add to Canvas Button */}
                         <button
                           onClick={() => handleAddToCanvas(content)}
-                          className="absolute top-2 right-2 w-8 h-8 bg-green-600 hover:bg-green-700 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="absolute top-3 right-3 w-10 h-10 bg-green-600 hover:bg-green-700 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                           title="Add to canvas"
                         >
-                          <Plus className="w-4 h-4" />
+                          <Plus className="w-6 h-6" />
                         </button>
                       </div>
                       
                       {/* Content Info */}
-                      <div className="p-3">
-                        <p className="text-white text-xs font-medium truncate mb-2">
-                          @{searchInput.replace('@', '').replace(/.*instagram\.com\//, '')}
-                        </p>
-                        
+                      <div className="p-4">
                         {/* Caption Preview */}
                         {content.caption && (
-                          <p className="text-gray-300 text-xs mb-2 line-clamp-2 leading-relaxed">
-                            {content.caption.substring(0, 80)}
-                            {content.caption.length > 80 && '...'}
+                          <p className="text-gray-700 dark:text-gray-300 text-sm mb-3 line-clamp-2 leading-relaxed">
+                            {content.caption.substring(0, 120)}
+                            {content.caption.length > 120 && '...'}
                           </p>
                         )}
                         
                         {/* Stats */}
-                        <div className="flex items-center justify-between text-xs text-gray-400">
-                          <div className="flex items-center gap-2">
+                        <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-400">
+                          <div className="flex items-center gap-3">
                             <div className="flex items-center gap-1">
-                              <Heart className="w-3 h-3 text-red-400" />
+                              <Heart className="w-4 h-4 text-red-400" />
                               <span>{formatCount(content.likes || 0)}</span>
                             </div>
                             <div className="flex items-center gap-1">
-                              <MessageCircle className="w-3 h-3 text-blue-400" />
+                              <MessageCircle className="w-4 h-4 text-blue-400" />
                               <span>{formatCount(content.comments || 0)}</span>
                             </div>
                             <div className="flex items-center gap-1">
-                              <Eye className="w-3 h-3 text-gray-400" />
+                              <Eye className="w-4 h-4 text-gray-400" />
                               <span>{formatCount(content.views || 0)}</span>
                             </div>
                           </div>
                           
                           {/* Posted Date */}
                           {content.posted_date && (
-                            <span className="text-xs text-gray-500">
+                            <span className="text-sm text-gray-500 dark:text-gray-500">
                               {new Date(content.posted_date).toLocaleDateString()}
                             </span>
                           )}
@@ -511,7 +542,7 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
                 {displayedResults < searchState.results.length && (
                   <button
                     onClick={() => setDisplayedResults(prev => prev + 10)}
-                    className="w-full bg-gray-800 hover:bg-gray-700 text-white font-medium py-3 px-4 rounded-lg transition-colors"
+                    className="w-full bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-900 dark:text-white font-medium py-3 px-4 rounded-lg transition-colors"
                   >
                     Load More ({searchState.results.length - displayedResults} remaining)
                   </button>

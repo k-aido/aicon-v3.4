@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Youtube, Instagram, Video, ExternalLink, X, Edit, Save, Loader2, AlertCircle } from 'lucide-react';
+import { Youtube, Instagram, Video, ExternalLink, X, Edit, Save, Loader2, AlertCircle, BarChart3 } from 'lucide-react';
 import { ContentElement as ContentElementType, Connection, Platform } from '@/types';
+import { ContentAnalysis, VideoTranscript } from '@/types/analysis';
 import { ConnectionPoint } from './ConnectionPoint';
 import { useElementDrag } from '@/hooks/useElementDrag';
 import { SimpleResize } from './SimpleResize';
@@ -89,6 +90,7 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
   onOpenAnalysisPanel,
   onReanalyze
 }) => {
+  console.log('[ContentElement] Rendering element:', { id: element.id, url: element.url, platform: element.platform });
   const [isHovered, setIsHovered] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editUrl, setEditUrl] = useState(element.url || '');
@@ -97,6 +99,7 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [analysisStatus, setAnalysisStatus] = useState<'pending' | 'transcribing' | 'analyzing' | 'completed' | 'failed'>('pending');
   
   const hasConnections = connections.some(conn => 
     conn.from === element.id || conn.to === element.id
@@ -121,17 +124,37 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
     setShowContextMenu(true);
   };
 
-  // Analyze content by calling the API
-  const analyzeContent = async (url: string) => {
-    if (!url || isAnalyzing) return;
+  // Enhanced analyze content function using the new API
+  const analyzeContent = async () => {
+    if (isAnalyzing) {
+      console.log('[ContentElement] Analysis already in progress, skipping');
+      return;
+    }
+    
+    // Check if already analyzing based on metadata
+    const metadata = (element as any).metadata;
+    if (metadata?.isAnalyzing) {
+      console.log('[ContentElement] Analysis already in progress (metadata), skipping');
+      return;
+    }
+
+    // Get the Supabase content ID from element metadata
+    const supabaseContentId = metadata?.contentId;
+    
+    if (!supabaseContentId) {
+      console.error('[ContentElement] No Supabase content ID found in metadata');
+      setAnalysisError('Content not properly linked to database');
+      return;
+    }
 
     setIsAnalyzing(true);
     setAnalysisError(null);
+    setAnalysisStatus('analyzing');
     
     // Update element metadata to show analyzing state
     onUpdate(element.id, {
       metadata: {
-        ...(element as any).metadata,
+        ...metadata,
         isAnalyzing: true,
         isAnalyzed: false,
         analysisError: null
@@ -139,14 +162,17 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
     } as any);
 
     try {
-      console.log('[ContentElement] Starting content analysis for:', url);
+      console.log('[ContentElement] Starting enhanced content analysis for:', supabaseContentId);
       
-      const response = await fetch('/api/content', {
+      const response = await fetch('/api/content/analyze', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ 
+          contentId: supabaseContentId,
+          forceReanalysis: true 
+        }),
       });
 
       const data = await response.json();
@@ -155,36 +181,36 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
         throw new Error(data.error || `Server error: ${response.status}`);
       }
 
-      console.log('[ContentElement] Content analysis successful:', data);
+      console.log('[ContentElement] Enhanced content analysis successful:', data);
 
-      // Update element with the fetched data
-      onUpdate(element.id, {
-        title: data.title,
-        thumbnail: data.thumbnail,
-        platform: data.platform,
-        url: data.url,
-        metadata: {
-          ...(element as any).metadata,
-          isAnalyzing: false,
-          isAnalyzed: true,
-          analysisError: null,
-          author: data.author,
-          analyzedAt: new Date().toISOString()
-        }
-      } as any);
+      if (data.success && data.analysis) {
+        setAnalysisStatus('completed');
+        
+        // Update element metadata
+        onUpdate(element.id, {
+          metadata: {
+            ...metadata,
+            isAnalyzing: false,
+            isAnalyzed: true,
+            analysisError: null,
+            analyzedAt: new Date().toISOString()
+          }
+        } as any);
+      }
 
       setAnalysisError(null);
       
     } catch (error: any) {
-      console.error('[ContentElement] Content analysis failed:', error);
+      console.error('[ContentElement] Enhanced content analysis failed:', error);
       
       const errorMessage = error.message || 'Failed to analyze content';
       setAnalysisError(errorMessage);
+      setAnalysisStatus('failed');
       
       // Update element metadata with error state
       onUpdate(element.id, {
         metadata: {
-          ...(element as any).metadata,
+          ...metadata,
           isAnalyzing: false,
           isAnalyzed: false,
           analysisError: errorMessage
@@ -197,7 +223,7 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
 
   const handleReanalysis = () => {
     setShowContextMenu(false);
-    analyzeContent(element.url);
+    analyzeContent();
   };
 
   // Sync local state with element metadata
@@ -209,21 +235,34 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
     }
   }, [(element as any).metadata]);
 
-  // Auto-analyze if URL is set but content hasn't been analyzed yet
+  // Auto-analyze if content is linked to Supabase and hasn't been analyzed yet
   useEffect(() => {
     const metadata = (element as any).metadata;
     const hasUrl = element.url && element.url !== 'https://example.com';
+    const hasContentId = metadata?.contentId;
     const notAnalyzed = !metadata?.isAnalyzed && !metadata?.isAnalyzing && !metadata?.analysisError;
     
-    if (hasUrl && notAnalyzed && !isAnalyzing) {
+    console.log('[ContentElement] Auto-analysis check:', {
+      elementId: element.id,
+      hasUrl,
+      hasContentId,
+      notAnalyzed,
+      isAnalyzing,
+      shouldTrigger: hasUrl && hasContentId && notAnalyzed && !isAnalyzing
+    });
+    
+    if (hasUrl && hasContentId && notAnalyzed && !isAnalyzing) {
+      console.log('[ContentElement] ✅ Triggering auto-analysis for element:', element.id);
       // Delay auto-analysis to avoid conflicts during element creation
       const timer = setTimeout(() => {
-        analyzeContent(element.url);
-      }, 1000);
+        analyzeContent();
+      }, 2000); // Slightly longer delay to ensure Supabase record is ready
       
       return () => clearTimeout(timer);
+    } else {
+      console.log('[ContentElement] ❌ Skipping auto-analysis - conditions not met');
     }
-  }, [element.url, isAnalyzing]);
+  }, [element.url, (element as any).metadata?.contentId, (element as any).metadata?.isAnalyzing, (element as any).metadata?.isAnalyzed]);
 
   // Close context menu when clicking outside
   useEffect(() => {
@@ -239,9 +278,20 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
     onUpdate(element.id, { width: newWidth, height: newHeight });
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     const urlChanged = editUrl !== element.url;
+    const isValidUrl = editUrl && editUrl !== 'https://example.com' && editUrl.startsWith('http');
     
+    console.log('[ContentElement] handleSaveEdit called:', {
+      elementId: element.id,
+      oldUrl: element.url,
+      newUrl: editUrl,
+      platform: editPlatform,
+      urlChanged,
+      isValidUrl
+    });
+    
+    // Update element first
     onUpdate(element.id, { 
       url: editUrl, 
       platform: editPlatform,
@@ -251,16 +301,95 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
         ...(element as any).metadata,
         // Reset analysis state if URL changed
         isAnalyzed: urlChanged ? false : (element as any).metadata?.isAnalyzed,
-        analysisError: urlChanged ? null : (element as any).metadata?.analysisError
+        analysisError: urlChanged ? null : (element as any).metadata?.analysisError,
+        contentId: urlChanged ? null : (element as any).metadata?.contentId // Reset content ID if URL changed
       }
     } as any);
     setIsEditing(false);
     
-    // Trigger analysis if URL was changed and is valid
-    if (urlChanged && editUrl && editUrl !== 'https://example.com') {
-      setTimeout(() => {
-        analyzeContent(editUrl);
-      }, 500); // Short delay to ensure element is updated
+    // Create Supabase record if URL was changed to a valid URL
+    console.log('[ContentElement] Checking conditions for Supabase creation:', {
+      urlChanged,
+      isValidUrl,
+      willCreateRecord: urlChanged && isValidUrl,
+      oldUrl: element.url,
+      newUrl: editUrl
+    });
+    
+    if (urlChanged && isValidUrl) {
+      console.log('[ContentElement] ✅ CONDITIONS MET - URL changed to valid URL, creating Supabase record');
+      
+      try {
+        const response = await fetch('/api/content/create', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            url: editUrl,
+            platform: editPlatform.toLowerCase(),
+            title: `${editPlatform.charAt(0).toUpperCase() + editPlatform.slice(1)} Content`,
+            thumbnail: `https://via.placeholder.com/300x200?text=${editPlatform}&bg=666&color=fff`,
+            canvasElementId: element.id
+          }),
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+          console.log('[ContentElement] Supabase content record created:', data.contentId);
+          
+          // Update element with Supabase content ID
+          onUpdate(element.id, {
+            metadata: {
+              ...(element as any).metadata,
+              contentId: data.contentId
+            }
+          } as any);
+          
+          // Trigger analysis after a short delay
+          setTimeout(() => {
+            analyzeContent();
+          }, 1000);
+        } else {
+          console.error('[ContentElement] Failed to create Supabase record:', data.error);
+          onUpdate(element.id, {
+            metadata: {
+              ...(element as any).metadata,
+              analysisError: `Failed to link content: ${data.error || 'Unknown error'}`
+            }
+          } as any);
+        }
+      } catch (error) {
+        console.error('[ContentElement] Error creating Supabase record:', error);
+        onUpdate(element.id, {
+          metadata: {
+            ...(element as any).metadata,
+            analysisError: `Network error: ${error instanceof Error ? error.message : 'Unknown error'}`
+          }
+        } as any);
+      }
+    } else {
+      console.log('[ContentElement] ❌ CONDITIONS NOT MET for Supabase creation:', {
+        reason: !urlChanged ? 'URL did not change' : 'URL is not valid',
+        urlChanged,
+        isValidUrl,
+        currentMetadata: (element as any).metadata
+      });
+      
+      if (!urlChanged && isValidUrl) {
+        // URL didn't change but it's valid, trigger analysis if we have contentId
+        const metadata = (element as any).metadata;
+        console.log('[ContentElement] Checking for existing contentId to trigger analysis:', metadata?.contentId);
+        if (metadata?.contentId) {
+          console.log('[ContentElement] Found existing contentId, triggering analysis');
+          setTimeout(() => {
+            analyzeContent();
+          }, 500);
+        } else {
+          console.log('[ContentElement] No contentId found, cannot trigger analysis');
+        }
+      }
     }
   };
 
@@ -277,7 +406,7 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       className={`absolute ${
-        isDragging ? 'cursor-grabbing' : 'cursor-grab'
+        isDragging ? 'cursor-grabbing' : (isHovered ? 'cursor-pointer' : 'cursor-grab')
       } pointer-events-auto`}
       style={{
         transform: `translate(${localPosition.x}px, ${localPosition.y}px)`,
@@ -340,12 +469,25 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
               <button 
                 onClick={(e) => {
                   e.stopPropagation();
+                  console.log('[ContentElement] Edit button clicked, toggling edit state:', { elementId: element.id, currentState: isEditing, newState: !isEditing });
                   setIsEditing(!isEditing);
                 }}
                 className="p-1 hover:bg-gray-700 rounded transition-colors outline-none focus:outline-none"
                 title="Edit content"
               >
                 <Edit className="w-4 h-4 text-gray-400" />
+              </button>
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onOpenAnalysisPanel) {
+                    onOpenAnalysisPanel(element);
+                  }
+                }}
+                className="p-1 hover:bg-gray-700 rounded transition-colors outline-none focus:outline-none"
+                title="View analysis"
+              >
+                <BarChart3 className="w-4 h-4 text-gray-400" />
               </button>
               <button 
                 onClick={(e) => {
@@ -396,7 +538,11 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
                 />
               </div>
               <button
-                onClick={handleSaveEdit}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  console.log('[ContentElement] Save button clicked');
+                  handleSaveEdit();
+                }}
                 className="bg-blue-600 hover:bg-blue-700 text-white rounded px-3 py-1 text-sm flex items-center gap-1 outline-none focus:outline-none"
               >
                 <Save className="w-3 h-3" />
@@ -413,29 +559,112 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
                 <p className="text-red-400 text-xs mb-2">Analysis Failed</p>
                 <p className="text-gray-400 text-xs leading-tight">{analysisError}</p>
                 <button
-                  onClick={() => analyzeContent(element.url)}
+                  onClick={() => analyzeContent()}
                   className="mt-2 px-2 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded transition-colors"
                   disabled={isAnalyzing}
                 >
                   Retry
                 </button>
               </div>
-            ) : isAnalyzing ? (
-              <div className="w-full h-full flex flex-col items-center justify-center">
-                <Loader2 className="w-8 h-8 text-yellow-500 animate-spin mb-2" />
-                <p className="text-yellow-400 text-xs">Analyzing content...</p>
+            ) : isAnalyzing || analysisStatus === 'transcribing' ? (
+              <div className="w-full h-full flex flex-col items-center justify-center relative">
+                {/* Background thumbnail with overlay */}
+                {element.thumbnail && (
+                  <img 
+                    src={element.thumbnail} 
+                    alt={element.title}
+                    className="absolute inset-0 w-full h-full object-cover opacity-20"
+                  />
+                )}
+                {/* Analysis overlay */}
+                <div className="relative z-10 flex flex-col items-center justify-center p-4 bg-black bg-opacity-60 rounded-lg">
+                  <Loader2 className="w-10 h-10 text-blue-400 animate-spin mb-3" />
+                  <div className="text-center">
+                    <p className="text-blue-400 text-sm font-medium mb-1">
+                      {analysisStatus === 'transcribing' ? 'Extracting Audio...' : 'Analyzing Content...'}
+                    </p>
+                    <p className="text-gray-300 text-xs">
+                      {analysisStatus === 'transcribing' 
+                        ? 'Getting video transcript' 
+                        : 'AI analyzing hook, body & CTA'
+                      }
+                    </p>
+                  </div>
+                </div>
+                {/* Progress indicator */}
+                <div className="absolute bottom-2 left-2 right-2">
+                  <div className="w-full bg-gray-700 rounded-full h-1">
+                    <div className="bg-blue-500 h-1 rounded-full animate-pulse" style={{width: '60%'}}></div>
+                  </div>
+                </div>
               </div>
             ) : (
-              <img 
-                src={element.thumbnail} 
-                alt={element.title}
-                className="w-full h-full object-cover"
-              />
+              <div className="relative">
+                <img 
+                  src={element.thumbnail} 
+                  alt={element.title}
+                  className="w-full h-full object-cover"
+                />
+                {/* Analysis completed badge */}
+                {(element as any).metadata?.isAnalyzed && (
+                  <div className="absolute top-2 right-2 bg-green-500 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1">
+                    <BarChart3 className="w-3 h-3" />
+                    Analyzed
+                  </div>
+                )}
+              </div>
             )}
           </div>
           
           {/* Title */}
-          <h3 className="text-white text-sm font-medium line-clamp-2">{element.title}</h3>
+          <div className="space-y-1">
+            <h3 className="text-white text-sm font-medium line-clamp-2">{element.title}</h3>
+            
+            {/* Analysis Status Bar */}
+            {(isAnalyzing || analysisStatus === 'transcribing') && (
+              <div className="flex items-center gap-2 text-xs">
+                <div className="flex items-center gap-1 text-blue-400">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  <span>
+                    {analysisStatus === 'transcribing' ? 'Transcribing...' : 'Analyzing...'}
+                  </span>
+                </div>
+                <div className="flex-1 bg-gray-700 rounded-full h-1">
+                  <div className="bg-blue-500 h-1 rounded-full transition-all duration-1000 animate-pulse" 
+                       style={{width: analysisStatus === 'transcribing' ? '30%' : '70%'}}></div>
+                </div>
+              </div>
+            )}
+            
+            {/* Analysis Completed Status */}
+            {(element as any).metadata?.isAnalyzed && !isAnalyzing && analysisStatus !== 'transcribing' && (
+              <div className="flex items-center gap-1 text-xs text-green-400">
+                <BarChart3 className="w-3 h-3" />
+                <span>Ready for analysis review</span>
+                {isHovered && (
+                  <span className="text-gray-400 ml-1 transition-opacity duration-200">
+                    • Double-click to view
+                  </span>
+                )}
+              </div>
+            )}
+            
+            {/* Double-click hint for pending analysis */}
+            {!isAnalyzing && analysisStatus === 'pending' && isHovered && (
+              <div className="flex items-center gap-1 text-xs text-gray-400 transition-opacity duration-200">
+                <BarChart3 className="w-3 h-3" />
+                <span>Double-click to view analysis</span>
+              </div>
+            )}
+            
+            {/* Analysis Error Status */}
+            {analysisError && !isAnalyzing && (
+              <div className="flex items-center gap-1 text-xs text-red-400">
+                <AlertCircle className="w-3 h-3" />
+                <span>Analysis failed - click to retry</span>
+              </div>
+            )}
+          </div>
         </div>
       </SimpleResize>
 
@@ -463,6 +692,7 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
           </button>
         </div>
       )}
+
     </div>
   );
 });

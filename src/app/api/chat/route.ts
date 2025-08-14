@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
+import { UsageTrackingService } from '@/services/usageTrackingService';
+import { TokenUsage } from '@/types/database';
+
 // Initialize AI clients with optional environment variables
 let openai: OpenAI | null = null;
 let anthropic: Anthropic | null = null;
@@ -31,7 +34,17 @@ if (process.env.ANTHROPIC_API_KEY) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { messages, model, connectedContent } = await request.json();
+    const { 
+      messages, 
+      model, 
+      connectedContent,
+      // New fields for tracking
+      accountId,
+      projectId,
+      chatInterfaceId,
+      threadId,
+      messageId
+    } = await request.json();
 
     console.log(`[API] Chat request - Model: ${model}, Messages: ${messages.length}, Connected Content: ${connectedContent?.length || 0}`);
 
@@ -57,6 +70,8 @@ export async function POST(request: NextRequest) {
     }
 
     let response;
+    let usage: TokenUsage | null = null;
+    const startTime = Date.now();
 
     console.log(`[API] Attempting to use ${selectedModel.provider} with model ${selectedModel.model}`);
     console.log(`[API] OpenAI client available:`, !!openai);
@@ -76,6 +91,15 @@ export async function POST(request: NextRequest) {
         });
 
         response = completion.choices[0]?.message?.content || 'No response generated';
+        
+        // Extract usage data
+        if (completion.usage) {
+          usage = {
+            prompt_tokens: completion.usage.prompt_tokens,
+            completion_tokens: completion.usage.completion_tokens,
+            total_tokens: completion.usage.total_tokens
+          };
+        }
       } catch (error: any) {
         console.error('OpenAI API error:', error);
         
@@ -115,6 +139,15 @@ export async function POST(request: NextRequest) {
         response = completion.content[0].type === 'text' 
           ? completion.content[0].text 
           : 'No response generated';
+          
+        // Extract usage data
+        if (completion.usage) {
+          usage = {
+            prompt_tokens: completion.usage.input_tokens,
+            completion_tokens: completion.usage.output_tokens,
+            total_tokens: completion.usage.input_tokens + completion.usage.output_tokens
+          };
+        }
       } catch (error: any) {
         console.error('Anthropic API error:', error);
         
@@ -150,7 +183,58 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ content: response });
+    const responseTime = Date.now() - startTime;
+
+    console.log('[API] Chat completion tracking data:', {
+      hasUsage: !!usage,
+      usage,
+      accountId,
+      projectId,
+      messageId,
+      chatInterfaceId,
+      threadId
+    });
+
+    // Track usage if we have the necessary data
+    if (usage && accountId && projectId && messageId) {
+      console.log('[API] Tracking message usage for billing...');
+      await UsageTrackingService.trackMessageUsage({
+        messageId,
+        accountId,
+        projectId,
+        model,
+        promptTokens: usage.prompt_tokens,
+        completionTokens: usage.completion_tokens
+      });
+    }
+
+    // Log API usage for analytics
+    if (projectId) {
+      await UsageTrackingService.logApiUsage({
+        accountId,
+        serviceName: selectedModel.provider,
+        endpoint: '/api/chat',
+        projectId,
+        chatInterfaceId,
+        threadId,
+        messageId,
+        model: selectedModel.model,
+        promptTokens: usage?.prompt_tokens,
+        completionTokens: usage?.completion_tokens,
+        responseTimeMs: responseTime,
+        statusCode: 200,
+        metadata: {
+          modelRequested: model,
+          hasConnectedContent: (connectedContent?.length || 0) > 0
+        }
+      });
+    }
+
+    return NextResponse.json({ 
+      content: response,
+      model: selectedModel.model,
+      usage: usage || undefined
+    });
   } catch (error: any) {
     console.error('Chat API error:', error);
     return NextResponse.json(

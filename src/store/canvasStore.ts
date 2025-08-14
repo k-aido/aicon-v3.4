@@ -1,4 +1,20 @@
 import { create } from 'zustand';
+import { ChatEventLogger } from '../utils/chatEventLogger';
+
+// Throttling for update events to prevent spam
+const updateThrottleMap = new Map<string, number>();
+const THROTTLE_DELAY = 2000; // 2 seconds between update logs
+
+const shouldLogUpdate = (elementId: string): boolean => {
+  const now = Date.now();
+  const lastLog = updateThrottleMap.get(elementId) || 0;
+  
+  if (now - lastLog > THROTTLE_DELAY) {
+    updateThrottleMap.set(elementId, now);
+    return true;
+  }
+  return false;
+};
 
 interface Element {
   id: string | number;  // Accept both string and number IDs for compatibility
@@ -101,6 +117,34 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         afterElements,
         elementsCount: { before: beforeElements.length, after: afterElements.length }
       });
+
+      // Create chat interface in database ONCE per element
+      if (element.type === 'chat') {
+        const canvasId = state.workspaceId || state.canvasTitle || 'unknown-canvas';
+        console.log('🚀 [canvasStore] NEW VERSION v2 - Creating chat interface in database for element:', element.id);
+        
+        ChatEventLogger.logChatInterfaceCreated(
+          String(element.id),
+          { x: element.x, y: element.y },
+          { width: element.width, height: element.height },
+          canvasId, // project_id is canvas ID (required)
+          undefined, // userId - can be added later if needed
+          'gpt-5-mini', // default model
+          `Chat ${element.id}` // name
+        ).then(result => {
+          if (result.success && result.chatInterfaceId) {
+            console.log('✅ Chat interface created with ID:', result.chatInterfaceId);
+            // Update the element with the database ID
+            set((state) => ({
+              elements: state.elements.map(el => 
+                el.id === element.id 
+                  ? { ...el, metadata: { ...el.metadata, dbId: result.chatInterfaceId } }
+                  : el
+              )
+            }));
+          }
+        }).catch(err => console.error('Failed to create chat interface:', err));
+      }
       
       return {
         elements: newElements
@@ -111,6 +155,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   updateElement: (id, updates) => {
     set((state) => {
       const beforeElements = state.elements.map(e => ({ id: e.id, type: e.type, title: e.title || 'N/A' }));
+      const elementToUpdate = state.elements.find(el => el.id === id);
       const updatedElements = state.elements.map(el => 
         el.id === id ? { ...el, ...updates } : el
       );
@@ -123,6 +168,39 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         afterElements,
         elementsCount: { before: beforeElements.length, after: afterElements.length }
       });
+
+      // Log position/dimension updates for chat interfaces (THROTTLED to prevent spam)
+      if (elementToUpdate?.type === 'chat' && shouldLogUpdate(String(id))) {
+        const canvasId = state.workspaceId || state.canvasTitle || 'unknown-canvas';
+        
+        // Only log significant position changes (throttled to 1 per 2 seconds)
+        if (updates.x !== undefined || updates.y !== undefined) {
+          const newPosition = {
+            x: updates.x !== undefined ? updates.x : elementToUpdate.x,
+            y: updates.y !== undefined ? updates.y : elementToUpdate.y
+          };
+          console.log('📍 [canvasStore] Logging THROTTLED position update for chat:', id);
+          ChatEventLogger.updateChatInterfacePosition(
+            String(id),
+            newPosition,
+            canvasId
+          ).catch(err => console.error('Failed to log position update:', err));
+        }
+
+        // Only log significant dimension changes (throttled to 1 per 2 seconds)
+        if (updates.width !== undefined || updates.height !== undefined) {
+          const newDimensions = {
+            width: updates.width !== undefined ? updates.width : elementToUpdate.width,
+            height: updates.height !== undefined ? updates.height : elementToUpdate.height
+          };
+          console.log('📏 [canvasStore] Logging THROTTLED dimension update for chat:', id);
+          ChatEventLogger.updateChatInterfaceDimensions(
+            String(id),
+            newDimensions,
+            canvasId
+          ).catch(err => console.error('Failed to log dimension update:', err));
+        }
+      }
       
       return {
         elements: updatedElements
@@ -133,6 +211,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   deleteElement: (id) => {
     set((state) => {
       const beforeElements = state.elements.map(e => ({ id: e.id, type: e.type, title: e.title || 'N/A' }));
+      const elementToDelete = state.elements.find(el => el.id === id);
       const filteredElements = state.elements.filter(el => el.id !== id);
       const afterElements = filteredElements.map(e => ({ id: e.id, type: e.type, title: e.title || 'N/A' }));
       
@@ -142,6 +221,52 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         afterElements,
         elementsRemoved: beforeElements.length - afterElements.length
       });
+
+      // Log chat interface deletion event ONCE per element
+      if (elementToDelete?.type === 'chat') {
+        const canvasId = state.workspaceId || state.canvasTitle || 'unknown-canvas';
+        console.log('🗑️ [canvasStore] Logging ONE-TIME chat interface deletion for element:', id);
+        
+        // Clean up throttle map
+        updateThrottleMap.delete(String(id));
+        
+        ChatEventLogger.logChatInterfaceDeleted(
+          String(id),
+          canvasId
+        ).catch(err => console.error('Failed to log chat interface deletion:', err));
+      }
+      
+      // Delete Supabase content record for content elements
+      if (elementToDelete?.type === 'content') {
+        const metadata = (elementToDelete as any).metadata;
+        const contentId = metadata?.contentId;
+        
+        if (contentId) {
+          console.log('🗑️ [canvasStore] Deleting Supabase content record for element:', { elementId: id, contentId });
+          
+          // Call API to delete content record
+          fetch('/api/content/delete', {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ contentId }),
+          })
+          .then(response => response.json())
+          .then(data => {
+            if (data.success) {
+              console.log('✅ [canvasStore] Successfully deleted Supabase content record:', contentId);
+            } else {
+              console.error('❌ [canvasStore] Failed to delete Supabase content record:', data.error);
+            }
+          })
+          .catch(err => {
+            console.error('❌ [canvasStore] Error deleting Supabase content record:', err);
+          });
+        } else {
+          console.log('ℹ️ [canvasStore] Content element has no contentId, skipping Supabase deletion');
+        }
+      }
       
       return {
         elements: filteredElements,
@@ -225,16 +350,33 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       .filter(conn => conn.to === chatId)
       .map(conn => conn.from);
     
-    const connectedElements = state.elements.filter(el => 
-      connectedIds.includes(el.id) && el.type === 'content'
-    );
+    let connectedElements: Element[] = [];
+    
+    // Process each connected element
+    connectedIds.forEach(id => {
+      const element = state.elements.find(el => el.id === id);
+      if (!element) return;
+      
+      if (element.type === 'content') {
+        // Direct content element
+        connectedElements.push(element);
+      } else if (element.type === 'folder') {
+        // Folder/collection - include all its child content
+        const folderContents = state.elements.filter(el => 
+          element.childIds?.includes(el.id) && el.type === 'content'
+        );
+        connectedElements.push(...folderContents);
+        console.log(`📁 [canvasStore] Collection "${element.name}" connected with ${folderContents.length} content items`);
+      }
+    });
     
     console.log('🔗 [canvasStore] getConnectedContent filter operation:', { 
       chatId, 
       connectedIds, 
       totalElements: state.elements.length,
-      connectedElements: connectedElements.map(e => ({ id: e.id, type: e.type, title: e.title || 'N/A' })),
-      connectedCount: connectedElements.length
+      connectedElements: connectedElements.map(e => ({ id: e.id, type: e.type, title: e.title || e.name || 'N/A' })),
+      connectedCount: connectedElements.length,
+      foldersConnected: connectedIds.filter(id => state.elements.find(el => el.id === id)?.type === 'folder').length
     });
     
     return connectedElements;

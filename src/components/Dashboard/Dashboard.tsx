@@ -108,10 +108,21 @@ export const Dashboard: React.FC = () => {
 
   const handleDelete = async (canvasId: string) => {
     try {
-      await canvasPersistence.deleteWorkspace(canvasId);
-      await loadCanvases();
+      console.log('[Dashboard] Attempting to delete canvas:', canvasId);
+      
+      // Use the improved deleteWorkspace method with better error handling
+      const success = await canvasPersistence.deleteWorkspace(canvasId);
+      
+      if (success) {
+        console.log('[Dashboard] Canvas deleted successfully, refreshing list...');
+        await loadCanvases();
+      } else {
+        console.error('[Dashboard] Failed to delete canvas - check console for detailed error logs');
+        alert('Failed to delete canvas. Please check the console for details or contact support.');
+      }
     } catch (error) {
-      console.error('Error deleting canvas:', error);
+      console.error('[Dashboard] Error deleting canvas:', error);
+      alert('Error deleting canvas. Please try again.');
     }
   };
 

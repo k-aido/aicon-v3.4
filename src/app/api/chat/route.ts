@@ -68,28 +68,7 @@ async function getUserIdFromCookies(): Promise<string | null> {
 // Helper function to check and deduct credits
 async function checkAndDeductCredits(accountId: string): Promise<{ success: boolean; error?: string }> {
   try {
-    // Get current credit balance from the view
-    const { data: balance, error: balanceError } = await supabase
-      .from('account_credit_balance')
-      .select('*')
-      .eq('account_id', accountId)
-      .single();
-
-    if (balanceError || !balance) {
-      console.error('[API] Error fetching credit balance:', balanceError);
-      return { success: false, error: 'Unable to fetch credit balance' };
-    }
-
-    // Check if sufficient credits
-    const totalAvailable = balance.credits_remaining || 0;
-    if (totalAvailable < CHAT_COMPLETION_CREDITS) {
-      return { 
-        success: false, 
-        error: `Insufficient credits. You need ${CHAT_COMPLETION_CREDITS} credits but only have ${totalAvailable} available.` 
-      };
-    }
-
-    // Get account details for credit deduction
+    // Get account details for credit check and deduction
     const { data: account, error: accountError } = await supabase
       .from('accounts')
       .select('promotional_credits, monthly_credits_remaining')
@@ -97,7 +76,24 @@ async function checkAndDeductCredits(accountId: string): Promise<{ success: bool
       .single();
 
     if (accountError || !account) {
+      console.error('[API] Error fetching account:', accountError);
       return { success: false, error: 'Unable to fetch account details' };
+    }
+
+    // Check if sufficient credits (check actual fields, not the view)
+    const totalAvailable = (account.promotional_credits || 0) + (account.monthly_credits_remaining || 0);
+    console.log('[API] Credit check:', { 
+      promotional: account.promotional_credits, 
+      monthly: account.monthly_credits_remaining, 
+      total: totalAvailable,
+      required: CHAT_COMPLETION_CREDITS 
+    });
+    
+    if (totalAvailable < CHAT_COMPLETION_CREDITS) {
+      return { 
+        success: false, 
+        error: `Insufficient credits. You need ${CHAT_COMPLETION_CREDITS} credits but only have ${totalAvailable} available.` 
+      };
     }
 
     // Calculate credit deduction (promotional first, then monthly)

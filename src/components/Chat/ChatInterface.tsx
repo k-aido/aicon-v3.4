@@ -5,6 +5,7 @@ import { Loader2, MessageSquare, Plus, Send, X, ChevronLeft, ChevronRight, Light
 import { ChatElement, Connection, ContentElement, Message, Model } from '@/types';
 import { useChatStore } from '@/store/chatStore';
 import { createBrowserClient } from '@/lib/supabase/client';
+import { InsufficientCreditsModal } from '@/components/Modal/InsufficientCreditsModal';
 
 interface ChatInterfaceProps {
   element: ChatElement;
@@ -57,6 +58,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [showModelDropdown, setShowModelDropdown] = useState(false);
   const [selectedModel, setSelectedModel] = useState('gpt-5-mini');
   const [chatInterfaceId, setChatInterfaceId] = useState<string | null>(null);
+  const [showCreditsModal, setShowCreditsModal] = useState(false);
+  const [creditsModalData, setCreditsModalData] = useState({ needed: 100, available: 0 });
   
   // Get current model info for provider branding
   const currentModel = LLM_MODELS.find(m => m.id === selectedModel) || LLM_MODELS[4];
@@ -222,6 +225,37 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
       if (!response.ok) {
         const errorData = await response.json();
+        
+        // Handle insufficient credits specifically
+        if (response.status === 402) {
+          // Extract credit info from error message if available
+          const match = errorData.error?.match(/You need (\d+) credits but only have (\d+) available/);
+          if (match) {
+            setCreditsModalData({
+              needed: parseInt(match[1]),
+              available: parseInt(match[2])
+            });
+          } else {
+            setCreditsModalData({
+              needed: 100,
+              available: 0
+            });
+          }
+          
+          // Remove the user message from the conversation since it wasn't processed
+          const revertedConversations = conversations.map(conv =>
+            conv.id === activeConversationId
+              ? { ...conv, messages: messages } // Revert to original messages
+              : conv
+          );
+          setStoreConversations(element.id, revertedConversations);
+          
+          // Show the modal
+          setShowCreditsModal(true);
+          setIsLoading(false);
+          return; // Exit early, don't throw error
+        }
+        
         throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
       }
 
@@ -268,29 +302,27 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       console.error('Error calling AI API:', error);
       let errorContent = error instanceof Error ? error.message : 'Unknown error';
       
-      // Check if it's a credit-related error
-      if (errorContent.includes('Insufficient credits')) {
-        errorContent = `⚠️ ${errorContent}\n\nPlease upgrade your plan or wait for your monthly credits to reset.`;
+      // Don't show credit errors in chat, modal handles them
+      if (!errorContent.includes('Insufficient credits')) {
+        const errorMessage = {
+          id: Date.now() + 1,
+          role: 'assistant' as const,
+          content: errorContent,
+          timestamp: new Date()
+        };
+        const finalMessages = [...updatedMessages, errorMessage];
+        const finalConversations = conversations.map(conv => 
+          conv.id === activeConversationId 
+            ? { 
+                ...conv, 
+                messages: finalMessages,
+                lastMessageAt: new Date(),
+                title: conv.title === 'New Chat' ? generateConversationTitle([userMessage]) : conv.title
+              }
+            : conv
+        );
+        setStoreConversations(element.id, finalConversations);
       }
-      
-      const errorMessage = {
-        id: Date.now() + 1,
-        role: 'assistant' as const,
-        content: errorContent,
-        timestamp: new Date()
-      };
-      const finalMessages = [...updatedMessages, errorMessage];
-      const finalConversations = conversations.map(conv => 
-        conv.id === activeConversationId 
-          ? { 
-              ...conv, 
-              messages: finalMessages,
-              lastMessageAt: new Date(),
-              title: conv.title === 'New Chat' ? generateConversationTitle([userMessage]) : conv.title
-            }
-          : conv
-      );
-      setStoreConversations(element.id, finalConversations);
     } finally {
       setIsLoading(false);
     }
@@ -561,6 +593,14 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
           </div>
         </div>
       </div>
+      
+      {/* Insufficient Credits Modal */}
+      <InsufficientCreditsModal
+        isOpen={showCreditsModal}
+        onClose={() => setShowCreditsModal(false)}
+        creditsNeeded={creditsModalData.needed}
+        creditsAvailable={creditsModalData.available}
+      />
     </div>
   );
 };

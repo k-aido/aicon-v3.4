@@ -12,7 +12,8 @@ import {
   Zap,
   TrendingUp,
   Users,
-  Building
+  Building,
+  ArrowLeft
 } from 'lucide-react';
 import { PLANS } from '@/lib/stripe/plans';
 import { BillingUsage, BillingSubscription } from '@/types/billing';
@@ -273,6 +274,13 @@ function BillingPageContent() {
         
         {/* Header */}
         <div className="mb-8">
+          <button
+            onClick={() => router.push('/dashboard')}
+            className="mb-4 flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Back to Dashboard</span>
+          </button>
           <h1 className="text-3xl font-bold text-gray-900">Billing & Subscription</h1>
           <p className="mt-2 text-gray-600">Manage your subscription and track credit usage</p>
         </div>

@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/components/providers/auth-provider';
 import { createClient } from '@supabase/supabase-js';
-import { Loader2, Save, User, CreditCard, Link as LinkIcon } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Loader2, Save, User, CreditCard, Link as LinkIcon, ArrowLeft } from 'lucide-react';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -31,6 +32,7 @@ interface UserProfile {
 
 export default function SettingsPage() {
   const { user } = useAuth();
+  const router = useRouter();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -132,6 +134,13 @@ export default function SettingsPage() {
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+        <button
+          onClick={() => router.push('/dashboard')}
+          className="mb-4 flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>Back to Dashboard</span>
+        </button>
         <div className="bg-white shadow rounded-lg">
           {/* Header */}
           <div className="px-6 py-4 border-b border-gray-200">

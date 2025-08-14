@@ -153,6 +153,9 @@ export async function POST(request: NextRequest) {
       case 'avatar_generation':
         creditsNeeded = CREDIT_USAGE_RATES.avatar_generation_per_minute * amount;
         break;
+      case 'chat_completion':
+        creditsNeeded = CREDIT_USAGE_RATES.chat_completion * amount;
+        break;
       default:
         return NextResponse.json(
           { error: 'Invalid usage type' },

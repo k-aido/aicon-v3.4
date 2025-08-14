@@ -61,6 +61,7 @@ export interface CreditUsageRate {
   script_generation: number;
   voice_generation_per_minute: number;
   avatar_generation_per_minute: number;
+  chat_completion: number;
 }
 
 export const CREDIT_USAGE_RATES: CreditUsageRate = {
@@ -68,6 +69,7 @@ export const CREDIT_USAGE_RATES: CreditUsageRate = {
   script_generation: 5,
   voice_generation_per_minute: 10,
   avatar_generation_per_minute: 20,
+  chat_completion: 100, // Each chat completion costs 100 credits
 };
 
 export const PLAN_LIMITS = {

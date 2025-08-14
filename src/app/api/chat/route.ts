@@ -1,9 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
+import { createClient } from '@supabase/supabase-js';
+import { cookies } from 'next/headers';
+
 // Initialize AI clients with optional environment variables
 let openai: OpenAI | null = null;
 let anthropic: Anthropic | null = null;
+
+// Initialize Supabase client for server-side operations
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
+  }
+);
+
+// Credit cost per chat completion (as specified by requirements)
+const CHAT_COMPLETION_CREDITS = 100;
 
 // Debug environment variables
 console.log('[API] Environment check:');
@@ -29,11 +47,174 @@ if (process.env.ANTHROPIC_API_KEY) {
   console.log('[API] Anthropic API key not found');
 }
 
+// Helper function to get user ID from cookies
+async function getUserIdFromCookies(): Promise<string | null> {
+  const cookieStore = await cookies();
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const authTokenKey = `sb-${supabaseUrl.split('//')[1]?.split('.')[0]}-auth-token`;
+  const authToken = cookieStore.get(authTokenKey);
+  
+  if (authToken?.value) {
+    try {
+      const tokenData = JSON.parse(authToken.value);
+      return tokenData.user?.id || null;
+    } catch (e) {
+      console.error('Failed to parse auth token:', e);
+    }
+  }
+  return null;
+}
+
+// Helper function to check and deduct credits
+async function checkAndDeductCredits(accountId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    // Get current credit balance from the view
+    const { data: balance, error: balanceError } = await supabase
+      .from('account_credit_balance')
+      .select('*')
+      .eq('account_id', accountId)
+      .single();
+
+    if (balanceError || !balance) {
+      console.error('[API] Error fetching credit balance:', balanceError);
+      return { success: false, error: 'Unable to fetch credit balance' };
+    }
+
+    // Check if sufficient credits
+    const totalAvailable = balance.credits_remaining || 0;
+    if (totalAvailable < CHAT_COMPLETION_CREDITS) {
+      return { 
+        success: false, 
+        error: `Insufficient credits. You need ${CHAT_COMPLETION_CREDITS} credits but only have ${totalAvailable} available.` 
+      };
+    }
+
+    // Get account details for credit deduction
+    const { data: account, error: accountError } = await supabase
+      .from('accounts')
+      .select('promotional_credits, monthly_credits_remaining')
+      .eq('id', accountId)
+      .single();
+
+    if (accountError || !account) {
+      return { success: false, error: 'Unable to fetch account details' };
+    }
+
+    // Calculate credit deduction (promotional first, then monthly)
+    let promotionalUsed = 0;
+    let monthlyUsed = 0;
+    let remainingToDeduct = CHAT_COMPLETION_CREDITS;
+
+    if (account.promotional_credits > 0) {
+      promotionalUsed = Math.min(account.promotional_credits, remainingToDeduct);
+      remainingToDeduct -= promotionalUsed;
+    }
+
+    if (remainingToDeduct > 0) {
+      monthlyUsed = remainingToDeduct;
+    }
+
+    // Update account credits
+    const { error: updateError } = await supabase
+      .from('accounts')
+      .update({
+        promotional_credits: Math.max(0, account.promotional_credits - promotionalUsed),
+        monthly_credits_remaining: Math.max(0, account.monthly_credits_remaining - monthlyUsed),
+      })
+      .eq('id', accountId);
+
+    if (updateError) {
+      console.error('[API] Error updating credits:', updateError);
+      return { success: false, error: 'Failed to deduct credits' };
+    }
+
+    // Update or create usage record for current month
+    const currentMonth = new Date();
+    const startOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
+    const endOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0);
+
+    const { data: existingUsage } = await supabase
+      .from('billing_usage')
+      .select('*')
+      .eq('account_id', accountId)
+      .eq('billing_period_start', startOfMonth.toISOString().split('T')[0])
+      .single();
+
+    if (existingUsage) {
+      // Update existing usage
+      const usageDetails = existingUsage.usage_details || {};
+      usageDetails.chat_completions = (usageDetails.chat_completions || 0) + 1;
+
+      await supabase
+        .from('billing_usage')
+        .update({
+          promotional_credits_used: existingUsage.promotional_credits_used + promotionalUsed,
+          monthly_credits_used: existingUsage.monthly_credits_used + monthlyUsed,
+          total_credits_used: existingUsage.total_credits_used + CHAT_COMPLETION_CREDITS,
+          usage_details: usageDetails,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existingUsage.id);
+    } else {
+      // Create new usage record
+      await supabase
+        .from('billing_usage')
+        .insert({
+          account_id: accountId,
+          billing_period_start: startOfMonth.toISOString().split('T')[0],
+          billing_period_end: endOfMonth.toISOString().split('T')[0],
+          promotional_credits_used: promotionalUsed,
+          monthly_credits_used: monthlyUsed,
+          total_credits_used: CHAT_COMPLETION_CREDITS,
+          usage_details: { chat_completions: 1 },
+        });
+    }
+
+    console.log('[API] Credits deducted successfully:', {
+      accountId,
+      creditsUsed: CHAT_COMPLETION_CREDITS,
+      promotionalUsed,
+      monthlyUsed
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error('[API] Unexpected error in credit check/deduction:', error);
+    return { success: false, error: 'Unexpected error processing credits' };
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const { messages, model, connectedContent } = await request.json();
+    const { messages, model, connectedContent, threadId, chatElementId, chatInterfaceId, projectId } = await request.json();
 
-    console.log(`[API] Chat request - Model: ${model}, Messages: ${messages.length}, Connected Content: ${connectedContent?.length || 0}`);
+    console.log(`[API] Chat request - Model: ${model}, Messages: ${messages.length}, Thread: ${threadId}, Element: ${chatElementId}, Interface: ${chatInterfaceId}`);
+
+    // Get user authentication
+    const userId = await getUserIdFromCookies();
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Get user's account
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('account_id')
+      .eq('id', userId)
+      .single();
+
+    if (userError || !userData?.account_id) {
+      return NextResponse.json({ error: 'Account not found' }, { status: 404 });
+    }
+
+    // Check and deduct credits BEFORE making the API call
+    const creditCheck = await checkAndDeductCredits(userData.account_id);
+    if (!creditCheck.success) {
+      return NextResponse.json(
+        { error: creditCheck.error || 'Insufficient credits' },
+        { status: 402 } // Payment Required
+      );
+    }
 
     // Map model IDs to actual API models
     const modelMapping: Record<string, { provider: string; model: string }> = {
@@ -57,10 +238,12 @@ export async function POST(request: NextRequest) {
     }
 
     let response;
+    let promptTokens = 0;
+    let completionTokens = 0;
+    let totalTokens = 0;
+    let chatInterfaceUuid: string | null = null;
 
     console.log(`[API] Attempting to use ${selectedModel.provider} with model ${selectedModel.model}`);
-    console.log(`[API] OpenAI client available:`, !!openai);
-    console.log(`[API] Anthropic client available:`, !!anthropic);
     
     if (selectedModel.provider === 'openai' && openai) {
       console.log('[API] Using OpenAI API');
@@ -76,8 +259,33 @@ export async function POST(request: NextRequest) {
         });
 
         response = completion.choices[0]?.message?.content || 'No response generated';
+        
+        // Extract token usage
+        if (completion.usage) {
+          promptTokens = completion.usage.prompt_tokens;
+          completionTokens = completion.usage.completion_tokens;
+          totalTokens = completion.usage.total_tokens;
+        }
+
       } catch (error: any) {
         console.error('OpenAI API error:', error);
+        
+        // Since we already deducted credits, we should refund them on error
+        // In production, you might want a more sophisticated refund mechanism
+        const { data: currentAccount } = await supabase
+          .from('accounts')
+          .select('monthly_credits_remaining')
+          .eq('id', userData.account_id)
+          .single();
+        
+        if (currentAccount) {
+          await supabase
+            .from('accounts')
+            .update({
+              monthly_credits_remaining: currentAccount.monthly_credits_remaining + CHAT_COMPLETION_CREDITS
+            })
+            .eq('id', userData.account_id);
+        }
         
         let errorMessage = 'Sorry, I encountered an error: ';
         
@@ -115,8 +323,31 @@ export async function POST(request: NextRequest) {
         response = completion.content[0].type === 'text' 
           ? completion.content[0].text 
           : 'No response generated';
+          
+        // Extract token usage (Anthropic provides this differently)
+        if (completion.usage) {
+          promptTokens = completion.usage.input_tokens || 0;
+          completionTokens = completion.usage.output_tokens || 0;
+          totalTokens = promptTokens + completionTokens;
+        }
       } catch (error: any) {
         console.error('Anthropic API error:', error);
+        
+        // Refund credits on error
+        const { data: currentAccount } = await supabase
+          .from('accounts')
+          .select('monthly_credits_remaining')
+          .eq('id', userData.account_id)
+          .single();
+        
+        if (currentAccount) {
+          await supabase
+            .from('accounts')
+            .update({
+              monthly_credits_remaining: currentAccount.monthly_credits_remaining + CHAT_COMPLETION_CREDITS
+            })
+            .eq('id', userData.account_id);
+        }
         
         let errorMessage = 'Sorry, I encountered an error: ';
         
@@ -136,7 +367,22 @@ export async function POST(request: NextRequest) {
         throw new Error(errorMessage);
       }
     } else {
-      // No API keys configured - explain to user
+      // No API keys configured - refund credits and return error
+      const { data: currentAccount } = await supabase
+        .from('accounts')
+        .select('monthly_credits_remaining')
+        .eq('id', userData.account_id)
+        .single();
+      
+      if (currentAccount) {
+        await supabase
+          .from('accounts')
+          .update({
+            monthly_credits_remaining: currentAccount.monthly_credits_remaining + CHAT_COMPLETION_CREDITS
+          })
+          .eq('id', userData.account_id);
+      }
+        
       console.log(`[API] No API keys configured for ${selectedModel.provider}`);
       const lastMessage = messages[messages.length - 1];
       const userMessage = lastMessage?.content || '';
@@ -150,7 +396,237 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ content: response });
+    // Store the conversation in the database if we have thread/element info
+    console.log('[API] Database persistence check:', { 
+      threadId, 
+      chatInterfaceId, 
+      chatElementId,
+      willPersist: !!(threadId && (chatInterfaceId || chatElementId))
+    });
+    
+    if (threadId && (chatInterfaceId || chatElementId)) {
+      try {
+        // Use the provided chatInterfaceId or create one if needed
+        chatInterfaceUuid = chatInterfaceId;
+        
+        if (!chatInterfaceUuid && chatElementId) {
+          // Use the provided projectId if available, otherwise get the first project
+          let projectIdToUse = projectId;
+          
+          if (!projectIdToUse) {
+            const { data: projects, error: projectError } = await supabase
+              .from('projects')
+              .select('id')
+              .eq('account_id', userData.account_id)
+              .limit(1);
+            
+            if (projectError) {
+              console.error('[API] Error fetching project:', projectError);
+            }
+            
+            projectIdToUse = projects && projects.length > 0 ? projects[0].id : null;
+          }
+          
+          if (projectIdToUse) {
+            // Create a chat_interface if it doesn't exist
+            const { data: newInterface, error: interfaceError } = await supabase
+              .from('chat_interfaces')
+              .insert({
+                project_id: projectIdToUse,
+                name: `Chat Interface ${chatElementId}`,
+                user_id: userId,
+                ai_model_preference: model,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+              })
+              .select()
+              .single();
+            
+            if (newInterface) {
+              chatInterfaceUuid = newInterface.id;
+              console.log('[API] Created new chat interface:', chatInterfaceUuid);
+            } else {
+              console.error('[API] Failed to create chat interface');
+            }
+          } else {
+            console.error('[API] No project found for account');
+          }
+        }
+        
+        // If we still don't have a chat interface ID, we can't proceed with database storage
+        if (!chatInterfaceUuid) {
+          console.warn('[API] No chat_interface_id available, skipping database persistence');
+          // Return early but still include response
+          return NextResponse.json({ 
+            content: response,
+            usage: {
+              prompt_tokens: promptTokens,
+              completion_tokens: completionTokens,
+              total_tokens: totalTokens,
+              credits_used: CHAT_COMPLETION_CREDITS
+            }
+          });
+        }
+        
+        // Check if thread exists
+        const { data: existingThread } = await supabase
+          .from('chat_threads')
+          .select('id, title, created_by_user_id')
+          .eq('id', threadId)
+          .single();
+
+        if (!existingThread) {
+          // Ensure we have a chat_interface_id before creating the thread
+          if (!chatInterfaceUuid) {
+            console.error('[API] Cannot create thread without chat_interface_id');
+            // Skip database persistence if we can't create a proper thread
+            return NextResponse.json({ 
+              content: response,
+              usage: {
+                prompt_tokens: promptTokens,
+                completion_tokens: completionTokens,
+                total_tokens: totalTokens,
+                credits_used: CHAT_COMPLETION_CREDITS
+              }
+            });
+          }
+          
+          // For new threads, use the first user message as the title
+          const firstUserMessage = messages.find((m: any) => m.role === 'user');
+          const threadTitle = firstUserMessage?.content?.substring(0, 50) || 'New Chat';
+          
+          // Create new thread with proper user ID
+          const { error: insertError } = await supabase
+            .from('chat_threads')
+            .insert({
+              id: threadId,
+              chat_interface_id: chatInterfaceUuid,
+              title: threadTitle,
+              created_by_user_id: userId, // This should now properly set the user ID
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            });
+            
+          if (insertError) {
+            console.error('[API] Error creating thread:', insertError);
+          } else {
+            console.log('[API] Created new thread with title:', threadTitle, 'and user:', userId);
+          }
+        } else {
+          // Update existing thread's updated_at timestamp
+          // Also update title if it's still "New Chat" and we have a user message
+          let updates: any = {
+            updated_at: new Date().toISOString()
+          };
+          
+          // Update user ID if it was null
+          if (!existingThread.created_by_user_id) {
+            updates.created_by_user_id = userId;
+          }
+          
+          // Update title if it's still "New Chat"
+          if (existingThread.title === 'New Chat') {
+            const firstUserMessage = messages.find((m: any) => m.role === 'user');
+            if (firstUserMessage) {
+              updates.title = firstUserMessage.content.substring(0, 50);
+            }
+          }
+          
+          const { error: updateError } = await supabase
+            .from('chat_threads')
+            .update(updates)
+            .eq('id', threadId);
+            
+          if (updateError) {
+            console.error('[API] Error updating thread:', updateError);
+          }
+        }
+
+        // Store user message
+        const userMessage = messages[messages.length - 1];
+        if (userMessage) {
+          await supabase
+            .from('chat_messages')
+            .insert({
+              thread_id: threadId,
+              role: 'user',
+              content: userMessage.content,
+              tool_calls: {},
+              usage: {},
+              model: null,
+              prompt_tokens: 0,
+              completion_tokens: 0,
+              total_tokens: 0,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            });
+        }
+
+        // Store assistant response with token usage
+        await supabase
+          .from('chat_messages')
+          .insert({
+            thread_id: threadId,
+            role: 'assistant',
+            content: response,
+            tool_calls: {},
+            usage: {
+              prompt_tokens: promptTokens,
+              completion_tokens: completionTokens,
+              total_tokens: totalTokens,
+              credits_used: CHAT_COMPLETION_CREDITS
+            },
+            model: model,
+            prompt_tokens: promptTokens,
+            completion_tokens: completionTokens,
+            total_tokens: totalTokens,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          });
+
+        // Also log in message_usage_records for billing tracking
+        // Note: We need to get the actual project_id from the canvas/workspace
+        // For now, we'll check if a valid project exists, otherwise skip this logging
+        const { data: project } = await supabase
+          .from('projects')
+          .select('id')
+          .eq('account_id', userData.account_id)
+          .single();
+        
+        if (project) {
+          await supabase
+            .from('message_usage_records')
+            .insert({
+              message_id: crypto.randomUUID(), // Generate a UUID for the message
+              account_id: userData.account_id,
+              project_id: project.id, // Use actual project ID
+              model: model,
+              prompt_tokens: promptTokens,
+              completion_tokens: completionTokens,
+              total_tokens: totalTokens,
+              cost_usd: CHAT_COMPLETION_CREDITS / 100, // Convert credits to rough USD estimate
+              billing_period: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            });
+        }
+
+      } catch (dbError) {
+        console.error('[API] Error storing message in database:', dbError);
+        // Don't fail the request if DB storage fails
+      }
+    }
+
+    return NextResponse.json({ 
+      content: response,
+      usage: {
+        prompt_tokens: promptTokens,
+        completion_tokens: completionTokens,
+        total_tokens: totalTokens,
+        credits_used: CHAT_COMPLETION_CREDITS
+      },
+      chatInterfaceId: chatInterfaceUuid // Return the interface ID to the frontend
+    });
   } catch (error: any) {
     console.error('Chat API error:', error);
     return NextResponse.json(

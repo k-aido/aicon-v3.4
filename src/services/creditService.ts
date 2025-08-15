@@ -10,7 +10,8 @@ import { createClient } from '@supabase/supabase-js';
 
 // Credit costs for different operations
 export const CREDIT_COSTS = {
-  CONTENT_ANALYSIS: 10,      // Analyzing social media content
+  CONTENT_SCRAPING: 50,      // Scraping and analyzing social media content (combined)
+  CONTENT_ANALYSIS: 0,       // Analysis is included in scraping cost
   CHAT_MESSAGE: 100,         // Each AI chat message (updated to match billing requirements)
   SCRIPT_GENERATION: 50,     // Generating video scripts
   VOICE_GENERATION: 100,     // Text-to-speech generation

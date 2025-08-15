@@ -23,8 +23,8 @@ if (process.env.OPENAI_API_KEY) {
   });
 }
 
-// Credit cost for analysis
-const ANALYSIS_CREDITS = 100;
+// Note: Credits are deducted when scraping completes (50 credits for combined scrape + analysis)
+// This endpoint doesn't deduct credits separately
 
 // Helper function to get user ID from cookies
 async function getUserIdFromCookies(): Promise<string | null> {
@@ -121,51 +121,8 @@ export async function POST(
       });
     }
 
-    // Check credits
-    const { data: account, error: accountError } = await supabase
-      .from('accounts')
-      .select('promotional_credits, monthly_credits_remaining')
-      .eq('id', userData.account_id)
-      .single();
-
-    if (accountError || !account) {
-      return NextResponse.json({ error: 'Unable to fetch account details' }, { status: 500 });
-    }
-
-    const totalCredits = (account.promotional_credits || 0) + (account.monthly_credits_remaining || 0);
-    
-    if (totalCredits < ANALYSIS_CREDITS) {
-      return NextResponse.json(
-        { 
-          error: `Insufficient credits. You need ${ANALYSIS_CREDITS} credits but only have ${totalCredits} available.`,
-          creditsNeeded: ANALYSIS_CREDITS,
-          creditsAvailable: totalCredits
-        },
-        { status: 402 }
-      );
-    }
-
-    // Deduct credits
-    let promotionalUsed = 0;
-    let monthlyUsed = 0;
-    let remainingToDeduct = ANALYSIS_CREDITS;
-
-    if (account.promotional_credits > 0) {
-      promotionalUsed = Math.min(account.promotional_credits, remainingToDeduct);
-      remainingToDeduct -= promotionalUsed;
-    }
-
-    if (remainingToDeduct > 0) {
-      monthlyUsed = remainingToDeduct;
-    }
-
-    await supabase
-      .from('accounts')
-      .update({
-        promotional_credits: Math.max(0, account.promotional_credits - promotionalUsed),
-        monthly_credits_remaining: Math.max(0, account.monthly_credits_remaining - monthlyUsed),
-      })
-      .eq('id', userData.account_id);
+    // Credits have already been deducted when scraping completed
+    // No need to check or deduct credits here
 
     // Prepare content for analysis
     const contentData = scrapeRecord.processed_data || {};
@@ -206,20 +163,11 @@ export async function POST(
 
     if (analysisError || !newAnalysis) {
       console.error('[Analyze API] Error storing analysis:', analysisError);
-      
-      // Refund credits on error
-      await supabase
-        .from('accounts')
-        .update({
-          promotional_credits: account.promotional_credits,
-          monthly_credits_remaining: account.monthly_credits_remaining,
-        })
-        .eq('id', userData.account_id);
-        
       return NextResponse.json({ error: 'Failed to store analysis' }, { status: 500 });
     }
 
-    // Update billing usage
+    // Billing usage is already updated when scraping completes
+    // Just update the analysis count in usage details
     const currentMonth = new Date();
     const startOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
     
@@ -237,9 +185,6 @@ export async function POST(
       await supabase
         .from('billing_usage')
         .update({
-          promotional_credits_used: existingUsage.promotional_credits_used + promotionalUsed,
-          monthly_credits_used: existingUsage.monthly_credits_used + monthlyUsed,
-          total_credits_used: existingUsage.total_credits_used + ANALYSIS_CREDITS,
           usage_details: usageDetails,
           updated_at: new Date().toISOString(),
         })

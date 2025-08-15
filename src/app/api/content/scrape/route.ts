@@ -15,8 +15,8 @@ const supabase = createClient(
   }
 );
 
-// Credit cost for scraping
-const SCRAPE_CREDITS = 50;
+// Credit cost for scraping and analysis combined
+const SCRAPE_AND_ANALYSIS_CREDITS = 50;
 
 // Helper function to get user ID from cookies
 async function getUserIdFromCookies(): Promise<string | null> {
@@ -94,11 +94,11 @@ export async function POST(request: NextRequest) {
 
     const totalCredits = (account.promotional_credits || 0) + (account.monthly_credits_remaining || 0);
     
-    if (totalCredits < SCRAPE_CREDITS) {
+    if (totalCredits < SCRAPE_AND_ANALYSIS_CREDITS) {
       return NextResponse.json(
         { 
-          error: `Insufficient credits. You need ${SCRAPE_CREDITS} credits but only have ${totalCredits} available.`,
-          creditsNeeded: SCRAPE_CREDITS,
+          error: `Insufficient credits. You need ${SCRAPE_AND_ANALYSIS_CREDITS} credits but only have ${totalCredits} available.`,
+          creditsNeeded: SCRAPE_AND_ANALYSIS_CREDITS,
           creditsAvailable: totalCredits
         },
         { status: 402 }
@@ -129,59 +129,8 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Deduct credits
-    let promotionalUsed = 0;
-    let monthlyUsed = 0;
-    let remainingToDeduct = SCRAPE_CREDITS;
-
-    if (account.promotional_credits > 0) {
-      promotionalUsed = Math.min(account.promotional_credits, remainingToDeduct);
-      remainingToDeduct -= promotionalUsed;
-    }
-
-    if (remainingToDeduct > 0) {
-      monthlyUsed = remainingToDeduct;
-    }
-
-    const { error: creditUpdateError } = await supabase
-      .from('accounts')
-      .update({
-        promotional_credits: Math.max(0, account.promotional_credits - promotionalUsed),
-        monthly_credits_remaining: Math.max(0, account.monthly_credits_remaining - monthlyUsed),
-      })
-      .eq('id', userData.account_id);
-
-    if (creditUpdateError) {
-      console.error('[Scrape API] Error updating credits:', creditUpdateError);
-      return NextResponse.json({ error: 'Failed to deduct credits' }, { status: 500 });
-    }
-
-    // Update billing usage
-    const currentMonth = new Date();
-    const startOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
-    
-    const { data: existingUsage } = await supabase
-      .from('billing_usage')
-      .select('*')
-      .eq('account_id', userData.account_id)
-      .eq('billing_period_start', startOfMonth.toISOString().split('T')[0])
-      .single();
-
-    if (existingUsage) {
-      const usageDetails = existingUsage.usage_details || {};
-      usageDetails.content_scrapes = (usageDetails.content_scrapes || 0) + 1;
-
-      await supabase
-        .from('billing_usage')
-        .update({
-          promotional_credits_used: existingUsage.promotional_credits_used + promotionalUsed,
-          monthly_credits_used: existingUsage.monthly_credits_used + monthlyUsed,
-          total_credits_used: existingUsage.total_credits_used + SCRAPE_CREDITS,
-          usage_details: usageDetails,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', existingUsage.id);
-    }
+    // Don't deduct credits here - we'll deduct them after successful completion
+    // Credits will be deducted in the status check endpoint when scraping completes
 
     // Create scrape record
     const { data: scrapeRecord, error: scrapeError } = await supabase
@@ -198,16 +147,6 @@ export async function POST(request: NextRequest) {
 
     if (scrapeError || !scrapeRecord) {
       console.error('[Scrape API] Error creating scrape record:', scrapeError);
-      
-      // Refund credits on error
-      await supabase
-        .from('accounts')
-        .update({
-          promotional_credits: account.promotional_credits,
-          monthly_credits_remaining: account.monthly_credits_remaining,
-        })
-        .eq('id', userData.account_id);
-        
       return NextResponse.json({ error: 'Failed to create scrape record' }, { status: 500 });
     }
 

@@ -146,22 +146,32 @@ class ApifyService {
     let normalized: ScrapedContent;
 
     // YouTube data normalization
-    if (data.videoId || data.channelId) {
+    if (data.videoId || data.channelId || data.video_id) {
       platform = 'youtube';
+      
+      // YouTube thumbnails can be in various fields
+      const thumbnailUrl = data.thumbnailUrl || 
+                          data.thumbnail_url || 
+                          data.thumbnail ||
+                          data.thumbnails?.high?.url ||
+                          data.thumbnails?.maxres?.url ||
+                          data.thumbnails?.standard?.url ||
+                          data.thumbnails?.default?.url;
+      
       normalized = {
         platform,
-        url: data.url || `https://youtube.com/watch?v=${data.videoId}`,
+        url: data.url || `https://youtube.com/watch?v=${data.videoId || data.video_id}`,
         title: data.title,
         description: data.description,
         transcript: data.subtitles?.[0]?.text || data.captions?.[0]?.text,
-        viewCount: parseInt(data.viewCount || data.views || 0),
-        likeCount: parseInt(data.likeCount || data.likes || 0),
-        commentCount: parseInt(data.commentCount || data.comments?.length || 0),
+        viewCount: parseInt(data.viewCount || data.view_count || data.views || 0),
+        likeCount: parseInt(data.likeCount || data.like_count || data.likes || 0),
+        commentCount: parseInt(data.commentCount || data.comment_count || data.comments?.length || 0),
         duration: data.duration,
-        uploadDate: data.uploadDate || data.publishedAt,
-        authorName: data.channelName || data.channelTitle,
-        authorId: data.channelId,
-        thumbnailUrl: data.thumbnailUrl || data.thumbnail,
+        uploadDate: data.uploadDate || data.upload_date || data.publishedAt || data.published_at,
+        authorName: data.channelName || data.channel_name || data.channelTitle || data.channel_title,
+        authorId: data.channelId || data.channel_id,
+        thumbnailUrl,
         hashtags: this.extractHashtags(data.description || ''),
         mentions: this.extractMentions(data.description || ''),
         comments: data.comments?.slice(0, 50)?.map((c: any) => ({
@@ -176,21 +186,41 @@ class ApifyService {
     // Instagram data normalization
     else if (data.shortCode || data.type === 'Post') {
       platform = 'instagram';
+      
+      // Instagram scraper may return different field names
+      // Check multiple possible fields for thumbnail
+      const thumbnailUrl = data.displayUrl || 
+                          data.display_url || 
+                          data.imageUrl || 
+                          data.image_url || 
+                          data.thumbnailUrl || 
+                          data.thumbnail_url ||
+                          data.images?.[0] ||
+                          data.displayResources?.[0]?.src;
+      
+      console.log('[ApifyService] Instagram thumbnail extraction:', {
+        displayUrl: data.displayUrl,
+        display_url: data.display_url,
+        imageUrl: data.imageUrl,
+        thumbnailUrl: data.thumbnailUrl,
+        extracted: thumbnailUrl
+      });
+      
       normalized = {
         platform,
         url: data.url || `https://instagram.com/p/${data.shortCode}`,
-        title: data.caption?.substring(0, 100),
+        title: data.caption?.substring(0, 100) || data.text?.substring(0, 100),
         caption: data.caption || data.text,
-        viewCount: parseInt(data.videoViewCount || data.views || 0),
-        likeCount: parseInt(data.likesCount || data.likes || 0),
-        commentCount: parseInt(data.commentsCount || data.comments?.length || 0),
-        uploadDate: data.timestamp || data.takenAt,
-        authorName: data.ownerUsername || data.owner?.username,
-        authorId: data.ownerId || data.owner?.id,
-        thumbnailUrl: data.displayUrl || data.thumbnailUrl,
-        videoUrl: data.videoUrl,
-        hashtags: this.extractHashtags(data.caption || ''),
-        mentions: this.extractMentions(data.caption || ''),
+        viewCount: parseInt(data.videoViewCount || data.video_view_count || data.views || 0),
+        likeCount: parseInt(data.likesCount || data.likes_count || data.likes || 0),
+        commentCount: parseInt(data.commentsCount || data.comments_count || data.comments?.length || 0),
+        uploadDate: data.timestamp || data.takenAt || data.taken_at,
+        authorName: data.ownerUsername || data.owner_username || data.owner?.username,
+        authorId: data.ownerId || data.owner_id || data.owner?.id,
+        thumbnailUrl,
+        videoUrl: data.videoUrl || data.video_url,
+        hashtags: this.extractHashtags(data.caption || data.text || ''),
+        mentions: this.extractMentions(data.caption || data.text || ''),
         comments: data.comments?.slice(0, 50)?.map((c: any) => ({
           text: c.text,
           author: c.ownerUsername,
@@ -203,21 +233,31 @@ class ApifyService {
     // TikTok data normalization
     else {
       platform = 'tiktok';
+      
+      // TikTok thumbnails can be in various fields
+      const thumbnailUrl = data.videoMeta?.cover || 
+                          data.video_meta?.cover ||
+                          data.covers?.default ||
+                          data.covers?.origin ||
+                          data.cover ||
+                          data.thumbnailUrl ||
+                          data.thumbnail_url;
+      
       normalized = {
         platform,
-        url: data.webVideoUrl || data.url,
-        title: data.text?.substring(0, 100),
+        url: data.webVideoUrl || data.web_video_url || data.url,
+        title: data.text?.substring(0, 100) || data.description?.substring(0, 100),
         caption: data.text || data.description,
-        viewCount: parseInt(data.playCount || data.views || 0),
-        likeCount: parseInt(data.diggCount || data.likes || 0),
-        commentCount: parseInt(data.commentCount || data.comments?.length || 0),
-        shareCount: parseInt(data.shareCount || data.shares || 0),
-        duration: data.videoMeta?.duration,
-        uploadDate: data.createTime,
-        authorName: data.authorMeta?.name || data.author?.uniqueId,
-        authorId: data.authorMeta?.id || data.author?.id,
-        thumbnailUrl: data.videoMeta?.cover || data.covers?.default,
-        videoUrl: data.videoUrl || data.videoUrlNoWatermark,
+        viewCount: parseInt(data.playCount || data.play_count || data.views || 0),
+        likeCount: parseInt(data.diggCount || data.digg_count || data.likes || 0),
+        commentCount: parseInt(data.commentCount || data.comment_count || data.comments?.length || 0),
+        shareCount: parseInt(data.shareCount || data.share_count || data.shares || 0),
+        duration: data.videoMeta?.duration || data.video_meta?.duration || data.duration,
+        uploadDate: data.createTime || data.create_time || data.createTimeISO,
+        authorName: data.authorMeta?.name || data.author_meta?.name || data.author?.uniqueId || data.author?.unique_id,
+        authorId: data.authorMeta?.id || data.author_meta?.id || data.author?.id,
+        thumbnailUrl,
+        videoUrl: data.videoUrl || data.video_url || data.videoUrlNoWatermark || data.video_url_no_watermark,
         hashtags: data.hashtags || this.extractHashtags(data.text || ''),
         mentions: data.mentions || this.extractMentions(data.text || ''),
         comments: data.comments?.slice(0, 50)?.map((c: any) => ({

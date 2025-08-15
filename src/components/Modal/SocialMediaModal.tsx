@@ -3,6 +3,7 @@ import { X, Globe, AlertCircle, Loader2 } from 'lucide-react';
 import { useCanvasStore } from '@/store/canvasStore';
 import { detectPlatform } from '@/utils/platform';
 import { createBrowserClient } from '@/lib/supabase/client';
+import { getPlatformPlaceholder } from '@/utils/imageProxy';
 
 const supabase = createBrowserClient();
 
@@ -68,11 +69,22 @@ export const SocialMediaModal: React.FC<SocialMediaModalProps> = ({ isOpen, onCl
         const statusData = await statusResponse.json();
 
         if (statusData.status === 'completed') {
+          // Get current element to preserve existing data
+          const currentElement = elements.find(el => el.id === elementId);
+          const currentMetadata = (currentElement as any)?.metadata || {};
+          
+          console.log('[SocialMediaModal] Scraping completed, updating element:', {
+            elementId,
+            thumbnailUrl: statusData.processedData?.thumbnailUrl,
+            title: statusData.processedData?.title
+          });
+          
           // Update element with scraped data
           updateElement(elementId, {
             title: statusData.processedData?.title || 'Content loaded',
-            thumbnail: statusData.processedData?.thumbnailUrl || undefined,
+            thumbnail: statusData.processedData?.thumbnailUrl || currentElement?.thumbnail,
             metadata: {
+              ...currentMetadata,
               isScraping: false,
               isAnalyzing: true,
               scrapeId: scrapeId,
@@ -89,12 +101,18 @@ export const SocialMediaModal: React.FC<SocialMediaModalProps> = ({ isOpen, onCl
 
           if (analyzeResponse.ok) {
             const analysisData = await analyzeResponse.json();
+            // Get current element state to preserve metadata
+            const currentElement = elements.find(el => el.id === elementId);
+            const currentMetadata = (currentElement as any)?.metadata || {};
+            
             updateElement(elementId, {
               metadata: {
+                ...currentMetadata,
                 isAnalyzing: false,
                 isAnalyzed: true,
                 analysis: analysisData.analysis,
-                processedData: statusData.processedData
+                processedData: statusData.processedData,
+                scrapeId: scrapeId
               }
             });
           } else {
@@ -109,8 +127,12 @@ export const SocialMediaModal: React.FC<SocialMediaModalProps> = ({ isOpen, onCl
         }
 
         if (statusData.status === 'failed') {
+          const currentElement = elements.find(el => el.id === elementId);
+          const currentMetadata = (currentElement as any)?.metadata || {};
+          
           updateElement(elementId, {
             metadata: {
+              ...currentMetadata,
               isScraping: false,
               scrapingError: statusData.error || 'Scraping failed'
             }
@@ -179,7 +201,7 @@ export const SocialMediaModal: React.FC<SocialMediaModalProps> = ({ isOpen, onCl
         title: `Loading ${detectedPlatform} content...`,
         url: url.trim(),
         platform: detectedPlatform,
-        thumbnail: `https://via.placeholder.com/300x200?text=${detectedPlatform}&bg=666&color=fff`,
+        thumbnail: getPlatformPlaceholder(detectedPlatform || 'content'),
         metadata: {
           isScraping: true,
           contentScope: scope,

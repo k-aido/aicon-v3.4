@@ -327,16 +327,20 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
     })));
   }, [elements]);
 
-  // Auto-analyze content when added to canvas
+  // Auto-analyze content when added to canvas (MOCK ONLY - for elements without real scraping)
   useEffect(() => {
     elements.forEach(element => {
-      if (element.type === 'content' && !(element as any).metadata?.isAnalyzed && !(element as any).metadata?.isAnalyzing) {
+      // Skip if element has real scraping data or is being scraped
+      const metadata = (element as any).metadata;
+      const hasRealScraping = metadata?.scrapeId || metadata?.isScraping || metadata?.processedData;
+      
+      if (element.type === 'content' && !metadata?.isAnalyzed && !metadata?.isAnalyzing && !hasRealScraping) {
         // Mark as analyzing
         updateElement(element.id, {
           metadata: { ...(element as any).metadata, isAnalyzing: true }
         });
 
-        // Simulate analysis after a delay
+        // Simulate analysis after a delay (MOCK ONLY)
         setTimeout(() => {
           // Randomly fail 20% of analyses for testing error states
           const shouldFail = Math.random() < 0.2;

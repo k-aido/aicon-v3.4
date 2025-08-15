@@ -5,6 +5,7 @@ import { ConnectionPoint } from './ConnectionPoint';
 import { useElementDrag } from '@/hooks/useElementDrag';
 import { SimpleResize } from './SimpleResize';
 import { useContentScraping } from '@/hooks/useContentScraping';
+import { getProxiedImageUrl, getPlatformPlaceholder } from '@/utils/imageProxy';
 
 interface ContentElementProps {
   element: ContentElementType;
@@ -129,78 +130,12 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
     setShowContextMenu(true);
   };
 
-  // Analyze content by calling the API
+  // Analyze content by calling the API (DEPRECATED - using Apify flow now)
   const analyzeContent = async (url: string) => {
-    if (!url || isAnalyzing) return;
-
-    setIsAnalyzing(true);
-    setAnalysisError(null);
-    
-    // Update element metadata to show analyzing state
-    onUpdate(element.id, {
-      metadata: {
-        ...(element as any).metadata,
-        isAnalyzing: true,
-        isAnalyzed: false,
-        analysisError: null
-      }
-    } as any);
-
-    try {
-      console.log('[ContentElement] Starting content analysis for:', url);
-      
-      const response = await fetch('/api/content', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ url }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || `Server error: ${response.status}`);
-      }
-
-      console.log('[ContentElement] Content analysis successful:', data);
-
-      // Update element with the fetched data
-      onUpdate(element.id, {
-        title: data.title,
-        thumbnail: data.thumbnail,
-        platform: data.platform,
-        url: data.url,
-        metadata: {
-          ...(element as any).metadata,
-          isAnalyzing: false,
-          isAnalyzed: true,
-          analysisError: null,
-          author: data.author,
-          analyzedAt: new Date().toISOString()
-        }
-      } as any);
-
-      setAnalysisError(null);
-      
-    } catch (error: any) {
-      console.error('[ContentElement] Content analysis failed:', error);
-      
-      const errorMessage = error.message || 'Failed to analyze content';
-      setAnalysisError(errorMessage);
-      
-      // Update element metadata with error state
-      onUpdate(element.id, {
-        metadata: {
-          ...(element as any).metadata,
-          isAnalyzing: false,
-          isAnalyzed: false,
-          analysisError: errorMessage
-        }
-      } as any);
-    } finally {
-      setIsAnalyzing(false);
-    }
+    // This function is deprecated - elements should use the Apify scraping flow
+    // which handles both scraping and analysis through SocialMediaModal
+    console.warn('[ContentElement] analyzeContent called but should use Apify flow instead');
+    return;
   };
 
   const handleReanalysis = () => {
@@ -223,7 +158,10 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
     const hasUrl = element.url && element.url !== 'https://example.com';
     const notAnalyzed = !metadata?.isAnalyzed && !metadata?.isAnalyzing && !metadata?.analysisError;
     
-    if (hasUrl && notAnalyzed && !isAnalyzing) {
+    // Don't auto-analyze if element is being scraped or has scraping data
+    const isBeingScraped = metadata?.isScraping || metadata?.scrapeId;
+    
+    if (hasUrl && notAnalyzed && !isAnalyzing && !isBeingScraped) {
       // Delay auto-analysis to avoid conflicts during element creation
       const timer = setTimeout(() => {
         analyzeContent(element.url);
@@ -426,11 +364,16 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
                 <Loader2 className="w-8 h-8 text-blue-500 animate-spin mb-2" />
                 <p className="text-blue-400 text-xs">Scraping content...</p>
               </div>
-            ) : analysisError ? (
+            ) : (element as any).metadata?.isAnalyzing ? (
+              <div className="w-full h-full flex flex-col items-center justify-center">
+                <Loader2 className="w-8 h-8 text-yellow-500 animate-spin mb-2" />
+                <p className="text-yellow-400 text-xs">Analyzing content...</p>
+              </div>
+            ) : analysisError || (element as any).metadata?.analysisError ? (
               <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center">
                 <AlertCircle className="w-8 h-8 text-red-500 mb-2" />
                 <p className="text-red-400 text-xs mb-2">Analysis Failed</p>
-                <p className="text-gray-400 text-xs leading-tight">{analysisError}</p>
+                <p className="text-gray-400 text-xs leading-tight">{analysisError || (element as any).metadata?.analysisError}</p>
                 <button
                   onClick={() => analyzeContent(element.url)}
                   className="mt-2 px-2 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded transition-colors"
@@ -439,22 +382,29 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
                   Retry
                 </button>
               </div>
-            ) : isAnalyzing ? (
-              <div className="w-full h-full flex flex-col items-center justify-center">
-                <Loader2 className="w-8 h-8 text-yellow-500 animate-spin mb-2" />
-                <p className="text-yellow-400 text-xs">Analyzing content...</p>
-              </div>
             ) : (
               <img 
-                src={element.thumbnail} 
-                alt={element.title}
+                src={getProxiedImageUrl(
+                  (element as any).metadata?.processedData?.thumbnailUrl || element.thumbnail
+                )} 
+                alt={(element as any).metadata?.processedData?.title || element.title}
                 className="w-full h-full object-cover"
+                onError={(e) => {
+                  const img = e.target as HTMLImageElement;
+                  // Don't log error for placeholder images
+                  if (!img.src.includes('placeholder')) {
+                    console.warn('Failed to load thumbnail, using placeholder:', img.src);
+                  }
+                  img.src = getPlatformPlaceholder(element.platform);
+                }}
               />
             )}
           </div>
           
           {/* Title */}
-          <h3 className="text-white text-sm font-medium line-clamp-2">{element.title}</h3>
+          <h3 className="text-white text-sm font-medium line-clamp-2">
+            {(element as any).metadata?.processedData?.title || element.title}
+          </h3>
         </div>
       </SimpleResize>
 

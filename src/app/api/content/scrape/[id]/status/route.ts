@@ -120,6 +120,12 @@ export async function GET(
               mentions: scrapedContent.mentions,
               topComments: scrapedContent.comments?.slice(0, 10)
             };
+            
+            console.log(`[Status API] Processed data for ${scrapeId}:`, {
+              title: processedData.title,
+              thumbnailUrl: processedData.thumbnailUrl,
+              platform: scrapeRecord.platform
+            });
 
             // Update scrape record with results
             await supabase

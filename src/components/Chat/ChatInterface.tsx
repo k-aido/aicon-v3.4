@@ -257,8 +257,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         if (inputRef.current) {
           const rect = inputRef.current.getBoundingClientRect();
           const position = {
-            top: rect.top - 10, // Above the input
-            left: rect.left + (lastAtIndex * 8) // Rough character width estimate
+            top: rect.top - 320, // Above the input with space for dropdown
+            left: rect.left + Math.min(lastAtIndex * 8, rect.width - 400) // Position near @ but keep on screen
           };
           setMentionPosition(position);
           console.log('[ChatInterface] Autocomplete position:', position);
@@ -279,8 +279,24 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     if (lastAtIndex !== -1) {
       const beforeAt = input.substring(0, lastAtIndex);
       const afterCursor = input.substring(cursorPosition);
-      const contentTitle = (content as any).metadata?.processedData?.title || content.title;
-      const newInput = `${beforeAt}@[${contentTitle}](${content.id})${afterCursor}`;
+      
+      // Create short platform-based label
+      const platformPrefix = content.platform.toLowerCase().substring(0, 2); // ig, yo, ti
+      
+      // Get all connected content to determine the number
+      const connectedContent = getConnectedContent();
+      const sameplatformContent = connectedContent.filter(c => c.platform === content.platform);
+      const contentIndex = sameplatformContent.findIndex(c => c.id === content.id) + 1;
+      
+      const shortLabel = `${platformPrefix}${contentIndex}`; // e.g., ig1, yt2
+      
+      // Get the scrape ID from metadata if available, otherwise use element ID
+      const metadata = (content as any).metadata;
+      const scrapeId = metadata?.scrapeId || content.id;
+      
+      console.log('[ChatInterface] Creating mention with scrapeId:', scrapeId, 'from element:', content.id);
+      
+      const newInput = `${beforeAt}@${shortLabel}[${scrapeId}]${afterCursor}`;
       
       setInput(newInput);
       setMentionedContent(prev => [...prev, content]);
@@ -290,7 +306,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       setTimeout(() => {
         if (inputRef.current) {
           inputRef.current.focus();
-          const newCursorPos = beforeAt.length + `@[${contentTitle}](${content.id})`.length;
+          const newCursorPos = beforeAt.length + `@${shortLabel}[${scrapeId}]`.length;
           inputRef.current.setSelectionRange(newCursorPos, newCursorPos);
         }
       }, 0);
@@ -298,24 +314,26 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   };
 
   // Parse mentions from input text
-  const parseMentionsFromText = (text: string): { cleanText: string; mentionIds: number[] } => {
-    const mentionPattern = /@\[([^\]]+)\]\((\d+)\)/g;
-    const mentionIds: number[] = [];
+  const parseMentionsFromText = (text: string): { cleanText: string; mentionIds: string[] } => {
+    // Updated pattern for new format: @ig1[id] where id can be UUID or numeric
+    const mentionPattern = /@([a-z]{2}\d+)\[([a-zA-Z0-9-]+)\]/g;
+    const mentionIds: string[] = [];
     let cleanText = text;
     
     let match;
     while ((match = mentionPattern.exec(text)) !== null) {
-      mentionIds.push(parseInt(match[2]));
+      mentionIds.push(match[2]); // Keep as string to handle both UUIDs and numeric IDs
     }
     
-    // Replace mention syntax with just the title for display
+    // Replace mention syntax with just the short label for display
     cleanText = text.replace(mentionPattern, '@$1');
     
+    console.log('[ChatInterface] Parsed mentions:', { cleanText, mentionIds });
     return { cleanText, mentionIds };
   };
 
   // Fetch content analysis for mentioned content
-  const fetchContentAnalysis = async (contentIds: number[]) => {
+  const fetchContentAnalysis = async (contentIds: string[]) => {
     if (contentIds.length === 0) return [];
 
     try {
@@ -345,6 +363,12 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     // Parse mentions from input
     const { cleanText, mentionIds } = parseMentionsFromText(input.trim());
     
+    console.log('[ChatInterface] Sending message with mentions:', { 
+      originalInput: input,
+      cleanText, 
+      mentionIds 
+    });
+    
     // Create user message with clean text
     const userMessage = {
       id: Date.now(),
@@ -369,7 +393,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     
     try {
       // Fetch analysis for mentioned content
+      console.log('[ChatInterface] Fetching analysis for IDs:', mentionIds);
       const contentAnalysis = await fetchContentAnalysis(mentionIds);
+      console.log('[ChatInterface] Fetched content analysis:', contentAnalysis);
       
       // Prepare connected content for RAG
       const connectedContentForChat = contentAnalysis.map(content => ({
@@ -381,6 +407,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         keyTopics: content.analysis?.keyTopics || [],
         engagementTactics: content.analysis?.engagementTactics || []
       }));
+      
+      console.log('[ChatInterface] Sending to API with content:', connectedContentForChat);
 
       // Call real AI API with thread and element IDs for database persistence
       const response = await fetch('/api/chat', {

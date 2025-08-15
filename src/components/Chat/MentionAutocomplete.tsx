@@ -44,14 +44,26 @@ export const MentionAutocomplete: React.FC<MentionAutocompleteProps> = ({
 
   // Filter content based on search query
   useEffect(() => {
+    // If no search query, show all available content
+    if (!searchQuery) {
+      console.log('[MentionAutocomplete] No search query, showing all content');
+      setFilteredContent(availableContent);
+      setSelectedIndex(0);
+      return;
+    }
+
     const query = searchQuery.toLowerCase();
     const filtered = availableContent.filter(content => {
       const metadata = (content as any).metadata;
       const title = (metadata?.processedData?.title || content.title || '').toLowerCase();
       const platform = content.platform.toLowerCase();
+      const url = (content.url || '').toLowerCase();
       
-      // Search in title and platform
-      return title.includes(query) || platform.includes(query);
+      // Search in title, platform, and URL
+      return title.includes(query) || 
+             platform.includes(query) || 
+             url.includes(query) ||
+             platform.startsWith(query); // Allow partial platform matches
     });
     
     console.log('[MentionAutocomplete] Filtered content:', filtered);
@@ -179,8 +191,14 @@ export const MentionAutocomplete: React.FC<MentionAutocompleteProps> = ({
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1 mb-1">
                     <PlatformIcon platform={content.platform} className="w-3 h-3" />
-                    <span className="text-sm font-medium text-gray-900 truncate">
-                      {processedData?.title || content.title}
+                    <span className="text-xs font-mono bg-gray-100 px-1 rounded">
+                      @{content.platform.toLowerCase().substring(0, 2)}{index + 1}
+                    </span>
+                    <span className="text-sm font-medium text-gray-900 truncate" title={processedData?.title || content.title}>
+                      {(() => {
+                        const title = processedData?.title || content.title;
+                        return title.length > 40 ? title.substring(0, 37) + '...' : title;
+                      })()}
                     </span>
                   </div>
                   

@@ -60,10 +60,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    console.log('[Library API] Fetching content for IDs:', contentIds);
+    console.log('[Library API] Fetching content for element IDs:', contentIds);
 
-    // Fetch content analysis data for the selected content IDs
-    // We need to join through the canvas elements to get the scrape IDs
+    // First, we need to map canvas element IDs to scrape IDs
+    // The contentIds are the canvas element IDs, but we need to find the corresponding scrape IDs
+    // For now, we'll fetch by scrape_id directly if the IDs match
+    
+    // Try to fetch content analysis data for the selected content IDs
     const { data: contentData, error: contentError } = await supabase
       .from('content_analysis')
       .select(`
@@ -77,6 +80,7 @@ export async function POST(request: NextRequest) {
           user_id
         )
       `)
+      .in('scrape_id', contentIds.map(String)) // Convert IDs to strings and match scrape_id
       .eq('content_scrapes.project_id', projectId)
       .eq('content_scrapes.user_id', userId);
 

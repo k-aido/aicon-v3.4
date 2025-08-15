@@ -193,12 +193,36 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       .filter(conn => conn.from === element.id || conn.to === element.id)
       .map(conn => conn.from === element.id ? conn.to : conn.from);
 
-    return allElements
-      .filter(el => 
-        connectedIds.includes(el.id) && 
-        el.type === 'content' &&
-        (el as any).metadata?.isAnalyzed
-      ) as ContentElement[];
+    console.log('[ChatInterface] Connected IDs:', connectedIds);
+    console.log('[ChatInterface] All elements:', allElements);
+
+    const connectedContent = allElements
+      .filter(el => {
+        const isConnected = connectedIds.includes(el.id);
+        const isContent = el.type === 'content';
+        const metadata = (el as any).metadata;
+        
+        // Accept content that has been scraped OR analyzed
+        // processedData = scraped, analysis = analyzed
+        const hasUsableData = metadata?.processedData || 
+                             metadata?.analysis || 
+                             metadata?.isAnalyzed ||
+                             metadata?.scrapeId; // Has been scraped
+        
+        console.log('[ChatInterface] Element check:', {
+          id: el.id,
+          type: el.type,
+          isConnected,
+          isContent,
+          hasUsableData,
+          metadata
+        });
+        
+        return isConnected && isContent && hasUsableData;
+      }) as ContentElement[];
+    
+    console.log('[ChatInterface] Connected content for mentions:', connectedContent);
+    return connectedContent;
   };
 
   // Handle @ mention detection
@@ -208,31 +232,43 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     setInput(value);
     setCursorPosition(cursorPos);
 
+    console.log('[ChatInterface] Input change:', { value, cursorPos });
+
     // Check for @ symbol
     const lastAtIndex = value.lastIndexOf('@', cursorPos - 1);
+    
+    console.log('[ChatInterface] @ detection:', { lastAtIndex, value });
     
     if (lastAtIndex !== -1) {
       // Check if we're in a mention context (@ followed by text without space)
       const textAfterAt = value.substring(lastAtIndex + 1, cursorPos);
       const hasSpaceAfterAt = textAfterAt.includes(' ');
       
+      console.log('[ChatInterface] Mention context:', { textAfterAt, hasSpaceAfterAt });
+      
       if (!hasSpaceAfterAt) {
         // Show autocomplete
         setMentionSearchQuery(textAfterAt);
         setShowMentionAutocomplete(true);
         
+        console.log('[ChatInterface] Showing mention autocomplete with query:', textAfterAt);
+        
         // Calculate position for autocomplete
         if (inputRef.current) {
           const rect = inputRef.current.getBoundingClientRect();
-          setMentionPosition({
+          const position = {
             top: rect.top - 10, // Above the input
             left: rect.left + (lastAtIndex * 8) // Rough character width estimate
-          });
+          };
+          setMentionPosition(position);
+          console.log('[ChatInterface] Autocomplete position:', position);
         }
       } else {
+        console.log('[ChatInterface] Hiding autocomplete - space after @');
         setShowMentionAutocomplete(false);
       }
     } else {
+      console.log('[ChatInterface] Hiding autocomplete - no @ found');
       setShowMentionAutocomplete(false);
     }
   };

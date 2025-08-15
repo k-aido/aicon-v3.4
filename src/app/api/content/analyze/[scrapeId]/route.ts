@@ -282,16 +282,29 @@ Metrics: ${JSON.stringify(contentData.metrics || {})}
 Duration: ${contentData.duration ? `${contentData.duration} seconds` : 'N/A'}
 Hashtags: ${contentData.hashtags?.join(', ') || 'N/A'}
 
-Provide a structured analysis with:
-1. HOOK ANALYSIS: How does the content grab attention in the first 3 seconds?
-2. BODY ANALYSIS: What storytelling techniques and value delivery methods are used?
-3. CTA ANALYSIS: What call-to-action or desired outcome is presented?
-4. KEY TOPICS: List 3-5 main themes or topics covered
-5. ENGAGEMENT TACTICS: List 3-5 specific techniques used to boost engagement
-6. SENTIMENT: Determine if positive, negative, or neutral
-7. COMPLEXITY: Rate as simple, moderate, or complex
+Provide a structured analysis with these exact sections:
 
-Focus on actionable insights that can be replicated in new content.`;
+1. HOOK ANALYSIS: How does the content grab attention in the first 3 seconds? (2-3 sentences)
+
+2. BODY ANALYSIS: What storytelling techniques and value delivery methods are used? (2-3 sentences)
+
+3. CTA ANALYSIS: What call-to-action or desired outcome is presented? (1-2 sentences)
+
+4. KEY TOPICS: List exactly 3-5 main themes (bullet points only)
+- Topic 1
+- Topic 2
+- Topic 3
+
+5. ENGAGEMENT TACTICS: List exactly 3-5 techniques (bullet points only)
+- Tactic 1
+- Tactic 2
+- Tactic 3
+
+6. SENTIMENT: One word only (positive/negative/neutral)
+
+7. COMPLEXITY: One word only (simple/moderate/complex)
+
+Be concise and actionable. Focus on insights that can be replicated.`;
 
   try {
     const completion = await openai.chat.completions.create({
@@ -307,7 +320,7 @@ Focus on actionable insights that can be replicated in new content.`;
         }
       ],
       temperature: 0.3,
-      max_tokens: 1500
+      max_tokens: 2500  // Increased from 1500 to prevent cutoffs
     });
 
     const response = completion.choices[0]?.message?.content || '';
@@ -351,7 +364,7 @@ Focus on actionable insights that can be replicated in new content.`;
 function createMockAnalysis(contentData: any, platform: string) {
   const metrics = contentData.metrics || {};
   const engagementRate = metrics.views > 0 
-    ? ((metrics.likes + metrics.comments) / metrics.views * 100).toFixed(2) 
+    ? (metrics.likes + metrics.comments) / metrics.views * 100
     : 0;
 
   return {

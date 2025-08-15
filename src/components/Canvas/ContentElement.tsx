@@ -297,9 +297,32 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
                 <ExternalLink className="w-4 h-4 text-gray-400" />
               </button>
               <button 
-                onClick={(e) => {
+                onClick={async (e) => {
                   e.stopPropagation();
                   console.log('🗑️ [ContentElement] Delete button clicked:', { elementId: element.id });
+                  
+                  // Cleanup database if element has scraping data
+                  const metadata = (element as any).metadata;
+                  if (metadata?.scrapeId) {
+                    try {
+                      // Get project ID from URL
+                      const projectId = window.location.pathname.split('/canvas/')[1];
+                      
+                      console.log('[ContentElement] Cleaning up content data:', metadata.scrapeId);
+                      await fetch('/api/content/cleanup', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          scrapeId: metadata.scrapeId,
+                          projectId
+                        })
+                      });
+                    } catch (error) {
+                      console.error('[ContentElement] Failed to cleanup content:', error);
+                      // Continue with deletion even if cleanup fails
+                    }
+                  }
+                  
                   onDelete(element.id);
                 }}
                 className="p-1 hover:bg-gray-700 rounded transition-colors outline-none focus:outline-none"

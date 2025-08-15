@@ -222,8 +222,32 @@ const CanvasComponent: React.FC<CanvasProps> = ({
   }, [setElements]);
 
   // Handle element deletion (single)
-  const handleElementDelete = useCallback((id: number) => {
+  const handleElementDelete = useCallback(async (id: number) => {
     console.log('🗑️ [Canvas] handleElementDelete called:', { id });
+    
+    // Get project ID from URL
+    const projectId = window.location.pathname.split('/canvas/')[1];
+    
+    // Find element to delete
+    const elementToDelete = elements.find(el => el.id === id);
+    
+    // Clean up content data for ContentElements
+    if (elementToDelete && elementToDelete.type === 'content' && (elementToDelete as any).metadata?.scrapeId) {
+      try {
+        console.log('[Canvas] Cleaning up content data for element:', id);
+        await fetch('/api/content/cleanup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            scrapeId: (elementToDelete as any).metadata.scrapeId,
+            projectId
+          })
+        });
+      } catch (error) {
+        console.error('[Canvas] Failed to cleanup content for element:', id, error);
+      }
+    }
+    
     setElements(prev => {
       const beforeDelete = prev.map(e => ({ id: e.id, type: e.type, title: (e as any).title || 'N/A' }));
       const afterDelete = prev.filter(el => el.id !== id);
@@ -247,11 +271,40 @@ const CanvasComponent: React.FC<CanvasProps> = ({
     if (selectedElement?.id === id) {
       setSelectedElement(null);
     }
-  }, [setElements, setConnections, selectedElement, setSelectedElement]);
+  }, [elements, setElements, setConnections, selectedElement, setSelectedElement]);
 
   // Handle multiple element deletion
-  const handleMultipleElementDelete = useCallback((ids: number[]) => {
+  const handleMultipleElementDelete = useCallback(async (ids: number[]) => {
     console.log('🗑️ [Canvas] handleMultipleElementDelete called:', { ids });
+    
+    // Get project ID from URL
+    const projectId = window.location.pathname.split('/canvas/')[1];
+    
+    // Clean up content data for ContentElements
+    const elementsToDelete = elements.filter(el => ids.includes(el.id));
+    const cleanupPromises = elementsToDelete
+      .filter(el => el.type === 'content' && (el as any).metadata?.scrapeId)
+      .map(async (element) => {
+        try {
+          console.log('[Canvas] Cleaning up content data for element:', element.id);
+          await fetch('/api/content/cleanup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              scrapeId: (element as any).metadata.scrapeId,
+              projectId
+            })
+          });
+        } catch (error) {
+          console.error('[Canvas] Failed to cleanup content for element:', element.id, error);
+        }
+      });
+    
+    // Wait for all cleanups to complete (but don't block on errors)
+    if (cleanupPromises.length > 0) {
+      await Promise.allSettled(cleanupPromises);
+    }
+    
     setElements(prev => {
       const beforeDelete = prev.map(e => ({ id: e.id, type: e.type, title: (e as any).title || 'N/A' }));
       const afterDelete = prev.filter(el => !ids.includes(el.id));
@@ -270,7 +323,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
     });
     setSelectedElementIds([]);
     setSelectedElement(null);
-  }, [setElements, setConnections, setSelectedElement]);
+  }, [elements, setElements, setConnections, setSelectedElement]);
 
   // Handle element selection with multi-select support
   const handleElementSelect = useCallback((element: CanvasElement, event?: React.MouseEvent) => {

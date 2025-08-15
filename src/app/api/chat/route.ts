@@ -214,9 +214,9 @@ export async function POST(request: NextRequest) {
 
     // Map model IDs to actual API models
     const modelMapping: Record<string, { provider: string; model: string }> = {
-      'gpt-5-standard': { provider: 'openai', model: 'gpt-4o' },
-      'gpt-5-mini': { provider: 'openai', model: 'gpt-4o-mini' },
-      'gpt-5-nano': { provider: 'openai', model: 'gpt-4o-mini' },
+      'gpt-5-standard': { provider: 'openai', model: 'gpt-4.1' },
+      'gpt-5-mini': { provider: 'openai', model: 'gpt-4.1-mini' },
+      'gpt-5-nano': { provider: 'openai', model: 'gpt-4.1-nano' },
       'claude-opus-4': { provider: 'anthropic', model: 'claude-3-opus-20240229' },
       'claude-sonnet-4': { provider: 'anthropic', model: 'claude-3-5-sonnet-20241022' }
     };

@@ -3,6 +3,7 @@ import { Home, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCanvasStore } from '@/store/canvasStore';
 import { canvasPersistence } from '@/services/canvasPersistence';
+import CreditCounter from '../CreditCounter/CreditCounter';
 
 interface CanvasNavigationProps {
   lastSaved?: Date | null;
@@ -188,6 +189,12 @@ export const CanvasNavigation: React.FC<CanvasNavigationProps> = ({ lastSaved })
           </span>
         </>
       )}
+
+      {/* Separator */}
+      <div className="mx-3 h-6 w-px bg-gray-300"></div>
+
+      {/* Credit Counter */}
+      <CreditCounter />
 
       {/* Separator */}
       <div className="mx-3 h-6 w-px bg-gray-300"></div>

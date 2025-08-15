@@ -464,6 +464,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         localStorage.setItem(localStorageKey, data.chatInterfaceId);
         console.log('[ChatInterface] Stored new interface ID:', data.chatInterfaceId, 'with key:', localStorageKey);
       }
+      
+      // Trigger credit update since a chat message was sent successfully
+      window.dispatchEvent(new Event('creditUpdate'));
 
       const aiMessage = {
         id: Date.now() + 1,

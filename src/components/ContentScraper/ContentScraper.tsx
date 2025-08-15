@@ -126,6 +126,12 @@ const ContentScraper: React.FC<ContentScraperProps> = ({
         if (data.status === 'completed') {
           setProcessedData(data.processedData);
           setStatus('analyzing');
+          
+          // Trigger credit update if credits were deducted
+          if (data.creditsDeducted) {
+            window.dispatchEvent(new Event('creditUpdate'));
+          }
+          
           await analyzeContent(id);
           return;
         }

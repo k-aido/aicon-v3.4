@@ -1,12 +1,12 @@
 // PRIMARY CHAT INTERFACE - DO NOT MODIFY
 // Has working conversation sidebar and is the main chat component used on canvas
 import React, { useState, useRef, useEffect } from 'react';
-import { Loader2, MessageSquare, Plus, Send, X, ChevronLeft, ChevronRight, Lightbulb, FileText, Upload, ChevronDown, Bot, User, Link2, Trash2, Sparkles } from 'lucide-react';
+import { Loader2, MessageSquare, Plus, Send, X, ChevronLeft, ChevronRight, Lightbulb, FileText, Upload, ChevronDown, Bot, User, Link2, Trash2, Sparkles, AtSign } from 'lucide-react';
 import { ChatElement, Connection, ContentElement, Message, Model } from '@/types';
 import { useChatStore } from '@/store/chatStore';
 import { createBrowserClient } from '@/lib/supabase/client';
 import { InsufficientCreditsModal } from '@/components/Modal/InsufficientCreditsModal';
-import { ContentSelector } from './ContentSelector';
+import { MentionAutocomplete } from './MentionAutocomplete';
 
 interface ChatInterfaceProps {
   element: ChatElement;
@@ -61,10 +61,12 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [chatInterfaceId, setChatInterfaceId] = useState<string | null>(null);
   const [showCreditsModal, setShowCreditsModal] = useState(false);
   const [creditsModalData, setCreditsModalData] = useState({ needed: 100, available: 0 });
-  const [selectedContentIds, setSelectedContentIds] = useState<number[]>([]);
-  const [showContentSelector, setShowContentSelector] = useState(false);
-  const [loadingContent, setLoadingContent] = useState(false);
-  const [contentAnalysis, setContentAnalysis] = useState<any[]>([]);
+  const [mentionedContent, setMentionedContent] = useState<ContentElement[]>([]);
+  const [showMentionAutocomplete, setShowMentionAutocomplete] = useState(false);
+  const [mentionSearchQuery, setMentionSearchQuery] = useState('');
+  const [mentionPosition, setMentionPosition] = useState({ top: 0, left: 0 });
+  const [cursorPosition, setCursorPosition] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
   
   // Get current model info for provider branding
   const currentModel = LLM_MODELS.find(m => m.id === selectedModel) || LLM_MODELS[4];
@@ -185,50 +187,133 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     loadConversations();
   }, [element.id, setStoreConversations]);
 
-  // Fetch content analysis when content is selected
-  const fetchContentAnalysis = async () => {
-    if (selectedContentIds.length === 0) {
-      setContentAnalysis([]);
-      return;
-    }
+  // Get connected content that can be mentioned
+  const getConnectedContent = (): ContentElement[] => {
+    const connectedIds = connections
+      .filter(conn => conn.from === element.id || conn.to === element.id)
+      .map(conn => conn.from === element.id ? conn.to : conn.from);
 
-    setLoadingContent(true);
+    return allElements
+      .filter(el => 
+        connectedIds.includes(el.id) && 
+        el.type === 'content' &&
+        (el as any).metadata?.isAnalyzed
+      ) as ContentElement[];
+  };
+
+  // Handle @ mention detection
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    const cursorPos = e.target.selectionStart || 0;
+    setInput(value);
+    setCursorPosition(cursorPos);
+
+    // Check for @ symbol
+    const lastAtIndex = value.lastIndexOf('@', cursorPos - 1);
+    
+    if (lastAtIndex !== -1) {
+      // Check if we're in a mention context (@ followed by text without space)
+      const textAfterAt = value.substring(lastAtIndex + 1, cursorPos);
+      const hasSpaceAfterAt = textAfterAt.includes(' ');
+      
+      if (!hasSpaceAfterAt) {
+        // Show autocomplete
+        setMentionSearchQuery(textAfterAt);
+        setShowMentionAutocomplete(true);
+        
+        // Calculate position for autocomplete
+        if (inputRef.current) {
+          const rect = inputRef.current.getBoundingClientRect();
+          setMentionPosition({
+            top: rect.top - 10, // Above the input
+            left: rect.left + (lastAtIndex * 8) // Rough character width estimate
+          });
+        }
+      } else {
+        setShowMentionAutocomplete(false);
+      }
+    } else {
+      setShowMentionAutocomplete(false);
+    }
+  };
+
+  // Handle mention selection
+  const handleMentionSelect = (content: ContentElement) => {
+    const lastAtIndex = input.lastIndexOf('@', cursorPosition - 1);
+    if (lastAtIndex !== -1) {
+      const beforeAt = input.substring(0, lastAtIndex);
+      const afterCursor = input.substring(cursorPosition);
+      const contentTitle = (content as any).metadata?.processedData?.title || content.title;
+      const newInput = `${beforeAt}@[${contentTitle}](${content.id})${afterCursor}`;
+      
+      setInput(newInput);
+      setMentionedContent(prev => [...prev, content]);
+      setShowMentionAutocomplete(false);
+      
+      // Focus back on input
+      setTimeout(() => {
+        if (inputRef.current) {
+          inputRef.current.focus();
+          const newCursorPos = beforeAt.length + `@[${contentTitle}](${content.id})`.length;
+          inputRef.current.setSelectionRange(newCursorPos, newCursorPos);
+        }
+      }, 0);
+    }
+  };
+
+  // Parse mentions from input text
+  const parseMentionsFromText = (text: string): { cleanText: string; mentionIds: number[] } => {
+    const mentionPattern = /@\[([^\]]+)\]\((\d+)\)/g;
+    const mentionIds: number[] = [];
+    let cleanText = text;
+    
+    let match;
+    while ((match = mentionPattern.exec(text)) !== null) {
+      mentionIds.push(parseInt(match[2]));
+    }
+    
+    // Replace mention syntax with just the title for display
+    cleanText = text.replace(mentionPattern, '@$1');
+    
+    return { cleanText, mentionIds };
+  };
+
+  // Fetch content analysis for mentioned content
+  const fetchContentAnalysis = async (contentIds: number[]) => {
+    if (contentIds.length === 0) return [];
+
     try {
       const projectId = window.location.pathname.split('/canvas/')[1];
       const response = await fetch('/api/content/library', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contentIds: selectedContentIds,
+          contentIds,
           projectId
         })
       });
 
       if (response.ok) {
         const data = await response.json();
-        setContentAnalysis(data.content || []);
-        console.log('[ChatInterface] Loaded content analysis:', data.content?.length || 0);
+        return data.content || [];
       }
     } catch (error) {
       console.error('[ChatInterface] Error fetching content analysis:', error);
-    } finally {
-      setLoadingContent(false);
     }
+    return [];
   };
-
-  // Fetch content analysis when selection changes
-  useEffect(() => {
-    fetchContentAnalysis();
-  }, [selectedContentIds]);
 
   const sendMessage = async () => {
     if (!input.trim() || isLoading) return;
     
-    // Create user message
+    // Parse mentions from input
+    const { cleanText, mentionIds } = parseMentionsFromText(input.trim());
+    
+    // Create user message with clean text
     const userMessage = {
       id: Date.now(),
       role: 'user' as const,
-      content: input.trim(),
+      content: cleanText,
       timestamp: new Date()
     };
     
@@ -241,11 +326,15 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     );
     setStoreConversations(element.id, updatedConversations);
     
-    // Clear input
+    // Clear input and mentioned content
     setInput('');
+    setMentionedContent([]);
     setIsLoading(true);
     
     try {
+      // Fetch analysis for mentioned content
+      const contentAnalysis = await fetchContentAnalysis(mentionIds);
+      
       // Prepare connected content for RAG
       const connectedContentForChat = contentAnalysis.map(content => ({
         title: content.title,
@@ -595,30 +684,13 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
         {/* Input Area - Container allows drag */}
         <div className="border-t border-gray-200 bg-white p-4">
-          {/* RAG Content Indicator */}
-          {selectedContentIds.length > 0 && (
-            <div className="mb-3 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-blue-600" />
-                <span className="text-sm text-blue-800">
-                  Using {selectedContentIds.length} content piece{selectedContentIds.length !== 1 ? 's' : ''} for context
-                </span>
-              </div>
-              {loadingContent && (
-                <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
-              )}
-            </div>
-          )}
-          
           <div className="space-y-3">
-            <div className="flex gap-3">
+            <div className="flex gap-3 relative">
               <input
+                ref={inputRef}
                 type="text"
                 value={input}
-                onChange={(e) => {
-                  e.stopPropagation();
-                  setInput(e.target.value);
-                }}
+                onChange={handleInputChange}
                 onKeyPress={(e) => {
                   e.stopPropagation();
                   handleKeyPress(e);
@@ -626,12 +698,23 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 onClick={(e) => e.stopPropagation()}
                 onMouseDown={(e) => e.stopPropagation()}
                 onFocus={(e) => e.stopPropagation()}
-                placeholder="Type your message..."
+                placeholder="Type a message... Use @ to reference content"
                 disabled={isLoading}
                 data-no-drag
                 className="flex-1 px-4 py-3 bg-gray-100 rounded-xl border border-gray-200 outline-none focus:border-purple-500 focus:bg-white transition-all"
                 style={{ pointerEvents: 'auto', zIndex: 10 }}
               />
+              
+              {/* Mention Autocomplete */}
+              {showMentionAutocomplete && (
+                <MentionAutocomplete
+                  searchQuery={mentionSearchQuery}
+                  availableContent={getConnectedContent()}
+                  onSelect={handleMentionSelect}
+                  onClose={() => setShowMentionAutocomplete(false)}
+                  position={mentionPosition}
+                />
+              )}
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -646,32 +729,14 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
               </button>
             </div>
             
-            <div className="flex items-center gap-3">
-              {/* Content Selector Toggle */}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowContentSelector(!showContentSelector);
-                }}
-                onMouseDown={(e) => e.stopPropagation()}
-                className={`px-3 py-1.5 rounded-lg text-sm border transition-colors flex items-center gap-2 ${
-                  showContentSelector 
-                    ? 'bg-blue-100 border-blue-300 text-blue-700'
-                    : 'bg-gray-100 border-gray-200 text-gray-700 hover:bg-gray-200'
-                }`}
-                data-no-drag
-                title="Toggle RAG content selector"
-              >
-                <Sparkles className="w-4 h-4" />
-                RAG
-                {selectedContentIds.length > 0 && (
-                  <span className="ml-1 px-1.5 py-0.5 bg-blue-600 text-white text-xs rounded-full">
-                    {selectedContentIds.length}
-                  </span>
-                )}
-              </button>
+            <div className="flex items-center justify-between">
+              <div className="text-xs text-gray-400 flex items-center gap-1">
+                <AtSign className="w-3 h-3" />
+                <span>Type @ to reference content</span>
+              </div>
               
-              <span className="text-sm text-gray-500">Model:</span>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-500">Model:</span>
               <select
                 value={selectedModel}
                 onChange={(e) => {
@@ -693,6 +758,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   </option>
                 ))}
               </select>
+              </div>
             </div>
           </div>
         </div>

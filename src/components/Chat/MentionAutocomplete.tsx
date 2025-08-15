@@ -36,17 +36,10 @@ export const MentionAutocomplete: React.FC<MentionAutocompleteProps> = ({
   const [filteredContent, setFilteredContent] = useState<ContentElement[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  console.log('[MentionAutocomplete] Rendered with:', { 
-    searchQuery, 
-    availableContentCount: availableContent.length,
-    position 
-  });
-
   // Filter content based on search query
   useEffect(() => {
     // If no search query, show all available content
     if (!searchQuery) {
-      console.log('[MentionAutocomplete] No search query, showing all content');
       setFilteredContent(availableContent);
       setSelectedIndex(0);
       return;
@@ -66,7 +59,6 @@ export const MentionAutocomplete: React.FC<MentionAutocompleteProps> = ({
              platform.startsWith(query); // Allow partial platform matches
     });
     
-    console.log('[MentionAutocomplete] Filtered content:', filtered);
     setFilteredContent(filtered);
     setSelectedIndex(0);
   }, [searchQuery, availableContent]);

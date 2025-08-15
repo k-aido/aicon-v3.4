@@ -1,6 +1,6 @@
 // PRIMARY CHAT INTERFACE - DO NOT MODIFY
 // Has working conversation sidebar and is the main chat component used on canvas
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Loader2, MessageSquare, Plus, Send, X, ChevronLeft, ChevronRight, Lightbulb, FileText, Upload, ChevronDown, Bot, User, Link2, Trash2, Sparkles, AtSign } from 'lucide-react';
 import { ChatElement, Connection, ContentElement, Message, Model } from '@/types';
 import { useChatStore } from '@/store/chatStore';
@@ -187,16 +187,13 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     loadConversations();
   }, [element.id, setStoreConversations]);
 
-  // Get connected content that can be mentioned
-  const getConnectedContent = (): ContentElement[] => {
+  // Get connected content that can be mentioned - memoized to prevent re-computation
+  const connectedContent = useMemo(() => {
     const connectedIds = connections
       .filter(conn => conn.from === element.id || conn.to === element.id)
       .map(conn => conn.from === element.id ? conn.to : conn.from);
 
-    console.log('[ChatInterface] Connected IDs:', connectedIds);
-    console.log('[ChatInterface] All elements:', allElements);
-
-    const connectedContent = allElements
+    const content = allElements
       .filter(el => {
         const isConnected = connectedIds.includes(el.id);
         const isContent = el.type === 'content';
@@ -209,21 +206,11 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                              metadata?.isAnalyzed ||
                              metadata?.scrapeId; // Has been scraped
         
-        console.log('[ChatInterface] Element check:', {
-          id: el.id,
-          type: el.type,
-          isConnected,
-          isContent,
-          hasUsableData,
-          metadata
-        });
-        
         return isConnected && isContent && hasUsableData;
       }) as ContentElement[];
     
-    console.log('[ChatInterface] Connected content for mentions:', connectedContent);
-    return connectedContent;
-  };
+    return content;
+  }, [connections, element.id, allElements]);
 
   // Handle @ mention detection
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -232,26 +219,18 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     setInput(value);
     setCursorPosition(cursorPos);
 
-    console.log('[ChatInterface] Input change:', { value, cursorPos });
-
     // Check for @ symbol
     const lastAtIndex = value.lastIndexOf('@', cursorPos - 1);
-    
-    console.log('[ChatInterface] @ detection:', { lastAtIndex, value });
     
     if (lastAtIndex !== -1) {
       // Check if we're in a mention context (@ followed by text without space)
       const textAfterAt = value.substring(lastAtIndex + 1, cursorPos);
       const hasSpaceAfterAt = textAfterAt.includes(' ');
       
-      console.log('[ChatInterface] Mention context:', { textAfterAt, hasSpaceAfterAt });
-      
       if (!hasSpaceAfterAt) {
         // Show autocomplete
         setMentionSearchQuery(textAfterAt);
         setShowMentionAutocomplete(true);
-        
-        console.log('[ChatInterface] Showing mention autocomplete with query:', textAfterAt);
         
         // Calculate position for autocomplete
         if (inputRef.current) {
@@ -261,14 +240,11 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
             left: rect.left + Math.min(lastAtIndex * 8, rect.width - 400) // Position near @ but keep on screen
           };
           setMentionPosition(position);
-          console.log('[ChatInterface] Autocomplete position:', position);
         }
       } else {
-        console.log('[ChatInterface] Hiding autocomplete - space after @');
         setShowMentionAutocomplete(false);
       }
     } else {
-      console.log('[ChatInterface] Hiding autocomplete - no @ found');
       setShowMentionAutocomplete(false);
     }
   };
@@ -284,7 +260,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       const platformPrefix = content.platform.toLowerCase().substring(0, 2); // ig, yo, ti
       
       // Get all connected content to determine the number
-      const connectedContent = getConnectedContent();
+      // Use the memoized connectedContent
       const sameplatformContent = connectedContent.filter(c => c.platform === content.platform);
       const contentIndex = sameplatformContent.findIndex(c => c.id === content.id) + 1;
       
@@ -760,7 +736,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
               {showMentionAutocomplete && (
                 <MentionAutocomplete
                   searchQuery={mentionSearchQuery}
-                  availableContent={getConnectedContent()}
+                  availableContent={connectedContent}
                   onSelect={handleMentionSelect}
                   onClose={() => setShowMentionAutocomplete(false)}
                   position={mentionPosition}

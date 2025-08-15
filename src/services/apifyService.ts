@@ -223,8 +223,55 @@ class ApifyService {
     let platform: 'youtube' | 'instagram' | 'tiktok';
     let normalized: ScrapedContent;
 
-    // YouTube data normalization
-    if (data.videoId || data.channelId || data.video_id || data.id || data.url?.includes('youtube.com') || data.url?.includes('youtu.be')) {
+    // Check Instagram first (has specific fields like shortCode)
+    if (data.shortCode || data.type === 'Post' || data.inputUrl?.includes('instagram.com')) {
+      platform = 'instagram';
+      
+      // Instagram scraper may return different field names
+      // Check multiple possible fields for thumbnail
+      const thumbnailUrl = data.displayUrl || 
+                          data.display_url || 
+                          data.imageUrl || 
+                          data.image_url || 
+                          data.thumbnailUrl || 
+                          data.thumbnail_url ||
+                          data.images?.[0] ||
+                          data.displayResources?.[0]?.src;
+      
+      console.log('[ApifyService] Instagram thumbnail extraction:', {
+        displayUrl: data.displayUrl,
+        display_url: data.display_url,
+        imageUrl: data.imageUrl,
+        thumbnailUrl: data.thumbnailUrl,
+        extracted: thumbnailUrl
+      });
+      
+      normalized = {
+        platform,
+        url: data.url || `https://instagram.com/p/${data.shortCode}`,
+        title: data.caption?.substring(0, 100) || data.text?.substring(0, 100),
+        caption: data.caption || data.text,
+        viewCount: parseInt(data.videoViewCount || data.video_view_count || data.views || 0),
+        likeCount: parseInt(data.likesCount || data.likes_count || data.likes || 0),
+        commentCount: parseInt(data.commentsCount || data.comments_count || data.comments?.length || 0),
+        uploadDate: data.timestamp || data.takenAt || data.taken_at,
+        authorName: data.ownerUsername || data.owner_username || data.owner?.username,
+        authorId: data.ownerId || data.owner_id || data.owner?.id,
+        thumbnailUrl,
+        videoUrl: data.videoUrl || data.video_url,
+        hashtags: this.extractHashtags(data.caption || data.text || ''),
+        mentions: this.extractMentions(data.caption || data.text || ''),
+        comments: data.comments?.slice(0, 50)?.map((c: any) => ({
+          text: c.text,
+          author: c.ownerUsername,
+          likes: c.likesCount || 0,
+          timestamp: c.timestamp
+        })),
+        rawData: data
+      };
+    }
+    // YouTube data normalization - check after Instagram but before TikTok
+    else if (data.videoId || data.channelId || data.video_id || data.url?.includes('youtube.com') || data.url?.includes('youtu.be')) {
       platform = 'youtube';
       
       // Log raw data structure for debugging
@@ -298,54 +345,7 @@ class ApifyService {
         rawData: data
       };
     }
-    // Instagram data normalization
-    else if (data.shortCode || data.type === 'Post') {
-      platform = 'instagram';
-      
-      // Instagram scraper may return different field names
-      // Check multiple possible fields for thumbnail
-      const thumbnailUrl = data.displayUrl || 
-                          data.display_url || 
-                          data.imageUrl || 
-                          data.image_url || 
-                          data.thumbnailUrl || 
-                          data.thumbnail_url ||
-                          data.images?.[0] ||
-                          data.displayResources?.[0]?.src;
-      
-      console.log('[ApifyService] Instagram thumbnail extraction:', {
-        displayUrl: data.displayUrl,
-        display_url: data.display_url,
-        imageUrl: data.imageUrl,
-        thumbnailUrl: data.thumbnailUrl,
-        extracted: thumbnailUrl
-      });
-      
-      normalized = {
-        platform,
-        url: data.url || `https://instagram.com/p/${data.shortCode}`,
-        title: data.caption?.substring(0, 100) || data.text?.substring(0, 100),
-        caption: data.caption || data.text,
-        viewCount: parseInt(data.videoViewCount || data.video_view_count || data.views || 0),
-        likeCount: parseInt(data.likesCount || data.likes_count || data.likes || 0),
-        commentCount: parseInt(data.commentsCount || data.comments_count || data.comments?.length || 0),
-        uploadDate: data.timestamp || data.takenAt || data.taken_at,
-        authorName: data.ownerUsername || data.owner_username || data.owner?.username,
-        authorId: data.ownerId || data.owner_id || data.owner?.id,
-        thumbnailUrl,
-        videoUrl: data.videoUrl || data.video_url,
-        hashtags: this.extractHashtags(data.caption || data.text || ''),
-        mentions: this.extractMentions(data.caption || data.text || ''),
-        comments: data.comments?.slice(0, 50)?.map((c: any) => ({
-          text: c.text,
-          author: c.ownerUsername,
-          likes: c.likesCount || 0,
-          timestamp: c.timestamp
-        })),
-        rawData: data
-      };
-    }
-    // TikTok data normalization
+    // TikTok data normalization - fallback for everything else
     else {
       platform = 'tiktok';
       

@@ -77,8 +77,8 @@ export const ChatElement: React.FC<ChatElementProps> = React.memo(({
       <SimpleResize
         width={element.width}
         height={element.height}
-        minWidth={700}
-        minHeight={800}
+        minWidth={600}
+        minHeight={500}
         onResize={handleResize}
         showHandle={selected || isHovered}
         className={`rounded-lg shadow-lg outline-none focus:outline-none ${

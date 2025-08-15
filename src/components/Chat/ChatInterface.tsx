@@ -1,12 +1,13 @@
 // PRIMARY CHAT INTERFACE - DO NOT MODIFY
 // Has working conversation sidebar and is the main chat component used on canvas
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Loader2, MessageSquare, Plus, Send, X, ChevronLeft, ChevronRight, Trash2, AtSign } from 'lucide-react';
+import { Loader2, MessageSquare, Plus, Send, X, ChevronLeft, ChevronRight, Trash2, AtSign, Copy, Check } from 'lucide-react';
 import { ChatElement, Connection, ContentElement, Message } from '@/types';
 import { useChatStore } from '@/store/chatStore';
 import { createBrowserClient } from '@/lib/supabase/client';
 import { InsufficientCreditsModal } from '@/components/Modal/InsufficientCreditsModal';
 import { MentionAutocomplete } from './MentionAutocomplete';
+import { MarkdownMessage } from './MarkdownMessage';
 
 interface ChatInterfaceProps {
   element: ChatElement;
@@ -48,6 +49,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [mentionSearchQuery, setMentionSearchQuery] = useState('');
   const [mentionPosition, setMentionPosition] = useState({ top: 0, left: 0 });
   const [cursorPosition, setCursorPosition] = useState(0);
+  const [copiedMessageId, setCopiedMessageId] = useState<number | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   
   // Get current model info for provider branding
@@ -562,7 +564,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     setStoreConversations(element.id, updatedConversations);
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       sendMessage();
@@ -676,8 +678,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
           )}
         </div>
 
-        {/* Messages Area - DRAGGABLE */}
-        <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
+        {/* Messages Area - DRAGGABLE but text selectable */}
+        <div className="flex-1 overflow-y-auto p-6 bg-gray-50" style={{ userSelect: 'text' }}>
           {messages.length === 0 && (
             <div className="text-center text-gray-500 mt-12">
               <MessageSquare className="w-12 h-12 mx-auto mb-4 text-gray-300" />
@@ -690,14 +692,49 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
             {messages.map((message: Message) => (
               <div 
                 key={message.id} 
-                className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} group`}
               >
-                <div className={`max-w-[80%] p-4 rounded-2xl ${
+                <div className={`relative max-w-[80%] ${
                   message.role === 'user' 
-                    ? 'bg-purple-600 text-white' 
-                    : 'bg-white border border-gray-200 text-gray-900 shadow-sm'
+                    ? '' 
+                    : ''
                 }`}>
-                  {message.content}
+                  {/* Copy button for assistant messages */}
+                  {message.role === 'assistant' && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigator.clipboard.writeText(message.content);
+                        setCopiedMessageId(message.id);
+                        setTimeout(() => setCopiedMessageId(null), 2000);
+                      }}
+                      className="absolute -right-10 top-4 p-2 opacity-0 group-hover:opacity-100 transition-opacity bg-gray-100 hover:bg-gray-200 rounded-lg"
+                      title="Copy message"
+                    >
+                      {copiedMessageId === message.id ? (
+                        <Check className="w-4 h-4 text-green-600" />
+                      ) : (
+                        <Copy className="w-4 h-4 text-gray-600" />
+                      )}
+                    </button>
+                  )}
+                  
+                  <div className={`p-4 rounded-2xl ${
+                    message.role === 'user' 
+                      ? 'bg-purple-600 text-white' 
+                      : 'bg-white border border-gray-200 text-gray-900 shadow-sm'
+                  }`}
+                  style={{ userSelect: 'text', WebkitUserSelect: 'text' }}
+                  >
+                    {message.role === 'assistant' ? (
+                      <MarkdownMessage 
+                        content={message.content} 
+                        className=""
+                      />
+                    ) : (
+                      <div className="whitespace-pre-wrap">{message.content}</div>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}
@@ -719,9 +756,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 type="text"
                 value={input}
                 onChange={handleInputChange}
-                onKeyPress={(e) => {
+                onKeyDown={(e) => {
                   e.stopPropagation();
-                  handleKeyPress(e);
+                  handleKeyDown(e);
                 }}
                 onClick={(e) => e.stopPropagation()}
                 onMouseDown={(e) => e.stopPropagation()}

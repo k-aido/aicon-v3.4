@@ -224,13 +224,44 @@ export async function POST(request: NextRequest) {
     const selectedModel = modelMapping[model] || { provider: 'mock', model: model };
     console.log(`[API] Model mapping - ${model} -> ${selectedModel.provider}:${selectedModel.model}`);
 
-    // Add context from connected content if available
+    // Build system message with RAG content
     let systemMessage = 'You are an AI assistant helping with content creation and analysis.';
+    
     if (connectedContent && connectedContent.length > 0) {
-      systemMessage += '\n\nConnected content for context:\n';
-      connectedContent.forEach((content: any) => {
-        systemMessage += `- ${content.title} (${content.platform}): ${content.url}\n`;
+      systemMessage += '\n\nYou have access to analyzed content that should inform your responses. Use these insights to create new, inspired content:\n\n';
+      
+      connectedContent.forEach((content: any, index: number) => {
+        systemMessage += `===== Content ${index + 1}: ${content.title} (${content.platform}) =====\n`;
+        systemMessage += `URL: ${content.url}\n`;
+        
+        if (content.analysis) {
+          systemMessage += `\nHook Analysis: ${content.analysis.hookAnalysis}\n`;
+          systemMessage += `Body Analysis: ${content.analysis.bodyAnalysis}\n`;
+          systemMessage += `CTA Analysis: ${content.analysis.ctaAnalysis}\n`;
+          
+          if (content.keyTopics?.length > 0) {
+            systemMessage += `Key Topics: ${content.keyTopics.join(', ')}\n`;
+          }
+          
+          if (content.engagementTactics?.length > 0) {
+            systemMessage += `Engagement Tactics: ${content.engagementTactics.join(', ')}\n`;
+          }
+          
+          systemMessage += `Sentiment: ${content.analysis.sentiment || 'neutral'}\n`;
+          systemMessage += `Complexity: ${content.analysis.complexity || 'moderate'}\n`;
+        }
+        
+        if (content.metrics) {
+          systemMessage += `\nPerformance Metrics:\n`;
+          if (content.metrics.views) systemMessage += `- Views: ${content.metrics.views.toLocaleString()}\n`;
+          if (content.metrics.likes) systemMessage += `- Likes: ${content.metrics.likes.toLocaleString()}\n`;
+          if (content.metrics.comments) systemMessage += `- Comments: ${content.metrics.comments.toLocaleString()}\n`;
+        }
+        
+        systemMessage += '\n';
       });
+      
+      systemMessage += '\nWhen generating content, incorporate successful patterns and tactics from the analyzed content above. Be specific about which techniques you are adapting and why they work.';
     }
 
     let response;
@@ -426,7 +457,7 @@ export async function POST(request: NextRequest) {
           
           if (projectIdToUse) {
             // Create a chat_interface if it doesn't exist
-            const { data: newInterface, error: interfaceError } = await supabase
+            const { data: newInterface } = await supabase
               .from('chat_interfaces')
               .insert({
                 project_id: projectIdToUse,

@@ -1,11 +1,12 @@
 // PRIMARY CHAT INTERFACE - DO NOT MODIFY
 // Has working conversation sidebar and is the main chat component used on canvas
 import React, { useState, useRef, useEffect } from 'react';
-import { Loader2, MessageSquare, Plus, Send, X, ChevronLeft, ChevronRight, Lightbulb, FileText, Upload, ChevronDown, Bot, User, Link2, Trash2 } from 'lucide-react';
+import { Loader2, MessageSquare, Plus, Send, X, ChevronLeft, ChevronRight, Lightbulb, FileText, Upload, ChevronDown, Bot, User, Link2, Trash2, Sparkles } from 'lucide-react';
 import { ChatElement, Connection, ContentElement, Message, Model } from '@/types';
 import { useChatStore } from '@/store/chatStore';
 import { createBrowserClient } from '@/lib/supabase/client';
 import { InsufficientCreditsModal } from '@/components/Modal/InsufficientCreditsModal';
+import { ContentSelector } from './ContentSelector';
 
 interface ChatInterfaceProps {
   element: ChatElement;
@@ -60,6 +61,10 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [chatInterfaceId, setChatInterfaceId] = useState<string | null>(null);
   const [showCreditsModal, setShowCreditsModal] = useState(false);
   const [creditsModalData, setCreditsModalData] = useState({ needed: 100, available: 0 });
+  const [selectedContentIds, setSelectedContentIds] = useState<number[]>([]);
+  const [showContentSelector, setShowContentSelector] = useState(false);
+  const [loadingContent, setLoadingContent] = useState(false);
+  const [contentAnalysis, setContentAnalysis] = useState<any[]>([]);
   
   // Get current model info for provider branding
   const currentModel = LLM_MODELS.find(m => m.id === selectedModel) || LLM_MODELS[4];
@@ -180,6 +185,42 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     loadConversations();
   }, [element.id, setStoreConversations]);
 
+  // Fetch content analysis when content is selected
+  const fetchContentAnalysis = async () => {
+    if (selectedContentIds.length === 0) {
+      setContentAnalysis([]);
+      return;
+    }
+
+    setLoadingContent(true);
+    try {
+      const projectId = window.location.pathname.split('/canvas/')[1];
+      const response = await fetch('/api/content/library', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contentIds: selectedContentIds,
+          projectId
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setContentAnalysis(data.content || []);
+        console.log('[ChatInterface] Loaded content analysis:', data.content?.length || 0);
+      }
+    } catch (error) {
+      console.error('[ChatInterface] Error fetching content analysis:', error);
+    } finally {
+      setLoadingContent(false);
+    }
+  };
+
+  // Fetch content analysis when selection changes
+  useEffect(() => {
+    fetchContentAnalysis();
+  }, [selectedContentIds]);
+
   const sendMessage = async () => {
     if (!input.trim() || isLoading) return;
     
@@ -205,6 +246,17 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     setIsLoading(true);
     
     try {
+      // Prepare connected content for RAG
+      const connectedContentForChat = contentAnalysis.map(content => ({
+        title: content.title,
+        platform: content.platform,
+        url: content.url,
+        analysis: content.analysis,
+        metrics: content.metrics,
+        keyTopics: content.analysis?.keyTopics || [],
+        engagementTactics: content.analysis?.engagementTactics || []
+      }));
+
       // Call real AI API with thread and element IDs for database persistence
       const response = await fetch('/api/chat', {
         method: 'POST',
@@ -215,7 +267,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
             content: m.content 
           })),
           model: selectedModel,
-          connectedContent: [], // No connected content in basic chat
+          connectedContent: connectedContentForChat, // Pass analyzed content for RAG
           threadId: activeConversationId, // Pass thread ID for database persistence
           chatElementId: element.id.toString(), // Pass chat element ID
           chatInterfaceId: chatInterfaceId, // Pass the actual chat interface UUID
@@ -494,6 +546,19 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
           )}
         </div>
 
+        {/* Content Selector */}
+        {showContentSelector && (
+          <div className="border-b border-gray-200 bg-gray-50 p-4">
+            <ContentSelector
+              chatElementId={element.id}
+              connections={connections}
+              allElements={allElements}
+              selectedContentIds={selectedContentIds}
+              onContentSelectionChange={setSelectedContentIds}
+            />
+          </div>
+        )}
+
         {/* Messages Area - DRAGGABLE */}
         <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
           {messages.length === 0 && (
@@ -530,6 +595,21 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
         {/* Input Area - Container allows drag */}
         <div className="border-t border-gray-200 bg-white p-4">
+          {/* RAG Content Indicator */}
+          {selectedContentIds.length > 0 && (
+            <div className="mb-3 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-blue-600" />
+                <span className="text-sm text-blue-800">
+                  Using {selectedContentIds.length} content piece{selectedContentIds.length !== 1 ? 's' : ''} for context
+                </span>
+              </div>
+              {loadingContent && (
+                <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
+              )}
+            </div>
+          )}
+          
           <div className="space-y-3">
             <div className="flex gap-3">
               <input
@@ -566,7 +646,31 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
               </button>
             </div>
             
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
+              {/* Content Selector Toggle */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowContentSelector(!showContentSelector);
+                }}
+                onMouseDown={(e) => e.stopPropagation()}
+                className={`px-3 py-1.5 rounded-lg text-sm border transition-colors flex items-center gap-2 ${
+                  showContentSelector 
+                    ? 'bg-blue-100 border-blue-300 text-blue-700'
+                    : 'bg-gray-100 border-gray-200 text-gray-700 hover:bg-gray-200'
+                }`}
+                data-no-drag
+                title="Toggle RAG content selector"
+              >
+                <Sparkles className="w-4 h-4" />
+                RAG
+                {selectedContentIds.length > 0 && (
+                  <span className="ml-1 px-1.5 py-0.5 bg-blue-600 text-white text-xs rounded-full">
+                    {selectedContentIds.length}
+                  </span>
+                )}
+              </button>
+              
               <span className="text-sm text-gray-500">Model:</span>
               <select
                 value={selectedModel}

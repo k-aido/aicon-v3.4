@@ -66,8 +66,10 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     setActiveConversation 
   } = useChatStore();
   
-  // Use store state directly
-  const conversations = getConversations(element.id);
+  // Subscribe to store changes for this element's conversations
+  // Force re-render when conversations change
+  const storeConversations = useChatStore((state) => state.conversations);
+  const conversations = storeConversations[element.id] || [];
   const [activeConversationId, setActiveConversationId] = useState(() => getActiveConversation(element.id));
   
   // Get current conversation and messages
@@ -311,6 +313,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     
     // If no active conversation, create one first
     let currentActiveConversationId = activeConversationId;
+    let workingConversations = conversations;
+    
     if (!currentActiveConversationId) {
       // Generate a UUID directly here
       const generateUUID = () => {
@@ -331,8 +335,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       };
       
       // Update state with new conversation
-      const updatedConversationsForNew = [...conversations, newConversation];
-      setStoreConversations(element.id, updatedConversationsForNew);
+      workingConversations = [...conversations, newConversation];
+      setStoreConversations(element.id, workingConversations);
       setActiveConversationId(newConversationId);
       currentActiveConversationId = newConversationId;
     }
@@ -355,14 +359,13 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       timestamp: new Date()
     };
     
-    // Get the current conversation (might be the newly created one)
-    const currentConversations = getConversations(element.id);
-    const currentConversation = currentConversations.find(c => c.id === currentActiveConversationId);
+    // Use the working conversations array (which has the new conversation if we just created it)
+    const currentConversation = workingConversations.find(c => c.id === currentActiveConversationId);
     const currentMessages = currentConversation?.messages || [];
     
     // Add to current conversation's messages
     const updatedMessages = [...currentMessages, userMessage];
-    const updatedConversations = currentConversations.map(conv => 
+    const updatedConversations = workingConversations.map(conv => 
       conv.id === currentActiveConversationId 
         ? { ...conv, messages: updatedMessages, lastMessageAt: new Date() }
         : conv
@@ -431,7 +434,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
           }
           
           // Remove the user message from the conversation since it wasn't processed
-          const revertedConversations = currentConversations.map(conv =>
+          const revertedConversations = workingConversations.map(conv =>
             conv.id === currentActiveConversationId
               ? { ...conv, messages: currentMessages } // Revert to original messages
               : conv
@@ -479,7 +482,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       const finalMessages = [...updatedMessages, aiMessage];
       
       // Add AI message and update title if needed
-      const finalConversations = currentConversations.map(conv => 
+      const finalConversations = workingConversations.map(conv => 
         conv.id === currentActiveConversationId 
           ? { 
               ...conv, 
@@ -489,6 +492,14 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
             }
           : conv
       );
+      
+      console.log('[ChatInterface] Setting final conversations:', {
+        elementId: element.id,
+        conversationId: currentActiveConversationId,
+        messageCount: finalMessages.length,
+        finalConversations: finalConversations.map(c => ({ id: c.id, messageCount: c.messages.length }))
+      });
+      
       setStoreConversations(element.id, finalConversations);
     } catch (error) {
       console.error('Error calling AI API:', error);
@@ -503,7 +514,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
           timestamp: new Date()
         };
         const finalMessages = [...updatedMessages, errorMessage];
-        const finalConversations = currentConversations.map(conv => 
+        const finalConversations = workingConversations.map(conv => 
           conv.id === currentActiveConversationId 
             ? { 
                 ...conv, 

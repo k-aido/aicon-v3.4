@@ -33,20 +33,18 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   activeConversations: {},
   
   getConversations: (elementId) => {
-    return get().conversations[elementId] || [{
-      id: crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-        const r = Math.random() * 16 | 0;
-        const v = c === 'x' ? r : (r & 0x3 | 0x8);
-        return v.toString(16);
-      }),
-      title: 'New Chat',
-      messages: [],
-      createdAt: new Date(),
-      lastMessageAt: new Date()
-    }];
+    return get().conversations[elementId] || [];
   },
   
   setConversations: (elementId, conversations) => {
+    console.log(`[ChatStore] Setting conversations for element ${elementId}:`, {
+      conversationCount: conversations.length,
+      conversations: conversations.map(c => ({ 
+        id: c.id, 
+        title: c.title, 
+        messageCount: c.messages.length 
+      }))
+    });
     set(state => ({
       conversations: { ...state.conversations, [elementId]: conversations }
     }));
@@ -57,7 +55,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const activeId = get().activeConversations[elementId];
     if (activeId) return activeId;
     
-    // If no active conversation, return the ID of the first conversation
+    // If no active conversation, return null
     const conversations = get().getConversations(elementId);
     return conversations.length > 0 ? conversations[0].id : null;
   },

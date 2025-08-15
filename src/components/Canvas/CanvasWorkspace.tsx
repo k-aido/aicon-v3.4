@@ -564,7 +564,6 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
                     } as any}
                     connections={connections as any}
                     allElements={elements as any}
-                    onUpdate={(id: number, updates: any) => handleElementUpdate(id.toString(), updates)}
                     onDelete={(id: number) => handleElementDelete(id.toString())}
                   />
                 </div>

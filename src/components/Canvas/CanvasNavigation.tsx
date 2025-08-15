@@ -43,9 +43,6 @@ export const CanvasNavigation: React.FC<CanvasNavigationProps> = ({ lastSaved })
     if (trimmedValue && trimmedValue !== canvasTitle && workspaceId) {
       const newTitle = trimmedValue.slice(0, 50);
       
-      // Update local state immediately for responsive UI
-      setCanvasTitle(newTitle);
-      
       try {
         console.log('[CanvasNavigation] Saving title change:', { 
           workspaceId, 
@@ -53,16 +50,19 @@ export const CanvasNavigation: React.FC<CanvasNavigationProps> = ({ lastSaved })
           newTitle 
         });
         
-        // Persist to database
+        // Persist to database FIRST before updating store
+        // This prevents the autosave from triggering with the new title
         const success = await canvasPersistence.updateWorkspace(workspaceId, {
           title: newTitle
         });
         
         if (success) {
           console.log('[CanvasNavigation] Title saved successfully');
+          // Only update the store after successful save
+          setCanvasTitle(newTitle);
         } else {
           console.error('[CanvasNavigation] Failed to save title');
-          // Could optionally revert the title here or show an error message
+          // Don't update the store if save failed
         }
       } catch (error) {
         console.error('[CanvasNavigation] Error saving title:', error);

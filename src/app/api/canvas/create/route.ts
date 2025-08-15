@@ -275,7 +275,7 @@ export async function POST(request: NextRequest) {
     const projectData = {
       account_id: accountId,
       created_by_user_id: userId,
-      user_id: userId, // Also set user_id for RLS policies
+      // Note: removed user_id field as it doesn't exist in projects table
       title: uniqueTitle,
       description: `Created on ${new Date().toLocaleString()}`,
       project_type: 'canvas',
@@ -293,7 +293,8 @@ export async function POST(request: NextRequest) {
       is_public: false,
       is_starred: false,
       starred_at: null,
-      last_accessed_at: new Date().toISOString()
+      last_accessed_at: new Date().toISOString(),
+      last_accessed_by_user_id: userId
     };
 
     console.log('[API] Creating canvas with data:', projectData);

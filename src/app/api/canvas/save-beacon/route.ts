@@ -81,17 +81,17 @@ export async function POST(request: NextRequest) {
       viewport: viewport || { x: 0, y: 0, zoom: 1.0 }
     };
     
-    // Update the project
+    // Update the project - just check by ID since the user should have access via RLS
     const { error } = await supabase
       .from('projects')
       .update({
         canvas_data: canvasData,
         title: title,
         last_accessed_at: new Date().toISOString(),
+        last_accessed_by_user_id: userId,
         updated_at: new Date().toISOString()
       })
-      .eq('id', workspaceId)
-      .eq('user_id', userId);
+      .eq('id', workspaceId);
     
     if (error) {
       console.error('[SaveBeacon] Error saving canvas:', error);

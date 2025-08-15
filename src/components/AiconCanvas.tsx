@@ -74,6 +74,16 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
       if (canvasId && canvasId !== 'new') {
         try {
           console.log(`[AiconCanvas] Loading canvas: ${canvasId}`);
+          
+          // Add a delay in production to ensure previous save completes
+          // This prevents the race condition where clearCanvas() happens before save completes
+          const isProduction = process.env.NODE_ENV === 'production';
+          if (isProduction) {
+            console.log('[AiconCanvas] Production environment - adding delay for save completion');
+            // Longer delay for production due to network latency to Supabase
+            await new Promise(resolve => setTimeout(resolve, 300));
+          }
+          
           const canvasData = await canvasPersistence.loadCanvas(canvasId);
           
           if (canvasData) {
@@ -83,29 +93,32 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
               connectionsCount: canvasData.connections?.length || 0,
               viewport: canvasData.viewport
             });
+            console.log('[AiconCanvas] Setting title to:', canvasData.title || 'Untitled Canvas');
+            
+            // Get the store to clear it properly
+            const store = useCanvasStore.getState();
+            
+            // Clear the entire canvas before loading new data
+            store.clearCanvas();
             
             // Set canvas title, workspace ID, and viewport
-            setCanvasTitle(canvasData.title || 'Untitled Canvas');
-            setWorkspaceId(canvasId);
+            store.setCanvasTitle(canvasData.title || 'Untitled Canvas');
+            store.setWorkspaceId(canvasId);
             if (canvasData.viewport) {
-              setViewport(canvasData.viewport);
+              store.setViewport(canvasData.viewport);
             }
-            
-            // Clear existing elements and connections
-            elements.forEach(el => deleteElement(el.id));
-            connections.forEach(conn => deleteConnection(conn.id));
             
             // Load elements
             if (canvasData.elements && Array.isArray(canvasData.elements)) {
               canvasData.elements.forEach((element: any) => {
-                addElement(element);
+                store.addElement(element);
               });
             }
             
             // Load connections
             if (canvasData.connections && Array.isArray(canvasData.connections)) {
               canvasData.connections.forEach((connection: any) => {
-                addConnection(connection);
+                store.addConnection(connection);
               });
             }
             
@@ -114,8 +127,8 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
             
             // Track initial saved state
             lastSavedStateRef.current = {
-              elements: canvasData.elements ? Object.values(canvasData.elements) : [],
-              connections: canvasData.connections ? Object.values(canvasData.connections) : [],
+              elements: canvasData.elements || [],
+              connections: canvasData.connections || [],
               title: canvasData.title || 'Untitled Canvas',
               viewport: canvasData.viewport || { x: 0, y: 0, zoom: 1.0 }
             };
@@ -128,7 +141,11 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
           console.error('[AiconCanvas] Error loading canvas:', error);
         }
       } else if (canvasId === 'new') {
-        // For new canvases, mark as loaded immediately
+        // For new canvases, clear the store and mark as loaded
+        const store = useCanvasStore.getState();
+        store.clearCanvas();
+        store.setCanvasTitle('New Canvas');
+        store.setWorkspaceId(null);
         setHasLoadedInitialData(true);
       }
       setIsLoading(false);
@@ -149,6 +166,7 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
     // Don't show saving status in UI, just save silently
     try {
       console.log('[AiconCanvas] Auto-saving canvas:', canvasId, 'with', currentStore.elements.length, 'elements');
+      console.log('[AiconCanvas] Title being saved:', currentStore.canvasTitle);
       const success = await canvasPersistence.saveCanvas(
         canvasId,
         currentStore.elements,
@@ -224,11 +242,21 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
       }
     };
   }, [elements, connections, canvasTitle, viewport, saveCanvas, hasLoadedInitialData]);
-
-  // Save immediately when component unmounts and clear store
+  
+  // Clear save timeout when canvasId changes
   useEffect(() => {
     return () => {
-      // Clear any pending save timeout first
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = null;
+      }
+    };
+  }, [canvasId]);
+
+  // Save immediately when component unmounts
+  useEffect(() => {
+    return () => {
+      // Clear any pending save timeout and execute save immediately
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
         console.log('[AiconCanvas] Cleared pending save timeout on unmount');
@@ -237,50 +265,39 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
       if (canvasId && canvasId !== 'new' && hasLoadedInitialData) {
         const store = useCanvasStore.getState();
         
-        // Check if there are unsaved changes
-        const hasUnsavedChanges = 
-          JSON.stringify(store.elements) !== JSON.stringify(lastSavedStateRef.current.elements) ||
-          JSON.stringify(store.connections) !== JSON.stringify(lastSavedStateRef.current.connections) ||
-          store.canvasTitle !== lastSavedStateRef.current.title ||
-          JSON.stringify(store.viewport) !== JSON.stringify(lastSavedStateRef.current.viewport);
+        // Always save on unmount in production to prevent data loss
+        console.log('[AiconCanvas] Component unmounting, saving canvas state');
+        console.log('[AiconCanvas] Current elements:', store.elements.length);
         
-        if (hasUnsavedChanges) {
-          console.log('[AiconCanvas] Detected unsaved changes on unmount, forcing save');
-          console.log('[AiconCanvas] Unsaved elements:', store.elements.length, 'vs saved:', lastSavedStateRef.current.elements.length);
-          
-          // Use sendBeacon for a more reliable unmount save
-          const saveData = {
-            workspaceId: canvasId,
-            elements: store.elements,
-            connections: store.connections,
-            viewport: store.viewport,
-            title: store.canvasTitle
-          };
-          
-          // Try to save using beacon API (more reliable on unmount)
-          if (navigator.sendBeacon) {
-            const blob = new Blob([JSON.stringify(saveData)], { type: 'application/json' });
-            navigator.sendBeacon('/api/canvas/save-beacon', blob);
-            console.log('[AiconCanvas] Sent save beacon on unmount');
-          }
-          
-          // Also try regular save as fallback
-          canvasPersistence.saveCanvas(
-            canvasId,
-            store.elements,
-            store.connections,
-            store.viewport,
-            store.canvasTitle
-          ).catch(err => {
-            console.error('[AiconCanvas] Failed to save on unmount:', err);
-          });
+        // Use sendBeacon for a more reliable unmount save
+        const saveData = {
+          workspaceId: canvasId,
+          elements: store.elements,
+          connections: store.connections,
+          viewport: store.viewport,
+          title: store.canvasTitle
+        };
+        
+        // Try to save using beacon API (more reliable on unmount)
+        if (navigator.sendBeacon) {
+          const blob = new Blob([JSON.stringify(saveData)], { type: 'application/json' });
+          const beaconSent = navigator.sendBeacon('/api/canvas/save-beacon', blob);
+          console.log('[AiconCanvas] Save beacon sent:', beaconSent);
         }
+        
+        // Also try regular save as fallback (synchronous-ish for unmount)
+        canvasPersistence.saveCanvas(
+          canvasId,
+          store.elements,
+          store.connections,
+          store.viewport,
+          store.canvasTitle
+        ).then(() => {
+          console.log('[AiconCanvas] Final save completed on unmount');
+        }).catch(err => {
+          console.error('[AiconCanvas] Failed to save on unmount:', err);
+        });
       }
-      
-      // Clear the canvas store to prevent stale data
-      const store = useCanvasStore.getState();
-      store.clearCanvas();
-      store.setCanvasTitle('Canvas Title');
     };
   }, [canvasId, hasLoadedInitialData]);
 

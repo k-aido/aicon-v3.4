@@ -227,7 +227,12 @@ export default function DashboardPage() {
     checkAuth();
   }, [router]);
 
-  const handleCanvasClick = (canvasId: string) => {
+  const handleCanvasClick = async (canvasId: string) => {
+    // Add a small delay in production to ensure any pending saves complete
+    if (process.env.NODE_ENV === 'production') {
+      setIsLoading(true);
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
     router.push(`/canvas/${canvasId}`);
   };
 

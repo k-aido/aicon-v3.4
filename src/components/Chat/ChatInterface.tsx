@@ -635,19 +635,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
           )}
         </div>
 
-        {/* Content Selector */}
-        {showContentSelector && (
-          <div className="border-b border-gray-200 bg-gray-50 p-4">
-            <ContentSelector
-              chatElementId={element.id}
-              connections={connections}
-              allElements={allElements}
-              selectedContentIds={selectedContentIds}
-              onContentSelectionChange={setSelectedContentIds}
-            />
-          </div>
-        )}
-
         {/* Messages Area - DRAGGABLE */}
         <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
           {messages.length === 0 && (

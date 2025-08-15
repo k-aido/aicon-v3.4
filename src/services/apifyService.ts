@@ -1,4 +1,5 @@
 import { ApifyClient } from 'apify-client';
+import got from 'got';
 
 interface ApifyRunResult {
   runId: string;
@@ -7,7 +8,15 @@ interface ApifyRunResult {
 }
 
 interface YouTubeScraperInput {
-  queries: string[];
+  startUrls?: string[];
+  youtubeHandles?: string[];
+  keywords?: string[];
+  uploadDate?: string;
+  duration?: string;
+  features?: string;
+  sort?: string;
+  maxItems?: number;
+  customMapFunction?: string;
 }
 
 interface InstagramScraperInput {
@@ -18,6 +27,9 @@ interface InstagramScraperInput {
 interface TikTokScraperInput {
   postURLs: string[];
   resultsPerPage?: number;
+  shouldDownloadVideos?: boolean;
+  shouldDownloadCovers?: boolean;
+  shouldDownloadSubtitles?: boolean;
 }
 
 export interface ScrapedContent {
@@ -53,7 +65,7 @@ class ApifyService {
   
   // Actor IDs for different platforms
   private readonly ACTORS = {
-    youtube: 'stefanie-rink/youtube-scraper',
+    youtube: 'apidojo/youtube-scraper',
     instagram: 'apify/instagram-post-scraper', 
     tiktok: 'clockworks/tiktok-video-scraper'
   };
@@ -70,10 +82,18 @@ class ApifyService {
    * Scrape YouTube video or channel content
    */
   async scrapeYouTube(url: string): Promise<{ runId: string }> {
+    // The apidojo/youtube-scraper uses startUrls as an array of strings
     const input: YouTubeScraperInput = {
-      queries: [url]
+      startUrls: [url],
+      maxItems: 1,  // Limit to 1 item since we're scraping a single video
+      uploadDate: 'all',
+      duration: 'all',
+      features: 'all',
+      sort: 'r'  // relevance
     };
 
+    console.log('[ApifyService] Starting YouTube scrape with apidojo/youtube-scraper:', url);
+    
     const run = await this.client.actor(this.ACTORS.youtube).call(input);
     return { runId: run.id };
   }
@@ -93,12 +113,70 @@ class ApifyService {
   }
 
   /**
+   * Expand TikTok short URL to canonical format
+   */
+  private async expandTikTokUrl(url: string): Promise<string> {
+    // Check if it's already a canonical URL
+    if (url.includes('tiktok.com/@') && url.includes('/video/')) {
+      return url;
+    }
+
+    // Check if it's a short URL that needs expansion
+    if (url.includes('vm.tiktok.com') || url.includes('vt.tiktok.com')) {
+      const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
+                       '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+      
+      try {
+        // Try HEAD request first to get Location header without fetching the page
+        const headResponse = await got.head(url, {
+          followRedirect: false,
+          headers: { 'User-Agent': userAgent },
+          timeout: { request: 10000 }
+        });
+        
+        if (headResponse.headers.location) {
+          console.log('[ApifyService] Expanded TikTok URL via HEAD:', headResponse.headers.location);
+          return headResponse.headers.location;
+        }
+      } catch (error) {
+        // HEAD request failed or no location header, fall through to GET
+        console.log('[ApifyService] HEAD request failed, trying GET:', error);
+      }
+      
+      try {
+        // Fallback: allow redirects and return the final URL
+        const getResponse = await got(url, {
+          followRedirect: true,
+          headers: { 'User-Agent': userAgent },
+          timeout: { request: 15000 }
+        });
+        
+        console.log('[ApifyService] Expanded TikTok URL via GET:', getResponse.url);
+        return getResponse.url;
+      } catch (error) {
+        console.error('[ApifyService] Failed to expand TikTok URL:', error);
+        throw new Error('Failed to expand TikTok short URL. Please use the full TikTok video URL.');
+      }
+    }
+
+    // Return original URL if it doesn't match short URL patterns
+    return url;
+  }
+
+  /**
    * Scrape TikTok video content
    */
   async scrapeTikTok(url: string): Promise<{ runId: string }> {
+    // Expand short URLs to canonical format
+    const expandedUrl = await this.expandTikTokUrl(url);
+    console.log('[ApifyService] Using TikTok URL:', expandedUrl);
+    
     const input: TikTokScraperInput = {
-      postURLs: [url],
-      resultsPerPage: 100
+      postURLs: [expandedUrl],
+      resultsPerPage: 100,
+      shouldDownloadCovers: true,  // Enable thumbnail download
+      shouldDownloadSubtitles: true, // Enable subtitles for transcripts
+      shouldDownloadVideos: false   // Skip video download to save time/cost
     };
 
     const run = await this.client.actor(this.ACTORS.tiktok).call(input);
@@ -146,39 +224,76 @@ class ApifyService {
     let normalized: ScrapedContent;
 
     // YouTube data normalization
-    if (data.videoId || data.channelId || data.video_id) {
+    if (data.videoId || data.channelId || data.video_id || data.id || data.url?.includes('youtube.com') || data.url?.includes('youtu.be')) {
       platform = 'youtube';
       
+      // Log raw data structure for debugging
+      console.log('[ApifyService] YouTube raw data structure:', {
+        hasVideoId: !!data.videoId,
+        hasId: !!data.id,
+        hasTitle: !!data.title,
+        hasThumbnails: !!data.thumbnails,
+        hasThumbnail: !!data.thumbnail,
+        topLevelKeys: Object.keys(data).slice(0, 20)
+      });
+      
       // YouTube thumbnails can be in various fields
-      const thumbnailUrl = data.thumbnailUrl || 
-                          data.thumbnail_url || 
-                          data.thumbnail ||
-                          data.thumbnails?.high?.url ||
-                          data.thumbnails?.maxres?.url ||
-                          data.thumbnails?.standard?.url ||
-                          data.thumbnails?.default?.url;
+      // The apidojo scraper returns thumbnails as an array of objects
+      let thumbnailUrl = data.thumbnailUrl || 
+                        data.thumbnail_url || 
+                        data.thumbnail;
+      
+      // Handle thumbnails array from apidojo/youtube-scraper
+      if (!thumbnailUrl && data.thumbnails) {
+        if (Array.isArray(data.thumbnails) && data.thumbnails.length > 0) {
+          // Get the highest quality thumbnail (usually the last one in the array)
+          thumbnailUrl = data.thumbnails[data.thumbnails.length - 1]?.url || 
+                        data.thumbnails[0]?.url;
+        } else if (typeof data.thumbnails === 'object') {
+          // Handle YouTube API style thumbnail object
+          thumbnailUrl = data.thumbnails.maxres?.url ||
+                        data.thumbnails.high?.url ||
+                        data.thumbnails.standard?.url ||
+                        data.thumbnails.medium?.url ||
+                        data.thumbnails.default?.url;
+        }
+      }
+      
+      console.log('[ApifyService] YouTube thumbnail extraction:', {
+        thumbnailsType: Array.isArray(data.thumbnails) ? 'array' : typeof data.thumbnails,
+        thumbnailsLength: Array.isArray(data.thumbnails) ? data.thumbnails.length : null,
+        extracted: thumbnailUrl
+      });
+      
+      // Handle different comment formats - might be an array or a count
+      let commentsArray: any[] = [];
+      if (Array.isArray(data.comments)) {
+        commentsArray = data.comments;
+      } else if (Array.isArray(data.commentsList)) {
+        commentsArray = data.commentsList;
+      }
       
       normalized = {
         platform,
-        url: data.url || `https://youtube.com/watch?v=${data.videoId || data.video_id}`,
+        url: data.url || `https://youtube.com/watch?v=${data.videoId || data.video_id || data.id}`,
         title: data.title,
         description: data.description,
-        transcript: data.subtitles?.[0]?.text || data.captions?.[0]?.text,
-        viewCount: parseInt(data.viewCount || data.view_count || data.views || 0),
-        likeCount: parseInt(data.likeCount || data.like_count || data.likes || 0),
-        commentCount: parseInt(data.commentCount || data.comment_count || data.comments?.length || 0),
-        duration: data.duration,
-        uploadDate: data.uploadDate || data.upload_date || data.publishedAt || data.published_at,
-        authorName: data.channelName || data.channel_name || data.channelTitle || data.channel_title,
-        authorId: data.channelId || data.channel_id,
+        transcript: data.subtitles?.[0]?.text || data.captions?.[0]?.text || data.transcript,
+        viewCount: parseInt(data.viewCount || data.view_count || data.views || data.statistics?.viewCount || 0),
+        likeCount: parseInt(data.likeCount || data.like_count || data.likes || data.statistics?.likeCount || 0),
+        commentCount: parseInt(data.commentCount || data.comment_count || data.comments || data.statistics?.commentCount || 0),
+        duration: data.duration || data.contentDetails?.duration,
+        uploadDate: data.uploadDate || data.upload_date || data.publishedAt || data.published_at || data.snippet?.publishedAt,
+        authorName: data.channelName || data.channel_name || data.channelTitle || data.channel_title || data.channel?.title || data.channel?.name || data.snippet?.channelTitle,
+        authorId: data.channelId || data.channel_id || data.channel?.id || data.snippet?.channelId,
         thumbnailUrl,
         hashtags: this.extractHashtags(data.description || ''),
         mentions: this.extractMentions(data.description || ''),
-        comments: data.comments?.slice(0, 50)?.map((c: any) => ({
-          text: c.text,
-          author: c.authorName,
-          likes: c.likeCount || 0,
-          timestamp: c.publishedAt
+        comments: commentsArray.slice(0, 50).map((c: any) => ({
+          text: c.text || c.textDisplay || c.snippet?.textDisplay,
+          author: c.authorName || c.author || c.snippet?.authorDisplayName,
+          likes: c.likeCount || c.likes || c.snippet?.likeCount || 0,
+          timestamp: c.publishedAt || c.snippet?.publishedAt
         })),
         rawData: data
       };
@@ -234,20 +349,48 @@ class ApifyService {
     else {
       platform = 'tiktok';
       
+      // Log the raw data structure for debugging
+      console.log('[ApifyService] TikTok raw data structure:', {
+        hasCoversObject: !!data.covers,
+        hasCoverUrl: !!data.coverUrl,
+        hasVideoMeta: !!data.videoMeta,
+        hasVideo: !!data.video,
+        topLevelKeys: Object.keys(data).slice(0, 20) // First 20 keys
+      });
+      
       // TikTok thumbnails can be in various fields
-      const thumbnailUrl = data.videoMeta?.cover || 
+      // Check for downloaded cover first, then fallback to other fields
+      const thumbnailUrl = data.coverUrl ||  // Downloaded cover URL if shouldDownloadCovers is true
+                          data.cover_url ||
+                          data.videoMeta?.coverUrl || // This is the actual field name!
+                          data.videoMeta?.originalCoverUrl || // Fallback to original cover
+                          data.video_meta?.coverUrl ||
                           data.video_meta?.cover ||
                           data.covers?.default ||
                           data.covers?.origin ||
+                          data.covers?.['0'] || // Sometimes covers is an object with numeric keys
                           data.cover ||
                           data.thumbnailUrl ||
-                          data.thumbnail_url;
+                          data.thumbnail_url ||
+                          data.video?.cover ||
+                          data.video?.dynamicCover ||
+                          data.video?.originCover;
+      
+      console.log('[ApifyService] TikTok thumbnail extraction:', {
+        coverUrl: data.coverUrl,
+        videoMeta_coverUrl: data.videoMeta?.coverUrl,
+        videoMeta_originalCoverUrl: data.videoMeta?.originalCoverUrl,
+        covers: data.covers,
+        video: data.video ? Object.keys(data.video) : null,
+        extracted: thumbnailUrl
+      });
       
       normalized = {
         platform,
         url: data.webVideoUrl || data.web_video_url || data.url,
         title: data.text?.substring(0, 100) || data.description?.substring(0, 100),
         caption: data.text || data.description,
+        transcript: data.subtitles || data.subtitleUrl || data.subtitle_url, // Include subtitles as transcript
         viewCount: parseInt(data.playCount || data.play_count || data.views || 0),
         likeCount: parseInt(data.diggCount || data.digg_count || data.likes || 0),
         commentCount: parseInt(data.commentCount || data.comment_count || data.comments?.length || 0),
@@ -299,11 +442,15 @@ class ApifyService {
       const urlObj = new URL(url);
       const hostname = urlObj.hostname.toLowerCase();
 
-      // YouTube validation
+      // YouTube validation - support regular videos, shorts, and youtu.be links
       if (hostname.includes('youtube.com') || hostname.includes('youtu.be')) {
+        // Check for various YouTube URL formats
         const videoIdMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
-        if (!videoIdMatch) {
-          return { isValid: false, error: 'Invalid YouTube video URL' };
+        const shortsMatch = url.match(/youtube\.com\/shorts\/([a-zA-Z0-9_-]+)/);
+        const channelMatch = url.match(/youtube\.com\/(@[a-zA-Z0-9_-]+|channel\/[a-zA-Z0-9_-]+|c\/[a-zA-Z0-9_-]+)/);
+        
+        if (!videoIdMatch && !shortsMatch && !channelMatch) {
+          return { isValid: false, error: 'Invalid YouTube URL. Please provide a video, shorts, or channel URL.' };
         }
         return { isValid: true, platform: 'youtube' };
       }
@@ -317,10 +464,10 @@ class ApifyService {
         return { isValid: true, platform: 'instagram' };
       }
 
-      // TikTok validation
+      // TikTok validation - accept both canonical and short URLs
       if (hostname.includes('tiktok.com')) {
         const videoMatch = url.match(/tiktok\.com\/@[^/]+\/video\/(\d+)/);
-        const shortLinkMatch = url.match(/vm\.tiktok\.com\/[a-zA-Z0-9]+/);
+        const shortLinkMatch = url.match(/(?:vm|vt)\.tiktok\.com\/[a-zA-Z0-9-_]+/);
         if (!videoMatch && !shortLinkMatch) {
           return { isValid: false, error: 'Invalid TikTok video URL' };
         }

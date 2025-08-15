@@ -73,15 +73,28 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Delete from project_content_library first (references content_analysis)
-    const { error: libraryError } = await supabase
-      .from('project_content_library')
-      .delete()
-      .eq('project_id', projectId)
-      .eq('analysis_id', scrapeId);
+    // First, get the analysis ID associated with this scrape
+    const { data: analysisRecord, error: analysisQueryError } = await supabase
+      .from('content_analysis')
+      .select('id')
+      .eq('scrape_id', scrapeId)
+      .single();
 
-    if (libraryError) {
-      console.error('[Cleanup API] Error deleting from library:', libraryError);
+    if (analysisQueryError) {
+      console.log('[Cleanup API] No analysis found for scrapeId:', scrapeId);
+    }
+
+    // Delete from project_content_library if we have an analysis ID
+    if (analysisRecord?.id) {
+      const { error: libraryError } = await supabase
+        .from('project_content_library')
+        .delete()
+        .eq('project_id', projectId)
+        .eq('analysis_id', analysisRecord.id);
+
+      if (libraryError) {
+        console.error('[Cleanup API] Error deleting from library:', libraryError);
+      }
     }
 
     // Delete from content_analysis (references content_scrapes)

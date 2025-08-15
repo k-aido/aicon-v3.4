@@ -51,6 +51,8 @@ export async function POST(request: NextRequest) {
           subscription_status: 'active',
           plan_type: 'individual',
           billing_email: email,
+          promotional_credits: 1000, // Give new users 1000 free credits to start
+          monthly_credits_remaining: 0,
           creator_limit: 5,
           user_limit: 1,
           voice_model_limit: 5,

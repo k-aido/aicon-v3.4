@@ -118,8 +118,8 @@ export const MentionAutocomplete: React.FC<MentionAutocompleteProps> = ({
         ref={containerRef}
         className="absolute z-50 bg-white rounded-lg shadow-lg border border-gray-200 p-3"
         style={{
-          top: position.top,
-          left: position.left,
+          bottom: '60px', // Position above the input field
+          left: `${position.left}px`,
           maxWidth: '400px'
         }}
       >
@@ -138,8 +138,8 @@ export const MentionAutocomplete: React.FC<MentionAutocompleteProps> = ({
       ref={containerRef}
       className="absolute z-50 bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden"
       style={{
-        top: position.top,
-        left: position.left,
+        bottom: '60px', // Position above the input field
+        left: `${position.left}px`,
         maxWidth: '400px',
         maxHeight: '300px'
       }}

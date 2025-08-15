@@ -95,7 +95,6 @@ export const ChatElement: React.FC<ChatElementProps> = React.memo(({
           element={element} 
           connections={connections}
           allElements={allElements}
-          onUpdate={onUpdate} 
           onDelete={onDelete}
         />
       </SimpleResize>

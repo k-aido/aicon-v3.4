@@ -1,8 +1,8 @@
 // PRIMARY CHAT INTERFACE - DO NOT MODIFY
 // Has working conversation sidebar and is the main chat component used on canvas
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Loader2, MessageSquare, Plus, Send, X, ChevronLeft, ChevronRight, Lightbulb, FileText, Upload, ChevronDown, Bot, User, Link2, Trash2, Sparkles, AtSign } from 'lucide-react';
-import { ChatElement, Connection, ContentElement, Message, Model } from '@/types';
+import { Loader2, MessageSquare, Plus, Send, X, ChevronLeft, ChevronRight, Trash2, AtSign } from 'lucide-react';
+import { ChatElement, Connection, ContentElement, Message } from '@/types';
 import { useChatStore } from '@/store/chatStore';
 import { createBrowserClient } from '@/lib/supabase/client';
 import { InsufficientCreditsModal } from '@/components/Modal/InsufficientCreditsModal';
@@ -12,7 +12,6 @@ interface ChatInterfaceProps {
   element: ChatElement;
   connections: Connection[];
   allElements: (ChatElement | ContentElement)[];
-  onUpdate: (id: number, updates: Partial<ChatElement>) => void;
   onDelete?: (id: number) => void;
 }
 
@@ -25,22 +24,6 @@ const LLM_MODELS = [
   { id: 'claude-sonnet-4', name: 'Claude Sonnet 4', provider: 'anthropic', color: 'text-purple-300' }
 ];
 
-// Database types for conversations and messages
-interface DbConversation {
-  id: string;
-  chat_element_id: number;
-  title: string;
-  created_at: string;
-  updated_at: string;
-}
-
-interface DbMessage {
-  id: string;
-  conversation_id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  created_at: string;
-}
 
 /**
  * Chat interface component for AI conversations
@@ -49,19 +32,18 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   element,
   connections,
   allElements,
-  onUpdate,
   onDelete
 }) => {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [showModelDropdown, setShowModelDropdown] = useState(false);
   const [selectedModel, setSelectedModel] = useState('gpt-5-mini');
+  // Use a consistent string representation of element ID for localStorage keys
+  const elementIdStr = String(element.id);
   const [chatInterfaceId, setChatInterfaceId] = useState<string | null>(null);
   const [showCreditsModal, setShowCreditsModal] = useState(false);
   const [creditsModalData, setCreditsModalData] = useState({ needed: 100, available: 0 });
-  const [mentionedContent, setMentionedContent] = useState<ContentElement[]>([]);
+  const [, setMentionedContent] = useState<ContentElement[]>([]);
   const [showMentionAutocomplete, setShowMentionAutocomplete] = useState(false);
   const [mentionSearchQuery, setMentionSearchQuery] = useState('');
   const [mentionPosition, setMentionPosition] = useState({ top: 0, left: 0 });
@@ -85,27 +67,11 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   // Use store state directly
   const conversations = getConversations(element.id);
   const [activeConversationId, setActiveConversationId] = useState(() => getActiveConversation(element.id));
-  const [dragOver, setDragOver] = useState(false);
   
   // Get current conversation and messages
   const activeConversation = conversations.find(conv => conv.id === activeConversationId);
   const messages = activeConversation?.messages || [];
-  const setMessages = (newMessages: Message[]) => {
-    const updatedConversations = conversations.map(conv =>
-      conv.id === activeConversationId ? { 
-        ...conv, 
-        messages: newMessages.map(msg => ({
-          ...msg,
-          timestamp: (msg as any).timestamp || new Date(),
-          model: selectedModel
-        }))
-      } : conv
-    );
-    setStoreConversations(element.id, updatedConversations);
-  };
   
-  const modelDropdownRef = useRef<HTMLDivElement>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   
   // Load conversations from localStorage on mount
   useEffect(() => {
@@ -127,10 +93,13 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         const supabase = createBrowserClient();
         
         // Check if we have a stored chat interface ID for this element
-        const storedInterfaceId = localStorage.getItem(`chat-interface-${element.id}`);
+        const localStorageKey = `chat-interface-${elementIdStr}`;
+        console.log('[ChatInterface] Looking for interface ID with key:', localStorageKey);
+        const storedInterfaceId = localStorage.getItem(localStorageKey);
+        console.log('[ChatInterface] Found stored interface ID:', storedInterfaceId);
+        
         if (storedInterfaceId) {
           setChatInterfaceId(storedInterfaceId);
-          console.log('[ChatInterface] Found stored interface ID:', storedInterfaceId);
           
           // Load threads for this chat interface
           const { data: threads, error } = await supabase
@@ -144,10 +113,12 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
             return;
           }
         
+          console.log('[ChatInterface] Loaded threads from database:', threads?.length || 0, 'threads');
+          
           if (threads && threads.length > 0) {
           // Load messages for each thread
           const conversationsWithMessages = await Promise.all(
-            threads.map(async (thread) => {
+            threads.map(async (thread: any) => {
               const { data: messages } = await supabase
                 .from('chat_messages')
                 .select('*')
@@ -155,15 +126,15 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 .order('created_at', { ascending: true });
               
               return {
-                id: thread.id,
-                title: thread.title || 'New Chat',
-                messages: messages?.map(msg => ({
-                  id: msg.id,
+                id: String(thread.id),
+                title: String(thread.title || 'New Chat'),
+                messages: messages?.map((msg: any, index: number) => ({
+                  id: Date.now() + index, // Use number for ID
                   role: msg.role as 'user' | 'assistant',
-                  content: msg.content,
+                  content: String(msg.content),
                   timestamp: new Date(msg.created_at),
-                  model: msg.model,
-                  usage: msg.usage
+                  model: String(msg.model || ''),
+                  usage: msg.usage || {}
                 })) || [],
                 createdAt: new Date(thread.created_at),
                 lastMessageAt: new Date(thread.updated_at)
@@ -232,12 +203,12 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         setMentionSearchQuery(textAfterAt);
         setShowMentionAutocomplete(true);
         
-        // Calculate position for autocomplete
+        // Calculate position for autocomplete relative to the input
         if (inputRef.current) {
-          const rect = inputRef.current.getBoundingClientRect();
+          // Calculate position relative to parent container
           const position = {
-            top: rect.top - 320, // Above the input with space for dropdown
-            left: rect.left + Math.min(lastAtIndex * 8, rect.width - 400) // Position near @ but keep on screen
+            top: -320, // Above the input (negative value since we're positioning from bottom)
+            left: Math.min(lastAtIndex * 8, 200) // Position near @ character but not too far right
           };
           setMentionPosition(position);
         }
@@ -336,13 +307,42 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const sendMessage = async () => {
     if (!input.trim() || isLoading) return;
     
+    // If no active conversation, create one first
+    let currentActiveConversationId = activeConversationId;
+    if (!currentActiveConversationId) {
+      // Generate a UUID directly here
+      const generateUUID = () => {
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+          const r = Math.random() * 16 | 0;
+          const v = c === 'x' ? r : (r & 0x3 | 0x8);
+          return v.toString(16);
+        });
+      };
+      
+      const newConversationId = generateUUID();
+      const newConversation = {
+        id: newConversationId,
+        title: 'New Chat',
+        messages: [],
+        createdAt: new Date(),
+        lastMessageAt: new Date()
+      };
+      
+      // Update state with new conversation
+      const updatedConversationsForNew = [...conversations, newConversation];
+      setStoreConversations(element.id, updatedConversationsForNew);
+      setActiveConversationId(newConversationId);
+      currentActiveConversationId = newConversationId;
+    }
+    
     // Parse mentions from input
     const { cleanText, mentionIds } = parseMentionsFromText(input.trim());
     
     console.log('[ChatInterface] Sending message with mentions:', { 
       originalInput: input,
       cleanText, 
-      mentionIds 
+      mentionIds,
+      activeConversationId: currentActiveConversationId
     });
     
     // Create user message with clean text
@@ -353,10 +353,15 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       timestamp: new Date()
     };
     
+    // Get the current conversation (might be the newly created one)
+    const currentConversations = getConversations(element.id);
+    const currentConversation = currentConversations.find(c => c.id === currentActiveConversationId);
+    const currentMessages = currentConversation?.messages || [];
+    
     // Add to current conversation's messages
-    const updatedMessages = [...messages, userMessage];
-    const updatedConversations = conversations.map(conv => 
-      conv.id === activeConversationId 
+    const updatedMessages = [...currentMessages, userMessage];
+    const updatedConversations = currentConversations.map(conv => 
+      conv.id === currentActiveConversationId 
         ? { ...conv, messages: updatedMessages, lastMessageAt: new Date() }
         : conv
     );
@@ -374,7 +379,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       console.log('[ChatInterface] Fetched content analysis:', contentAnalysis);
       
       // Prepare connected content for RAG
-      const connectedContentForChat = contentAnalysis.map(content => ({
+      const connectedContentForChat = contentAnalysis.map((content: any) => ({
         title: content.title,
         platform: content.platform,
         url: content.url,
@@ -397,7 +402,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
           })),
           model: selectedModel,
           connectedContent: connectedContentForChat, // Pass analyzed content for RAG
-          threadId: activeConversationId, // Pass thread ID for database persistence
+          threadId: currentActiveConversationId, // Pass thread ID for database persistence
           chatElementId: element.id.toString(), // Pass chat element ID
           chatInterfaceId: chatInterfaceId, // Pass the actual chat interface UUID
           projectId: window.location.pathname.split('/canvas/')[1] // Get project ID from URL
@@ -424,9 +429,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
           }
           
           // Remove the user message from the conversation since it wasn't processed
-          const revertedConversations = conversations.map(conv =>
-            conv.id === activeConversationId
-              ? { ...conv, messages: messages } // Revert to original messages
+          const revertedConversations = currentConversations.map(conv =>
+            conv.id === currentActiveConversationId
+              ? { ...conv, messages: currentMessages } // Revert to original messages
               : conv
           );
           setStoreConversations(element.id, revertedConversations);
@@ -453,8 +458,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       // If we got a new chat interface ID back, store it
       if (data.chatInterfaceId && !chatInterfaceId) {
         setChatInterfaceId(data.chatInterfaceId);
-        localStorage.setItem(`chat-interface-${element.id}`, data.chatInterfaceId);
-        console.log('[ChatInterface] Stored new interface ID:', data.chatInterfaceId);
+        const localStorageKey = `chat-interface-${elementIdStr}`;
+        localStorage.setItem(localStorageKey, data.chatInterfaceId);
+        console.log('[ChatInterface] Stored new interface ID:', data.chatInterfaceId, 'with key:', localStorageKey);
       }
 
       const aiMessage = {
@@ -468,8 +474,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       const finalMessages = [...updatedMessages, aiMessage];
       
       // Add AI message and update title if needed
-      const finalConversations = conversations.map(conv => 
-        conv.id === activeConversationId 
+      const finalConversations = currentConversations.map(conv => 
+        conv.id === currentActiveConversationId 
           ? { 
               ...conv, 
               messages: finalMessages,
@@ -492,8 +498,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
           timestamp: new Date()
         };
         const finalMessages = [...updatedMessages, errorMessage];
-        const finalConversations = conversations.map(conv => 
-          conv.id === activeConversationId 
+        const finalConversations = currentConversations.map(conv => 
+          conv.id === currentActiveConversationId 
             ? { 
                 ...conv, 
                 messages: finalMessages,
@@ -509,11 +515,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   };
 
-  const handleNewChat = () => {
-    setMessages([]);
-    setInput('');
-    onUpdate(element.id, { messages: [] });
-  };
 
   // New conversation management
   const createNewConversation = () => {

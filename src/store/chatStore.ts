@@ -20,8 +20,8 @@ interface ChatStore {
   
   getConversations: (elementId: number) => Conversation[];
   setConversations: (elementId: number, conversations: Conversation[]) => void;
-  getActiveConversation: (elementId: number) => string;
-  setActiveConversation: (elementId: number, conversationId: string) => void;
+  getActiveConversation: (elementId: number) => string | null;
+  setActiveConversation: (elementId: number, conversationId: string | null) => void;
   
   // Persistence methods
   saveToLocalStorage: (elementId: number) => void;
@@ -54,13 +54,20 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
   
   getActiveConversation: (elementId) => {
-    return get().activeConversations[elementId] || 'default';
+    const activeId = get().activeConversations[elementId];
+    if (activeId) return activeId;
+    
+    // If no active conversation, return the ID of the first conversation
+    const conversations = get().getConversations(elementId);
+    return conversations.length > 0 ? conversations[0].id : null;
   },
   
   setActiveConversation: (elementId, conversationId) => {
-    set(state => ({
-      activeConversations: { ...state.activeConversations, [elementId]: conversationId }
-    }));
+    if (conversationId) {
+      set(state => ({
+        activeConversations: { ...state.activeConversations, [elementId]: conversationId }
+      }));
+    }
   },
   
   saveToLocalStorage: (elementId) => {

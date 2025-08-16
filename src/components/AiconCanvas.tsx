@@ -555,24 +555,15 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
     setCreatorSearchPanel({ isOpen: false });
   };
 
-  const handleAddCreatorContentToCanvas = async (content: any) => {
+  const handleAddCreatorContentToCanvas = async (element: any) => {
+    // This function is passed as a callback to CreatorSearchPanel
+    // The CreatorSearchPanel will call addCreatorContentToCanvas which will use this callback
+    // So we just need to add the element to the store here
     try {
-      // Import the creator content helper
-      const { addCreatorContentToCanvas } = await import('@/lib/canvas/creatorContentHelpers');
-      
-      // Add content to canvas with proper analysis integration
-      const result = await addCreatorContentToCanvas(
-        content,
-        content.creator_handle || 'unknown'
-      );
-      
-      if (result.success) {
-        console.log(`[AiconCanvas] Successfully added creator content to canvas: ${result.elementId}`);
-      } else {
-        console.error(`[AiconCanvas] Failed to add creator content to canvas: ${result.error}`);
-      }
+      addElement(element);
+      console.log(`[AiconCanvas] Added creator content element to canvas:`, element.id);
     } catch (error) {
-      console.error('[AiconCanvas] Error adding creator content to canvas:', error);
+      console.error('[AiconCanvas] Error adding element to canvas:', error);
     }
   };
 

@@ -204,11 +204,33 @@ const pollForCompletion = async (elementId: string, scrapeId: string, projectId:
  */
 export async function addCreatorContentToCanvas(
   content: CreatorContent,
+  viewport: Viewport,
+  onAddContentToCanvas?: (element: any) => void,
   creatorHandle?: string
 ): Promise<{ success: boolean; elementId?: string; error?: string }> {
   try {
     const elementId = generateId();
-    const { addElement, updateElement } = useCanvasStore.getState();
+    
+    // Debug log to see what we're receiving
+    console.log('[CreatorContent] Received content:', content);
+    
+    // Get the URL from the content object - handle different possible property names
+    let contentUrl = content.content_url || (content as any).url || (content as any).link;
+    
+    // Handle Instagram reel URLs - convert reel URLs to regular post URLs if needed
+    // Instagram reels can be accessed via regular post URLs for scraping
+    if (contentUrl && contentUrl.includes('instagram.com/reel/')) {
+      // Reel URLs are in format: https://www.instagram.com/reel/XXXXX/
+      // They can also be accessed as: https://www.instagram.com/p/XXXXX/
+      contentUrl = contentUrl.replace('/reel/', '/p/');
+      console.log('[CreatorContent] Converted reel URL to post URL:', contentUrl);
+    }
+    
+    // Validate content has required fields
+    if (!content || !contentUrl) {
+      console.error('[CreatorContent] Invalid content - missing URL:', content);
+      return { success: false, error: 'Invalid content: missing URL' };
+    }
     
     // Get the current project ID from the URL
     const projectId = window.location.pathname.split('/canvas/')[1];
@@ -219,7 +241,7 @@ export async function addCreatorContentToCanvas(
 
     // Extract handle from URL or use provided one
     const handle = creatorHandle || 
-      extractHandleFromUrl(content.content_url) || 
+      extractHandleFromUrl(contentUrl) || 
       'unknown_creator';
 
     // Create title from caption or handle
@@ -234,9 +256,9 @@ export async function addCreatorContentToCanvas(
       width: 320,
       height: 280,
       title: title,
-      url: content.content_url.trim(),
-      platform: content.platform,
-      thumbnail: getPlatformPlaceholder(content.platform || 'content'),
+      url: contentUrl.trim(),
+      platform: content.platform || 'instagram',
+      thumbnail: getPlatformPlaceholder(content.platform || 'instagram'),
       metadata: {
         isScraping: true,
         contentScope: 'single',
@@ -245,66 +267,48 @@ export async function addCreatorContentToCanvas(
       }
     };
 
-    // Add element to canvas
-    addElement(newElement);
+    // Add element to canvas - use store directly OR callback if provided
+    if (onAddContentToCanvas && typeof onAddContentToCanvas === 'function') {
+      onAddContentToCanvas(newElement);
+    } else {
+      // Use the store directly if no callback provided
+      const { addElement } = useCanvasStore.getState();
+      addElement(newElement);
+    }
 
-    // Prepare processed data in the format expected by the analysis
-    const processedData = {
-      title: content.caption?.substring(0, 50) || `@${handle} content`,
-      description: content.caption || '',
-      caption: content.caption || '',
-      thumbnailUrl: content.thumbnail_url,
-      videoUrl: content.video_url,
-      contentUrl: content.content_url,
-      duration: content.duration_seconds,
-      postedDate: content.posted_date,
-      metrics: {
-        likes: Number(content.likes) || 0,
-        comments: Number(content.comments) || 0,
-        views: Number(content.views) || 0
-      },
-      hashtags: [],
-      authorName: handle,
-      author: {
-        name: handle,
-        handle: `@${handle}`
-      },
-      rawData: content.raw_data || {}
-    };
-
-    // Start "mock" scraping process
-    const response = await fetch('/api/content/mock-scrape', {
+    // Start REAL scraping process - same as SocialMediaModal
+    const response = await fetch('/api/content/scrape', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        url: content.content_url.trim(),
-        projectId: projectId,
-        processedData: processedData,
-        platform: content.platform
+        url: contentUrl.trim(),
+        projectId: projectId
       })
     });
 
     if (!response.ok) {
       const errorData = await response.json();
       
-      // Update element to show error
+      // Update element to show error - get fresh store state
+      const { updateElement } = useCanvasStore.getState();
       updateElement(newElement.id, {
         metadata: {
           isScraping: false,
-          scrapingError: errorData.error || 'Failed to process content'
+          scrapingError: errorData.error || 'Failed to scrape content'
         }
       });
       
-      throw new Error(errorData.error || 'Failed to process content');
+      throw new Error(errorData.error || 'Failed to scrape content');
     }
 
     const result = await response.json();
     
     // Start polling for scrape completion
     if (result.success && result.scrapeId) {
-      // Update element with scrape ID
+      // Update element with scrape ID - get fresh store state
+      const { updateElement } = useCanvasStore.getState();
       updateElement(newElement.id, {
         metadata: {
           ...newElement.metadata,

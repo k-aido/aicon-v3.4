@@ -55,7 +55,8 @@ class TranscriptionService {
         throw new Error(`Failed to download audio: ${audioResponse.status}`);
       }
       
-      const audioBuffer = await audioResponse.buffer();
+      const audioArrayBuffer = await audioResponse.arrayBuffer();
+      const audioBuffer = Buffer.from(audioArrayBuffer);
       
       // Better file extension detection
       let extension = 'mp4'; // Default to mp4
@@ -115,10 +116,10 @@ class TranscriptionService {
     try {
       const formData = new FormData();
       
-      // Add audio file to form data
+      // Add audio file to form data - use Buffer directly for Node.js
       formData.append('file', audioBuffer, {
-        filename,
-        contentType
+        filename: filename,
+        contentType: contentType
       });
       
       // Add model
@@ -147,14 +148,19 @@ class TranscriptionService {
         responseFormat
       });
       
-      // Make request to Groq API
+      // Make request to Groq API using form-data's buffer
+      // Get the buffer and calculate content length
+      const formBuffer = formData.getBuffer();
+      const formHeaders = formData.getHeaders();
+      
       const response = await fetch(this.apiEndpoint, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${this.apiKey}`,
-          ...formData.getHeaders()
+          ...formHeaders,
+          'Content-Length': formBuffer.length.toString()
         },
-        body: formData
+        body: formBuffer
       });
       
       if (!response.ok) {

@@ -50,6 +50,7 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
     error: null
   });
   const [displayedResults, setDisplayedResults] = useState(10);
+  const [addingContentIds, setAddingContentIds] = useState<Set<string>>(new Set());
 
   // Clean input on platform change
   useEffect(() => {
@@ -172,10 +173,19 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
   };
 
   const handleAddToCanvas = async (content: CreatorContent) => {
+    // Prevent duplicate adds
+    if (addingContentIds.has(content.id)) {
+      console.log('[CreatorSearchPanel] Already adding content:', content.id);
+      return;
+    }
+    
     try {
       if (!onAddContentToCanvas) {
         throw new Error('Canvas integration not available');
       }
+
+      // Mark as adding
+      setAddingContentIds(prev => new Set(prev).add(content.id));
 
       // Extract creator handle from search input
       const creatorHandle = searchInput.replace('@', '').replace(/.*instagram\.com\//, '');
@@ -204,6 +214,13 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
       
       // Show error toast
       showError('Failed to Add Content', error.message || 'Could not add content to canvas');
+    } finally {
+      // Remove from adding set
+      setAddingContentIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(content.id);
+        return newSet;
+      });
     }
   };
 
@@ -425,10 +442,19 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
                         {/* Add to Canvas Button */}
                         <button
                           onClick={() => handleAddToCanvas(content)}
-                          className="absolute top-2 right-2 w-8 h-8 bg-green-600 hover:bg-green-700 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                          title="Add to canvas"
+                          disabled={addingContentIds.has(content.id)}
+                          className={`absolute top-2 right-2 w-8 h-8 ${
+                            addingContentIds.has(content.id) 
+                              ? 'bg-gray-600 cursor-not-allowed' 
+                              : 'bg-green-600 hover:bg-green-700'
+                          } text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity`}
+                          title={addingContentIds.has(content.id) ? "Adding..." : "Add to canvas"}
                         >
-                          <Plus className="w-4 h-4" />
+                          {addingContentIds.has(content.id) ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Plus className="w-4 h-4" />
+                          )}
                         </button>
                       </div>
                       

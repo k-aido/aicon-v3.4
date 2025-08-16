@@ -105,6 +105,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Normalize URL for cache checking (handle reel vs post URLs)
+    let normalizedUrl = url;
+    if (url.includes('instagram.com')) {
+      // Extract the post/reel ID and normalize to post URL format
+      const reelMatch = url.match(/\/reel\/([^\/\?]+)/);
+      const postMatch = url.match(/\/p\/([^\/\?]+)/);
+      const contentId = reelMatch?.[1] || postMatch?.[1];
+      if (contentId) {
+        normalizedUrl = `https://www.instagram.com/p/${contentId}/`;
+      }
+    }
+    
     // Check if URL has been scraped recently (within 24 hours)
     const oneDayAgo = new Date();
     oneDayAgo.setHours(oneDayAgo.getHours() - 24);
@@ -112,7 +124,7 @@ export async function POST(request: NextRequest) {
     const { data: existingScrape } = await supabase
       .from('content_scrapes')
       .select('*')
-      .eq('url', url)
+      .or(`url.eq.${url},url.eq.${normalizedUrl}`)
       .eq('project_id', projectId)
       .eq('status', 'completed')
       .gte('created_at', oneDayAgo.toISOString())

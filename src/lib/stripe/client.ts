@@ -46,6 +46,8 @@ export async function createCheckoutSession(
       subscription_data: {
         metadata: metadata || {},
       },
+      // Allow customers to enter promotional codes
+      allow_promotion_codes: true,
     });
     return session;
   } catch (error) {

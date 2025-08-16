@@ -2,7 +2,7 @@ import { create } from 'zustand';
 
 interface Element {
   id: string | number;  // Accept both string and number IDs for compatibility
-  type: 'content' | 'chat' | 'folder';
+  type: 'content' | 'chat' | 'folder' | 'collection';
   x: number;
   y: number;
   width: number;
@@ -21,6 +21,11 @@ interface Element {
   color?: string;
   childIds?: (string | number)[];  // Also accept mixed ID types
   isExpanded?: boolean;
+  // Collection-specific fields
+  contentIds?: (string | number)[];  // IDs of content pieces in collection
+  viewMode?: 'grid' | 'list' | 'compact';
+  tags?: string[];
+  aggregatedAnalysis?: any;
 }
 
 interface Connection {
@@ -63,6 +68,11 @@ interface CanvasState {
   
   // Get connected content for a chat element
   getConnectedContent: (chatId: string | number) => Element[];
+  
+  // Collection-specific actions
+  addContentToCollection: (collectionId: string | number, contentId: string | number) => void;
+  removeContentFromCollection: (collectionId: string | number, contentId: string | number) => void;
+  getCollectionContent: (collectionId: string | number) => Element[];
 }
 
 // Helper function to check for duplicate connections
@@ -238,5 +248,83 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     });
     
     return connectedElements;
+  },
+  
+  addContentToCollection: (collectionId, contentId) => {
+    set((state) => {
+      const collection = state.elements.find(el => el.id === collectionId && el.type === 'collection');
+      if (!collection) {
+        console.warn(`[CanvasStore] Collection ${collectionId} not found`);
+        return state;
+      }
+      
+      const contentIds = collection.contentIds || [];
+      if (contentIds.includes(contentId)) {
+        console.warn(`[CanvasStore] Content ${contentId} already in collection ${collectionId}`);
+        return state;
+      }
+      
+      const updatedElements = state.elements.map(el => 
+        el.id === collectionId 
+          ? { ...el, contentIds: [...contentIds, contentId] }
+          : el
+      );
+      
+      console.log('➕ [canvasStore] Added content to collection:', {
+        collectionId,
+        contentId,
+        totalContentInCollection: contentIds.length + 1
+      });
+      
+      return { elements: updatedElements };
+    });
+  },
+  
+  removeContentFromCollection: (collectionId, contentId) => {
+    set((state) => {
+      const collection = state.elements.find(el => el.id === collectionId && el.type === 'collection');
+      if (!collection) {
+        console.warn(`[CanvasStore] Collection ${collectionId} not found`);
+        return state;
+      }
+      
+      const contentIds = collection.contentIds || [];
+      const updatedContentIds = contentIds.filter(id => id !== contentId);
+      
+      const updatedElements = state.elements.map(el => 
+        el.id === collectionId 
+          ? { ...el, contentIds: updatedContentIds }
+          : el
+      );
+      
+      console.log('➖ [canvasStore] Removed content from collection:', {
+        collectionId,
+        contentId,
+        remainingContent: updatedContentIds.length
+      });
+      
+      return { elements: updatedElements };
+    });
+  },
+  
+  getCollectionContent: (collectionId) => {
+    const state = get();
+    const collection = state.elements.find(el => el.id === collectionId && el.type === 'collection');
+    
+    if (!collection || !collection.contentIds) {
+      return [];
+    }
+    
+    const collectionContent = state.elements.filter(el => 
+      collection.contentIds?.includes(el.id) && el.type === 'content'
+    );
+    
+    console.log('📚 [canvasStore] getCollectionContent:', {
+      collectionId,
+      contentIds: collection.contentIds,
+      foundContent: collectionContent.length
+    });
+    
+    return collectionContent;
   }
 }));

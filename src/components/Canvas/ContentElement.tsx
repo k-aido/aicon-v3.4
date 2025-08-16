@@ -238,6 +238,18 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
       }}
       onDoubleClick={handleDoubleClick}
       onContextMenu={handleContextMenu}
+      draggable={true}
+      onDragStart={(e) => {
+        // Set data for collection drop
+        e.dataTransfer.effectAllowed = 'copy';
+        e.dataTransfer.setData('element', JSON.stringify({
+          id: element.id,
+          type: 'content',
+          title: element.title,
+          url: element.url,
+          platform: element.platform
+        }));
+      }}
     >
       <SimpleResize
         width={element.width}

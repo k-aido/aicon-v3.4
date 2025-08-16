@@ -12,7 +12,7 @@ import { MarkdownMessage } from './MarkdownMessage';
 interface ChatInterfaceProps {
   element: ChatElement;
   connections: Connection[];
-  allElements: (ChatElement | ContentElement)[];
+  allElements: any[]; // Accept any element type for now
   onDelete?: (id: number) => void;
 }
 

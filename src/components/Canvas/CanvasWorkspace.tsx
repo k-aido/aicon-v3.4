@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback, useMemo } from 'react';
 import { ContentPieceComponent } from './ContentPieceComponent';
 import { CreatorContentElement } from './CreatorContentElement';
 import { FolderComponent } from './FolderComponent';
+import { CollectionComponent } from './CollectionComponent';
 import { ChatInterface } from '@/components/Chat/ChatInterface';
 import { ContextMenu, useContextMenu } from './ContextMenu';
 import { ContentDetailsPanel } from '../Sidebar/ContentDetailsPanel';
@@ -14,7 +15,8 @@ import { useCanvasDrag } from '@/hooks/useCanvasDrag';
 import { 
   CanvasElement, 
   ContentPiece, 
-  FolderData, 
+  FolderData,
+  CollectionData,
   ChatData, 
   Connection, 
   CanvasState,
@@ -163,6 +165,24 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
   const handleFolderDeleteWithContents = useCallback((folderId: string, contentIds: string[]) => {
     handleElementDelete([folderId, ...contentIds]);
   }, [handleElementDelete]);
+
+  // Collection handlers
+  const handleCollectionDeleteWithContents = useCallback((collectionId: string) => {
+    const collection = elements[collectionId] as CollectionData;
+    if (collection?.contentIds) {
+      handleElementDelete([collectionId, ...collection.contentIds]);
+    } else {
+      handleElementDelete(collectionId);
+    }
+  }, [elements, handleElementDelete]);
+
+  const handleRemoveContentFromCollection = useCallback((collectionId: string, contentId: string) => {
+    const collection = elements[collectionId] as CollectionData;
+    if (collection?.contentIds) {
+      const updatedContentIds = collection.contentIds.filter(id => id !== contentId);
+      handleElementUpdate(collectionId, { contentIds: updatedContentIds });
+    }
+  }, [elements, handleElementUpdate]);
 
   // Connection handlers
   const handleConnectionStart = useCallback((elementId: string) => {
@@ -330,6 +350,20 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
           childIds: [],
           isExpanded: true
         } as FolderData;
+      } else if (tool.type === 'collection') {
+        newElement = {
+          ...baseElement,
+          type: 'collection',
+          dimensions: { width: 400, height: 300 },
+          name: 'New Collection',
+          description: '',
+          color: tool.color || '#9333EA',
+          contentIds: [],
+          tags: [],
+          isExpanded: true,
+          viewMode: 'grid',
+          sortOrder: 'manual'
+        } as CollectionData;
       } else {
         // Content piece
         newElement = {
@@ -537,6 +571,26 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
                   onDeleteWithContents={handleFolderDeleteWithContents}
                   onConnectionStart={handleConnectionStart}
                   onUpdateChildPosition={(childId, position) => handleElementUpdate(childId, { position })}
+                />
+              );
+            }
+
+            if (element.type === 'collection') {
+              return (
+                <CollectionComponent
+                  key={element.id}
+                  collection={element as CollectionData}
+                  elements={elements}
+                  selected={isSelected}
+                  connecting={connecting}
+                  connections={connections}
+                  onSelect={() => selectElement(element.id)}
+                  onUpdate={handleElementUpdate}
+                  onDelete={handleElementDelete}
+                  onDeleteWithContents={handleCollectionDeleteWithContents}
+                  onConnectionStart={handleConnectionStart}
+                  onRemoveContent={handleRemoveContentFromCollection}
+                  onOpenContentDetails={handleOpenContentDetails}
                 />
               );
             }

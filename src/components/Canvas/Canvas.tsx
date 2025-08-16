@@ -6,6 +6,7 @@ import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { ConnectionLine } from './ConnectionLine';
 import { ContentElement } from './ContentElement';
 import { ChatElement } from './ChatElement';
+import { CollectionElement } from './CollectionElement';
 import { useCanvasStore } from '@/store/canvasStore';
 
 // Generate truly unique numeric IDs for canvas elements
@@ -640,6 +641,21 @@ const CanvasComponent: React.FC<CanvasProps> = ({
             return (
               <ChatElement
                 key={`chat-${element.id}`}
+                element={element}
+                selected={selectedElementIds.includes(element.id)}
+                connecting={connecting}
+                connections={connections}
+                allElements={elements}
+                onSelect={(el, event) => handleElementSelect(el, event)}
+                onUpdate={handleElementUpdate}
+                onDelete={handleElementDelete}
+                onConnectionStart={handleConnectionStart}
+              />
+            );
+          } else if (element.type === 'collection') {
+            return (
+              <CollectionElement
+                key={`collection-${element.id}`}
                 element={element}
                 selected={selectedElementIds.includes(element.id)}
                 connecting={connecting}

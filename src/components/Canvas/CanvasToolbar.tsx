@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Globe, UserSearch } from 'lucide-react';
+import { Globe, UserSearch, FolderPlus } from 'lucide-react';
 import { AIChatIcon, InstagramIcon, TikTokIcon, YouTubeIcon, ProfilesIcon } from '@/components/icons/PngIcons';
-import { ContentPiece, ChatData, FolderData } from '@/types/canvas';
+import { ContentPiece, ChatData, FolderData, CollectionData } from '@/types/canvas';
 
 // Generate truly unique string IDs for canvas elements
 let toolIdCounter = 0;
@@ -16,12 +16,13 @@ interface Tool {
   icon: React.ComponentType<any>;
   label: string;
   color: string;
-  type: 'chat' | 'content' | 'folder' | 'creator-search';
+  type: 'chat' | 'content' | 'folder' | 'collection' | 'creator-search';
   platform?: string;
 }
 
 const tools: Tool[] = [
   { id: 'ai-chat', icon: AIChatIcon, label: 'AI Chat', color: '#8B5CF6', type: 'chat' },
+  { id: 'collection', icon: FolderPlus, label: 'Collection', color: '#9333EA', type: 'collection' },
   { id: 'creator-search', icon: UserSearch, label: 'Search Creators', color: '#10B981', type: 'creator-search' },
   { id: 'instagram', icon: InstagramIcon, label: 'Instagram', color: '#E4405F', type: 'content', platform: 'instagram' },
   { id: 'tiktok', icon: TikTokIcon, label: 'TikTok', color: '#000000', type: 'content', platform: 'tiktok' },
@@ -30,7 +31,7 @@ const tools: Tool[] = [
 ];
 
 interface CanvasToolbarProps {
-  onAddElement: (element: ContentPiece | ChatData | FolderData) => void;
+  onAddElement: (element: ContentPiece | ChatData | FolderData | CollectionData) => void;
   viewport: { x: number; y: number; zoom: number };
   onOpenSocialMediaModal?: (platform?: string) => void;
   onOpenCreatorSearch?: () => void;
@@ -110,6 +111,32 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({ onAddElement, view
         childIds: [],
         isExpanded: true,
         zIndex: 1,
+        isVisible: true,
+        isLocked: false,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+    }
+
+    if (tool.type === 'collection') {
+      return {
+        id: stringId,
+        type: 'collection' as const,
+        position: { x: x, y: y },
+        dimensions: { width: 400, height: 300 },
+        x: x,
+        y: y,
+        width: 400,
+        height: 300,
+        name: 'New Collection',
+        description: '',
+        color: tool.color || '#9333EA',
+        contentIds: [],
+        tags: [],
+        isExpanded: true,
+        viewMode: 'grid' as const,
+        sortOrder: 'manual' as const,
+        zIndex: 0,
         isVisible: true,
         isLocked: false,
         createdAt: new Date(),

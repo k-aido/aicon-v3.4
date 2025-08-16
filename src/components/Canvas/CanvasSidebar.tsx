@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Globe, UserSearch } from 'lucide-react';
+import { Globe, UserSearch, FolderPlus } from 'lucide-react';
 import { AIChatIcon, InstagramIcon, TikTokIcon, YouTubeIcon } from '@/components/icons/PngIcons';
 import { useCanvasStore } from '@/store/canvasStore';
 
@@ -8,12 +8,13 @@ interface Tool {
   icon: React.ComponentType<any>;
   label: string;
   color: string;
-  type: 'chat' | 'content' | 'creator-search';
+  type: 'chat' | 'content' | 'collection' | 'creator-search';
   platform?: string;
 }
 
 const tools: Tool[] = [
   { id: 'ai-chat', icon: AIChatIcon, label: 'AI Chat', color: '#8B5CF6', type: 'chat' },
+  { id: 'collection', icon: FolderPlus, label: 'Collection', color: '#9333EA', type: 'collection' },
   { id: 'creator-search', icon: UserSearch, label: 'Search Creators', color: '#10B981', type: 'creator-search' },
   { id: 'instagram', icon: InstagramIcon, label: 'Instagram', color: '#E4405F', type: 'content', platform: 'instagram' },
   { id: 'tiktok', icon: TikTokIcon, label: 'TikTok', color: '#000000', type: 'content', platform: 'tiktok' },
@@ -122,6 +123,24 @@ export const CanvasSidebar: React.FC<CanvasSidebarProps> = ({ onOpenSocialMediaM
         updatedAt: new Date()
       };
       addElement(chatElement);
+    } else if (tool.type === 'collection') {
+      const collectionElement = {
+        id: baseElement.id,
+        type: 'collection' as const,
+        x: baseElement.x,
+        y: baseElement.y,
+        width: 400,
+        height: 300,
+        name: 'New Collection',
+        description: '',
+        color: tool.color || '#9333EA',
+        contentIds: [],
+        tags: [],
+        isExpanded: true,
+        viewMode: 'grid' as const,
+        sortOrder: 'manual' as const
+      };
+      addElement(collectionElement);
     } else {
       // For non-chat, non-social media content types, create directly
       addElement({

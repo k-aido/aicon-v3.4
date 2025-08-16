@@ -184,6 +184,15 @@ export const ContentPieceComponent: React.FC<ContentPieceComponentProps> = React
     setShowEditForm(false);
   };
 
+  // Make content draggable to collections
+  const handleDragStart = (e: React.DragEvent) => {
+    e.dataTransfer.effectAllowed = 'copy';
+    e.dataTransfer.setData('application/json', JSON.stringify({
+      elementId: element.id,
+      type: 'content'
+    }));
+  };
+
   return (
     <div
       ref={setElementRef}
@@ -197,6 +206,8 @@ export const ContentPieceComponent: React.FC<ContentPieceComponentProps> = React
         willChange: isDragging ? 'transform' : 'auto'
       }}
       onClick={handleClick}
+      draggable={true}
+      onDragStart={handleDragStart}
       onMouseDown={(e) => {
         if (!(e.target as HTMLElement).closest('[data-resize-handle]') &&
             !(e.target as HTMLElement).closest('[data-dropdown]')) {

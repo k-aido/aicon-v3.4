@@ -2,8 +2,8 @@
 
 import { Platform, Position } from './index';
 
-// Extended element types to include folders
-export type CanvasElementType = 'content' | 'chat' | 'folder';
+// Extended element types to include folders and collections
+export type CanvasElementType = 'content' | 'chat' | 'folder' | 'collection';
 
 // Base canvas element interface
 export interface BaseCanvasElement {
@@ -80,6 +80,36 @@ export interface FolderData extends BaseCanvasElement {
   sortOrder?: 'manual' | 'alphabetical' | 'date' | 'type';
 }
 
+// Collection data interface for grouping content posts
+export interface CollectionData extends BaseCanvasElement {
+  type: 'collection';
+  name: string;
+  description?: string;
+  color: string; // hex color for visual grouping
+  icon?: string; // icon identifier or emoji
+  contentIds: string[]; // IDs of content pieces in this collection
+  tags?: string[]; // Tags for categorization
+  isExpanded: boolean;
+  viewMode: 'grid' | 'list' | 'compact'; // How to display contents
+  sortOrder?: 'manual' | 'date' | 'popularity' | 'alphabetical';
+  aggregatedAnalysis?: {
+    totalViews: number;
+    totalLikes: number;
+    totalComments: number;
+    avgSentiment?: 'positive' | 'negative' | 'neutral' | 'mixed';
+    commonTopics?: string[];
+    dateRange?: {
+      earliest: Date;
+      latest: Date;
+    };
+  };
+  metadata?: {
+    createdBy?: string;
+    purpose?: string; // e.g., "competitor analysis", "trend research", "content inspiration"
+    platforms?: Platform[]; // Platforms represented in collection
+  };
+}
+
 // Enhanced chat data interface
 export interface ChatData extends BaseCanvasElement {
   type: 'chat';
@@ -139,7 +169,7 @@ export interface Connection {
 
 // Canvas state interface
 export interface CanvasState {
-  elements: Record<string, ContentPiece | ChatData | FolderData>;
+  elements: Record<string, ContentPiece | ChatData | FolderData | CollectionData>;
   connections: Connection[];
   viewport: {
     x: number;
@@ -151,7 +181,7 @@ export interface CanvasState {
     connectionIds: string[];
   };
   clipboard?: {
-    elements: Array<ContentPiece | ChatData | FolderData>;
+    elements: Array<ContentPiece | ChatData | FolderData | CollectionData>;
     connections: Connection[];
   };
 }
@@ -183,7 +213,7 @@ export interface CanvasWorkspaceConfig {
 }
 
 // Union type for all canvas elements
-export type CanvasElement = ContentPiece | ChatData | FolderData;
+export type CanvasElement = ContentPiece | ChatData | FolderData | CollectionData;
 
 // Element bounds for collision detection
 export interface ElementBounds {

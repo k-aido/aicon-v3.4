@@ -2,7 +2,7 @@
 export type Platform = 'youtube' | 'instagram' | 'tiktok' | 'unknown';
 
 // Element types
-export type ElementType = 'content' | 'chat';
+export type ElementType = 'content' | 'chat' | 'collection';
 
 // Base element interface
 export interface BaseElement {
@@ -29,8 +29,21 @@ export interface ChatElement extends BaseElement {
   messages: Message[];
 }
 
+// Collection element interface
+export interface CollectionElement extends BaseElement {
+  type: 'collection';
+  name?: string;
+  description?: string;
+  color?: string;
+  contentIds?: (string | number)[];
+  tags?: string[];
+  isExpanded?: boolean;
+  viewMode?: 'grid' | 'list' | 'compact';
+  sortOrder?: 'manual' | 'date' | 'popularity' | 'alphabetical';
+}
+
 // Union type for all elements
-export type CanvasElement = ContentElement | ChatElement;
+export type CanvasElement = ContentElement | ChatElement | CollectionElement;
 
 // Message interface
 export interface Message {

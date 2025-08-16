@@ -207,6 +207,7 @@ class TranscriptionService {
              content.rawData?.video_url ||
              content.rawData?.videoUrlNoWatermark ||
              content.rawData?.video_url_no_watermark ||
+             content.rawData?.mediaUrls ||  // TikTok uses mediaUrls array
              (content.rawData?.formats && Array.isArray(content.rawData.formats)));
   }
 
@@ -214,12 +215,33 @@ class TranscriptionService {
    * Extract audio URL from content data
    */
   static getAudioUrl(content: any): string | null {
-    // Try to get direct video URL first
-    const videoUrl = content.videoUrl || 
-                    content.rawData?.videoUrl || 
-                    content.rawData?.video_url ||
-                    content.rawData?.videoUrlNoWatermark ||
-                    content.rawData?.video_url_no_watermark;
+    // Log what we're working with
+    console.log('[TranscriptionService] Extracting audio URL from content:', {
+      platform: content.platform,
+      hasVideoUrl: !!content.videoUrl,
+      hasRawData: !!content.rawData,
+      rawDataKeys: content.rawData ? Object.keys(content.rawData).slice(0, 10) : []
+    });
+    
+    // Try to get direct video URL first - check more fields for TikTok
+    let videoUrl = content.videoUrl || 
+                  content.rawData?.videoUrl || 
+                  content.rawData?.video_url ||
+                  content.rawData?.videoUrlNoWatermark ||
+                  content.rawData?.video_url_no_watermark ||
+                  content.rawData?.downloadUrl ||  // TikTok might use this
+                  content.rawData?.download_url ||
+                  content.rawData?.videoMeta?.downloadUrl || // Or nested in videoMeta
+                  content.rawData?.video?.playUrl || // Or in video object
+                  content.rawData?.video?.downloadUrl;
+    
+    // Check mediaUrls array for TikTok
+    if (!videoUrl && content.rawData?.mediaUrls && Array.isArray(content.rawData.mediaUrls)) {
+      if (content.rawData.mediaUrls.length > 0) {
+        videoUrl = content.rawData.mediaUrls[0];
+        console.log('[TranscriptionService] Found video URL in mediaUrls array');
+      }
+    }
     
     if (videoUrl) {
       console.log('[TranscriptionService] Found video URL:', videoUrl.substring(0, 100) + '...');

@@ -179,7 +179,7 @@ class ApifyService {
       resultsPerPage: 100,
       shouldDownloadCovers: true,  // Enable thumbnail download
       shouldDownloadSubtitles: true, // Enable subtitles for transcripts
-      shouldDownloadVideos: false   // Skip video download to save time/cost
+      shouldDownloadVideos: true    // Enable video URL for transcription
     };
 
     const run = await this.client.actor(this.ACTORS.tiktok).call(input);
@@ -469,6 +469,8 @@ class ApifyService {
         hasCoverUrl: !!data.coverUrl,
         hasVideoMeta: !!data.videoMeta,
         hasVideo: !!data.video,
+        hasMediaUrls: !!data.mediaUrls,
+        mediaUrlsContent: data.mediaUrls ? data.mediaUrls : 'not present',
         topLevelKeys: Object.keys(data).slice(0, 20) // First 20 keys
       });
       
@@ -499,6 +501,32 @@ class ApifyService {
         extracted: thumbnailUrl
       });
       
+      // Extract video URL from more possible fields
+      // Check mediaUrls array first (new format from scraper)
+      let tiktokVideoUrl = null;
+      
+      if (data.mediaUrls && Array.isArray(data.mediaUrls) && data.mediaUrls.length > 0) {
+        // mediaUrls is an array of video URLs from the scraper
+        tiktokVideoUrl = data.mediaUrls[0];
+        console.log('[ApifyService] Found TikTok video URL in mediaUrls array');
+      } else {
+        // Fallback to other possible fields
+        tiktokVideoUrl = data.videoUrl || 
+                        data.video_url || 
+                        data.videoUrlNoWatermark || 
+                        data.video_url_no_watermark ||
+                        data.downloadUrl ||
+                        data.download_url ||
+                        data.videoMeta?.downloadUrl ||
+                        data.video?.playUrl ||
+                        data.video?.downloadUrl;
+      }
+      
+      if (!tiktokVideoUrl) {
+        console.log('[ApifyService] Warning: No video URL found for TikTok content. Available keys:', Object.keys(data).slice(0, 20));
+        console.log('[ApifyService] mediaUrls content:', data.mediaUrls);
+      }
+      
       normalized = {
         platform,
         url: data.webVideoUrl || data.web_video_url || data.url,
@@ -514,7 +542,7 @@ class ApifyService {
         authorName: data.authorMeta?.name || data.author_meta?.name || data.author?.uniqueId || data.author?.unique_id,
         authorId: data.authorMeta?.id || data.author_meta?.id || data.author?.id,
         thumbnailUrl,
-        videoUrl: data.videoUrl || data.video_url || data.videoUrlNoWatermark || data.video_url_no_watermark,
+        videoUrl: tiktokVideoUrl,
         hashtags: data.hashtags || this.extractHashtags(data.text || ''),
         mentions: data.mentions || this.extractMentions(data.text || ''),
         comments: data.comments?.slice(0, 50)?.map((c: any) => ({

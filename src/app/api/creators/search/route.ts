@@ -69,7 +69,7 @@ async function getCachedContent(handle: string): Promise<{ creator: Creator | nu
 }
 
 // Scrape Instagram data using Apify synchronous API
-async function scrapeInstagramData(handle: string, filter: string): Promise<{ content: any[]; error?: string }> {
+async function scrapeInstagramData(handle: string, filter: string, contentType: 'all' | 'reels' | 'posts' = 'all'): Promise<{ content: any[]; error?: string }> {
   const apifyToken = process.env.APIFY_API_TOKEN;
   
   if (!apifyToken) {
@@ -77,43 +77,84 @@ async function scrapeInstagramData(handle: string, filter: string): Promise<{ co
   }
 
   try {
-    // Fetch both regular posts and reels in parallel
-    const [postsResponse, reelsResponse] = await Promise.all([
+    let postsResponse: Response | null = null;
+    let reelsResponse: Response | null = null;
+    
+    // Determine what to fetch based on contentType
+    const promises: Promise<Response>[] = [];
+    
+    if (contentType === 'all' || contentType === 'posts') {
       // Fetch regular posts
-      fetch(`https://api.apify.com/v2/acts/apify~instagram-scraper/run-sync-get-dataset-items?token=${apifyToken}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          directUrls: [`https://www.instagram.com/${handle.replace('@', '')}/`],
-          resultsType: "posts",
-          resultsLimit: 20,
-          addParentData: true,
+      const postsPayload = {
+        directUrls: [`https://www.instagram.com/${handle.replace('@', '')}/`],
+        resultsType: "posts",
+        resultsLimit: contentType === 'posts' ? 30 : 20, // More if only posts
+        addParentData: true,
+      };
+      
+      console.log('[Creator Search] Instagram Scraper request:', {
+        url: 'https://api.apify.com/v2/acts/apify~instagram-scraper/run-sync-get-dataset-items',
+        handle: handle.replace('@', ''),
+        payload: postsPayload
+      });
+      
+      promises.push(
+        fetch(`https://api.apify.com/v2/acts/apify~instagram-scraper/run-sync-get-dataset-items?token=${apifyToken}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(postsPayload)
         })
-      }),
-      // Fetch reels
-      fetch(`https://api.apify.com/v2/acts/apify~instagram-reel-scraper/run-sync-get-dataset-items?token=${apifyToken}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          profiles: [handle.replace('@', '')],
-          resultsLimit: 20,
+      );
+    }
+    
+    if (contentType === 'all' || contentType === 'reels') {
+      // Fetch reels - Note: This actor expects 'username' field, not 'profiles'
+      const reelsPayload = {
+        username: [handle.replace('@', '')],
+        resultsLimit: contentType === 'reels' ? 30 : 20, // More if only reels
+      };
+      
+      console.log('[Creator Search] Instagram Reel Scraper request:', {
+        url: 'https://api.apify.com/v2/acts/apify~instagram-reel-scraper/run-sync-get-dataset-items',
+        handle: handle.replace('@', ''),
+        payload: reelsPayload
+      });
+      
+      promises.push(
+        fetch(`https://api.apify.com/v2/acts/apify~instagram-reel-scraper/run-sync-get-dataset-items?token=${apifyToken}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(reelsPayload)
         })
-      })
-    ]);
+      );
+    }
+    
+    // Execute the fetches
+    const responses = await Promise.all(promises);
+    
+    // Assign responses based on what was fetched
+    if (contentType === 'all') {
+      postsResponse = responses[0];
+      reelsResponse = responses[1];
+    } else if (contentType === 'posts') {
+      postsResponse = responses[0];
+    } else if (contentType === 'reels') {
+      reelsResponse = responses[0];
+    }
 
     // Handle posts response
     let posts: any[] = [];
-    if (postsResponse.ok) {
+    if (postsResponse && postsResponse.ok) {
       const postsData = await postsResponse.json();
       if (Array.isArray(postsData)) {
         posts = postsData;
         console.log(`[Creator Search] Fetched ${posts.length} regular posts for ${handle}`);
       }
-    } else {
+    } else if (postsResponse) {
       console.error('Failed to fetch posts:', postsResponse.status);
       
       if (postsResponse.status === 403) {
@@ -129,8 +170,9 @@ async function scrapeInstagramData(handle: string, filter: string): Promise<{ co
 
     // Handle reels response
     let reels: any[] = [];
-    if (reelsResponse.ok) {
+    if (reelsResponse && reelsResponse.ok) {
       const reelsData = await reelsResponse.json();
+      console.log(`[Creator Search] Reel Scraper response type:`, typeof reelsData, 'isArray:', Array.isArray(reelsData));
       if (Array.isArray(reelsData)) {
         // Transform reel data to match post format for consistency
         reels = reelsData.map((reel: any) => ({
@@ -150,10 +192,21 @@ async function scrapeInstagramData(handle: string, filter: string): Promise<{ co
           ownerUsername: reel.ownerUsername,
           ownerId: reel.ownerId,
         }));
-        console.log(`[Creator Search] Fetched ${reels.length} reels for ${handle}`);
+        console.log(`[Creator Search] Successfully fetched ${reels.length} reels for ${handle}`);
+        if (reels.length > 0) {
+          console.log('[Creator Search] Sample reel data:', JSON.stringify(reels[0], null, 2).substring(0, 500));
+        }
+      } else {
+        console.error('[Creator Search] Unexpected reels response format:', reelsData);
       }
-    } else {
-      console.error('Failed to fetch reels:', reelsResponse.status);
+    } else if (reelsResponse) {
+      const errorText = await reelsResponse.text();
+      console.error('[Creator Search] Failed to fetch reels:', {
+        status: reelsResponse.status,
+        statusText: reelsResponse.statusText,
+        errorBody: errorText,
+        handle: handle
+      });
       // Don't fail completely if reels fetch fails, just log it
     }
 
@@ -196,7 +249,7 @@ async function scrapeInstagramData(handle: string, filter: string): Promise<{ co
 export async function POST(request: NextRequest) {
   try {
     const body: CreatorSearchRequest = await request.json();
-    const { platform, searchQuery, filter, userId } = body;
+    const { platform, searchQuery, filter, contentType = 'all', userId } = body;
 
     // Validate request
     if (!platform || platform !== 'instagram') {
@@ -267,7 +320,7 @@ export async function POST(request: NextRequest) {
     // No cache, scrape Instagram data directly
     console.log(`[Creator Search] No cached content, starting scrape for ${handle}`);
     
-    const { content: scrapedContent, error } = await scrapeInstagramData(handle, filter);
+    const { content: scrapedContent, error } = await scrapeInstagramData(handle, filter, contentType);
     if (error) {
       return NextResponse.json({ 
         error: error 

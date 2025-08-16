@@ -50,7 +50,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [mentionPosition, setMentionPosition] = useState({ top: 0, left: 0 });
   const [cursorPosition, setCursorPosition] = useState(0);
   const [copiedMessageId, setCopiedMessageId] = useState<number | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   
   // Get current model info for provider branding
   const currentModel = LLM_MODELS.find(m => m.id === selectedModel) || LLM_MODELS[4];
@@ -188,11 +188,17 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   }, [connections, element.id, allElements]);
 
   // Handle @ mention detection
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
     const cursorPos = e.target.selectionStart || 0;
     setInput(value);
     setCursorPosition(cursorPos);
+    
+    // Auto-resize textarea
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto';
+      inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 200) + 'px';
+    }
 
     // Check for @ symbol
     const lastAtIndex = value.lastIndexOf('@', cursorPos - 1);
@@ -376,6 +382,11 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     setInput('');
     setMentionedContent([]);
     setIsLoading(true);
+    
+    // Reset textarea height
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto';
+    }
     
     try {
       // Fetch analysis for mentioned content
@@ -583,6 +594,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       e.preventDefault();
       sendMessage();
     }
+    // Shift+Enter will naturally create a new line in textarea
   };
 
   return (
@@ -764,10 +776,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         {/* Input Area - Container allows drag */}
         <div className="border-t border-gray-200 bg-white p-4">
           <div className="space-y-3">
-            <div className="flex gap-3 relative">
-              <input
+            <div className="flex gap-3 relative items-end">
+              <textarea
                 ref={inputRef}
-                type="text"
                 value={input}
                 onChange={handleInputChange}
                 onKeyDown={(e) => {
@@ -780,8 +791,14 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 placeholder="Type a message... Use @ to reference content"
                 disabled={isLoading}
                 data-no-drag
-                className="flex-1 px-4 py-3 bg-gray-100 rounded-xl border border-gray-200 outline-none focus:border-purple-500 focus:bg-white transition-all"
-                style={{ pointerEvents: 'auto', zIndex: 10 }}
+                className="flex-1 px-4 py-3 bg-gray-100 rounded-xl border border-gray-200 outline-none focus:border-purple-500 focus:bg-white transition-all resize-none overflow-y-auto"
+                style={{ 
+                  pointerEvents: 'auto', 
+                  zIndex: 10,
+                  minHeight: '52px',
+                  maxHeight: '200px'
+                }}
+                rows={1}
               />
               
               {/* Mention Autocomplete */}
@@ -801,7 +818,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 }}
                 onMouseDown={(e) => e.stopPropagation()}
                 disabled={!input.trim() || isLoading}
-                className="px-4 py-3 bg-purple-600 text-white rounded-xl hover:bg-purple-700 disabled:opacity-50 transition-colors"
+                className="px-4 py-3 bg-purple-600 text-white rounded-xl hover:bg-purple-700 disabled:opacity-50 transition-colors self-end"
                 data-no-drag
               >
                 <Send className="w-5 h-5" />

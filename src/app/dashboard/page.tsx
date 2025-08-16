@@ -258,13 +258,16 @@ export default function DashboardPage() {
         
         // Show success message
         console.log('[Dashboard] Canvas deleted successfully:', canvasTitle);
+        
+        // Optional: Show success toast or notification
+        // You could add a toast notification here
       } else {
         console.error('[Dashboard] Failed to delete canvas:', canvasId);
-        alert('Failed to delete canvas. Please try again.');
+        alert('Failed to delete canvas. Please check the console for more details and try again.');
       }
     } catch (error) {
       console.error('[Dashboard] Error deleting canvas:', error);
-      alert('An error occurred while deleting the canvas.');
+      alert(`An error occurred while deleting the canvas: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsLoading(false);
     }

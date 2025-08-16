@@ -1123,23 +1123,33 @@ class CanvasPersistenceService {
    */
   async deleteWorkspace(workspaceId: string): Promise<boolean> {
     try {
-      console.log('[CanvasPersistence] Deleting workspace:', workspaceId);
+      console.log('[CanvasPersistence] Attempting to delete workspace:', workspaceId);
       
-      // Delete the project (canvas_elements and canvas_connections will cascade delete if they exist)
-      const { error } = await this.supabase
-        .from('projects')
-        .delete()
-        .eq('id', workspaceId);
-      
-      if (error) {
-        console.error('[CanvasPersistence] Error deleting workspace:', error);
+      // Use API endpoint for deletion to bypass RLS
+      const response = await fetch(`/api/canvas/delete?id=${workspaceId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        console.error('[CanvasPersistence] API error deleting workspace:', {
+          workspaceId,
+          status: response.status,
+          error: result.error,
+          details: result.details
+        });
         return false;
       }
-      
-      console.log('[CanvasPersistence] Workspace deleted successfully:', workspaceId);
+
+      console.log('[CanvasPersistence] Workspace deleted successfully via API:', workspaceId);
       return true;
+      
     } catch (error) {
-      console.error('[CanvasPersistence] Error in deleteWorkspace:', error);
+      console.error('[CanvasPersistence] Unexpected error in deleteWorkspace:', error);
       return false;
     }
   }

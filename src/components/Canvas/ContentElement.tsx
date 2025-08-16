@@ -61,8 +61,6 @@ const getStatusBorderColor = (element: ContentElementType): string => {
         return 'border-purple-500'; // Instagram purple
       case 'tiktok':
         return 'border-black'; // TikTok black
-      case 'website':
-        return 'border-blue-500'; // Website blue
       default:
         return 'border-green-500'; // Default analyzed color
     }
@@ -76,8 +74,6 @@ const getStatusBorderColor = (element: ContentElementType): string => {
       return 'border-purple-300'; // Instagram purple (lighter)
     case 'tiktok':
       return 'border-gray-400'; // TikTok black (lighter as gray)
-    case 'website':
-      return 'border-blue-300'; // Website blue (lighter)
     default:
       return 'border-gray-300'; // Default not analyzed color
   }

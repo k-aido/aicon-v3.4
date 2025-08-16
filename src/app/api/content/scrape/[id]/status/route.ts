@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import ApifyService from '@/services/apifyService';
+import TranscriptionService from '@/services/transcriptionService';
+import YouTubeTranscriptionService from '@/services/youtubeTranscriptionService';
+import YouTubeCaptionService from '@/services/youtubeCaptionService';
 
 // Credit cost for scraping and analysis combined
 const SCRAPE_AND_ANALYSIS_CREDITS = 50;
@@ -100,6 +103,118 @@ export async function GET(
           const scrapedContent = await apifyService.getRunResults(scrapeRecord.apify_run_id);
 
           if (scrapedContent) {
+            // Check if audio is available and perform transcription
+            let transcriptionText = null;
+            
+            // Handle YouTube separately
+            if (scrapedContent.platform === 'youtube') {
+              console.log(`[Status API] YouTube content detected, attempting transcription for ${scrapeId}`);
+              
+              const videoId = scrapedContent.rawData?.id || scrapedContent.rawData?.videoId;
+              
+              // Try multiple approaches for YouTube transcription
+              
+              // Approach 1: Try to get captions from scraped data
+              if (!transcriptionText && scrapedContent.rawData?.captions) {
+                console.log(`[Status API] Attempting to extract YouTube captions from scraped data`);
+                try {
+                  transcriptionText = await YouTubeCaptionService.extractCaptions(scrapedContent.rawData);
+                  if (transcriptionText) {
+                    console.log(`[Status API] YouTube captions extracted, length: ${transcriptionText.length} characters`);
+                  }
+                } catch (error) {
+                  console.error(`[Status API] Caption extraction error:`, error);
+                }
+              }
+              
+              // Approach 2: Try direct transcript fetch if we have video ID
+              if (!transcriptionText && videoId) {
+                console.log(`[Status API] Attempting direct YouTube transcript fetch for video: ${videoId}`);
+                try {
+                  transcriptionText = await YouTubeCaptionService.fetchTranscriptDirect(videoId);
+                  if (transcriptionText) {
+                    console.log(`[Status API] YouTube transcript fetched directly, length: ${transcriptionText.length} characters`);
+                  }
+                } catch (error) {
+                  console.error(`[Status API] Direct transcript fetch error:`, error);
+                }
+              }
+              
+              // Approach 3: Try audio download and transcription (may fail due to ytdl-core issues)
+              if (!transcriptionText && scrapedContent.url) {
+                console.log(`[Status API] Attempting YouTube audio download and transcription`);
+                try {
+                  const youtubeService = new YouTubeTranscriptionService();
+                  transcriptionText = await youtubeService.transcribeYouTubeVideo(
+                    scrapedContent.url,
+                    videoId
+                  );
+                  
+                  if (transcriptionText) {
+                    console.log(`[Status API] YouTube audio transcription successful, length: ${transcriptionText.length} characters`);
+                  }
+                } catch (error) {
+                  console.error(`[Status API] YouTube audio transcription error:`, error);
+                }
+              }
+              
+              if (!transcriptionText) {
+                console.log(`[Status API] All YouTube transcription methods failed`);
+                // Log what data we have for debugging
+                console.log(`[Status API] YouTube data available:`, {
+                  hasUrl: !!scrapedContent.url,
+                  hasVideoId: !!videoId,
+                  hasCaptions: !!scrapedContent.rawData?.captions,
+                  captionTracks: scrapedContent.rawData?.captions?.captionTracks?.length || 0
+                });
+                
+                // Set a message indicating no transcript available
+                if ((scrapedContent.rawData?.captions?.captionTracks?.length || 0) === 0) {
+                  console.log(`[Status API] No captions available for this YouTube video`);
+                  // Store a placeholder message for videos without captions
+                  transcriptionText = "[Transcript not available - this video has no captions]";
+                }
+              }
+            }
+            // Handle other platforms (Instagram, TikTok)
+            else if (TranscriptionService.needsTranscription(scrapedContent)) {
+              console.log(`[Status API] Audio available, performing transcription for ${scrapeId}`);
+              
+              try {
+                const transcriptionService = new TranscriptionService();
+                const audioUrl = TranscriptionService.getAudioUrl(scrapedContent);
+                
+                if (audioUrl) {
+                  console.log(`[Status API] Transcribing audio from: ${audioUrl.substring(0, 100)}...`);
+                  
+                  // Generate contextual prompt for better transcription
+                  const prompt = TranscriptionService.generatePrompt(scrapedContent);
+                  
+                  const transcriptionResult = await transcriptionService.transcribeFromUrl(audioUrl, {
+                    prompt,
+                    response_format: 'verbose_json'
+                  });
+                  
+                  if (transcriptionResult) {
+                    transcriptionText = transcriptionResult.text;
+                    console.log(`[Status API] Transcription successful, length: ${transcriptionText.length} characters`);
+                  } else {
+                    console.log(`[Status API] Transcription failed, continuing without transcript`);
+                  }
+                } else {
+                  console.log(`[Status API] No audio URL found for transcription (${scrapedContent.platform})`);
+                }
+              } catch (transcriptionError) {
+                console.error(`[Status API] Transcription error:`, transcriptionError);
+                // Continue without transcription - don't fail the entire scraping process
+              }
+            }
+            
+            // If we got a transcript, add it to the scraped content
+            if (transcriptionText) {
+              scrapedContent.transcript = transcriptionText;
+            }
+            
             // Now deduct credits since scraping succeeded
             // Get user's account
             const { data: userData } = await supabase
@@ -173,7 +288,7 @@ export async function GET(
               title: scrapedContent.title,
               description: scrapedContent.description,
               caption: scrapedContent.caption,
-              transcript: scrapedContent.transcript,
+              transcript: scrapedContent.transcript || transcriptionText, // Use scraped transcript or our transcription
               metrics: {
                 views: scrapedContent.viewCount,
                 likes: scrapedContent.likeCount,
@@ -190,8 +305,18 @@ export async function GET(
               videoUrl: scrapedContent.videoUrl,
               hashtags: scrapedContent.hashtags,
               mentions: scrapedContent.mentions,
-              topComments: scrapedContent.comments?.slice(0, 10)
+              topComments: scrapedContent.comments?.slice(0, 10),
+              transcriptionSource: scrapedContent.transcript ? 'scraper' : (transcriptionText ? 'captions' : null)
             };
+            
+            // Log transcript info
+            if (processedData.transcript) {
+              console.log(`[Status API] Transcript saved:`, {
+                length: processedData.transcript.length,
+                source: processedData.transcriptionSource,
+                last50Chars: processedData.transcript.substring(processedData.transcript.length - 50)
+              });
+            }
             
             console.log(`[Status API] Processed data for ${scrapeId}:`, {
               title: processedData.title,
@@ -199,8 +324,11 @@ export async function GET(
               platform: scrapeRecord.platform
             });
 
+            // Log before saving to database
+            console.log(`[Status API] Before DB save - transcript length: ${processedData.transcript?.length || 0}`);
+            
             // Update scrape record with results
-            await supabase
+            const { error: updateError } = await supabase
               .from('content_scrapes')
               .update({
                 status: 'completed',
@@ -209,6 +337,12 @@ export async function GET(
                 updated_at: new Date().toISOString()
               })
               .eq('id', scrapeId);
+              
+            if (updateError) {
+              console.error(`[Status API] Error updating scrape record:`, updateError);
+            } else {
+              console.log(`[Status API] Successfully saved to database`)
+            }
 
             return NextResponse.json({
               scrapeId: scrapeRecord.id,

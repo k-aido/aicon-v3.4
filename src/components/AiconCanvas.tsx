@@ -636,6 +636,7 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
         isOpen={creatorSearchPanel.isOpen}
         onClose={handleCloseCreatorSearch}
         onAddContentToCanvas={handleAddCreatorContentToCanvas}
+        viewport={viewport}
       />
     </div>
   );

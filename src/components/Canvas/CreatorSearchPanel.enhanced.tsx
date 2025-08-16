@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import type { CreatorSearchRequest, CreatorSearchResponse, CreatorContent } from '@/types/creator-search';
 import { addCreatorContentToCanvas } from '../../../lib/canvas/creatorContentHelpers';
+import type { Viewport } from '@/types';
 import { useToast } from '@/components/Modal/ToastContainer';
 import { useCreatorSearchRateLimit } from '../../../lib/rateLimit';
 import { useSearchCache } from '../../../lib/searchCache';
@@ -25,6 +26,7 @@ interface CreatorSearchPanelProps {
   isOpen: boolean;
   onClose: () => void;
   onAddContentToCanvas?: (element: any) => void;
+  viewport: { x: number; y: number; zoom: number };
 }
 
 interface SearchState {
@@ -52,7 +54,8 @@ const PLATFORMS = [
 export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
   isOpen,
   onClose,
-  onAddContentToCanvas
+  onAddContentToCanvas,
+  viewport
 }) => {
   const { showSuccess, showError, showInfo } = useToast();
   const rateLimit = useCreatorSearchRateLimit();
@@ -369,6 +372,8 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
       
       const result = await addCreatorContentToCanvas(
         content,
+        viewport,
+        onAddContentToCanvas,
         creatorHandle
       );
 

@@ -191,7 +191,8 @@ class YouTubeTranscriptionService {
                   
                   if (response.ok) {
                     console.log('[YouTubeTranscription] Direct URL download successful, status:', response.status);
-                    const buffer = await response.buffer();
+                    const arrayBuffer = await response.arrayBuffer();
+                    const buffer = Buffer.from(arrayBuffer);
                     console.log('[YouTubeTranscription] Downloaded buffer size:', buffer.length);
                     
                     // Save to file

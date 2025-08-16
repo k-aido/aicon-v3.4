@@ -1,6 +1,8 @@
 'use client';
 
 import type { CreatorContent } from '@/types/creator-search';
+import { useCanvasStore } from '@/store/canvasStore';
+import { getPlatformPlaceholder } from '@/utils/imageProxy';
 
 export interface CreatorContentElementType {
   id: string;
@@ -29,6 +31,9 @@ export interface CreatorContentElementType {
     analysisError?: string;
     analysisRetryCount?: number;
     rawData?: any;
+    isScraping?: boolean;
+    scrapeId?: string;
+    processedData?: any;
   };
   analysis?: {
     keyTopics: string[];
@@ -56,156 +61,266 @@ export interface Viewport {
 }
 
 /**
- * Creates a canvas element from creator content
+ * Generate ID similar to SocialMediaModal
  */
-export function createCreatorContentElement(
-  content: CreatorContent, 
-  viewport: Viewport,
-  creatorHandle?: string
-): CreatorContentElementType {
-  // Generate unique ID
+function generateId(): string {
   const timestamp = Date.now();
   const random = Math.floor(Math.random() * 1000000);
-  const elementId = `creator-content-${timestamp}-${random}`;
+  return `${timestamp}-${random}`;
+}
 
-  // Calculate center position in viewport
-  const centerX = (-viewport.x + window.innerWidth / 2) / viewport.zoom - 160; // Half of element width
-  const centerY = (-viewport.y + window.innerHeight / 2) / viewport.zoom - 200; // Half of element height
+/**
+ * Poll for scraping completion - exact copy from SocialMediaModal
+ */
+const pollForCompletion = async (elementId: string, scrapeId: string, projectId: string) => {
+  const maxAttempts = 60; // 60 seconds timeout
+  let attempts = 0;
 
-  // Extract creator handle from various sources
-  const handle = creatorHandle || 
-    extractHandleFromUrl(content.content_url) || 
-    'unknown_creator';
+  const checkStatus = async () => {
+    try {
+      // Check scraping status
+      const statusResponse = await fetch(`/api/content/scrape/${scrapeId}/status`);
+      const statusData = await statusResponse.json();
 
-  // Create short title from caption or use handle
-  let title = `@${handle}`;
-  if (content.caption && content.caption.length > 0) {
-    const shortCaption = content.caption.substring(0, 40).trim();
-    title = shortCaption.endsWith('...') ? shortCaption : shortCaption + '...';
-  }
+      if (statusData.status === 'completed') {
+        // Get current element to preserve existing data
+        const { elements, updateElement } = useCanvasStore.getState();
+        const currentElement = elements.find(el => el.id === elementId);
+        const currentMetadata = (currentElement as any)?.metadata || {};
+        
+        console.log('[CreatorContent] Scraping completed, updating element:', {
+          elementId,
+          thumbnailUrl: statusData.processedData?.thumbnailUrl,
+          title: statusData.processedData?.title
+        });
+        
+        // Update element with scraped data
+        updateElement(elementId, {
+          title: statusData.processedData?.title || 'Content loaded',
+          thumbnail: statusData.processedData?.thumbnailUrl || currentElement?.thumbnail,
+          metadata: {
+            ...currentMetadata,
+            isScraping: false,
+            isAnalyzing: true,
+            scrapeId: scrapeId,
+            processedData: statusData.processedData
+          }
+        });
 
-  const element: CreatorContentElementType = {
-    id: elementId,
-    type: 'content',
-    x: centerX,
-    y: centerY,
-    width: 320,
-    height: 400,
-    title,
-    url: content.content_url,
-    platform: content.platform as 'instagram',
-    thumbnail: content.thumbnail_url || generatePlaceholderThumbnail(content.platform),
-    metadata: {
-      creatorId: content.creator_id,
-      contentUrl: content.content_url,
-      thumbnailUrl: content.thumbnail_url,
-      videoUrl: content.video_url,
-      caption: content.caption,
-      likes: content.likes,
-      comments: content.comments,
-      views: content.views,
-      postedDate: content.posted_date,
-      duration: content.duration_seconds,
-      isAnalyzing: false,
-      isAnalyzed: false,
-      rawData: content.raw_data
-    },
-    zIndex: 1,
-    isVisible: true,
-    isLocked: false,
-    createdAt: new Date(),
-    updatedAt: new Date()
+        // Start analysis
+        const analyzeResponse = await fetch(`/api/content/analyze/${scrapeId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ addToLibrary: true })
+        });
+
+        if (analyzeResponse.ok) {
+          const analysisData = await analyzeResponse.json();
+          // Get current element state to preserve metadata
+          const { elements: currentElements } = useCanvasStore.getState();
+          const updatedElement = currentElements.find(el => el.id === elementId);
+          const updatedMetadata = (updatedElement as any)?.metadata || {};
+          
+          // Transform the analysis data to match the expected format in AnalysisPanel
+          const transformedAnalysis = {
+            hook: analysisData.analysis?.hook_analysis || '',
+            hookScore: 8, // Default score
+            contentStrategy: analysisData.analysis?.body_analysis || '',
+            keyInsights: analysisData.analysis?.key_topics || [],
+            improvements: analysisData.analysis?.engagement_tactics || [],
+            sentiment: analysisData.analysis?.sentiment || 'positive',
+            complexity: analysisData.analysis?.complexity || 'moderate',
+            // Also include the raw analysis for compatibility
+            ...analysisData.analysis
+          };
+          
+          updateElement(elementId, {
+            metadata: {
+              ...updatedMetadata,
+              isAnalyzing: false,
+              isAnalyzed: true,
+              analysis: transformedAnalysis,
+              processedData: statusData.processedData,
+              scrapeId: scrapeId
+            }
+          });
+        } else {
+          updateElement(elementId, {
+            metadata: {
+              isAnalyzing: false,
+              analysisError: 'Failed to analyze content'
+            }
+          });
+        }
+        return;
+      }
+
+      if (statusData.status === 'failed') {
+        const { elements: currentElements, updateElement } = useCanvasStore.getState();
+        const currentElement = currentElements.find(el => el.id === elementId);
+        const currentMetadata = (currentElement as any)?.metadata || {};
+        
+        updateElement(elementId, {
+          metadata: {
+            ...currentMetadata,
+            isScraping: false,
+            scrapingError: statusData.error || 'Scraping failed'
+          }
+        });
+        return;
+      }
+
+      // Continue polling if still processing
+      attempts++;
+      if (attempts < maxAttempts) {
+        setTimeout(checkStatus, 1000);
+      } else {
+        const { updateElement } = useCanvasStore.getState();
+        updateElement(elementId, {
+          metadata: {
+            isScraping: false,
+            scrapingError: 'Scraping timeout'
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error polling for completion:', error);
+      const { updateElement } = useCanvasStore.getState();
+      updateElement(elementId, {
+        metadata: {
+          isScraping: false,
+          scrapingError: 'Failed to check status'
+        }
+      });
+    }
   };
 
-  return element;
-}
+  // Start polling
+  setTimeout(checkStatus, 1000);
+};
 
 /**
- * Triggers automatic analysis for creator content
- */
-export async function triggerContentAnalysis(elementId: string, element: CreatorContentElementType): Promise<void> {
-  try {
-    console.log(`[CreatorContent] Starting analysis for element ${elementId}`);
-    
-    // Update element to analyzing state
-    element.metadata.isAnalyzing = true;
-    element.metadata.analysisError = undefined;
-
-    // Prepare analysis data
-    const analysisData = {
-      elementId,
-      contentUrl: element.url,
-      platform: element.platform,
-      caption: element.metadata.caption || '',
-      thumbnail: element.thumbnail,
-      metrics: {
-        likes: element.metadata.likes,
-        comments: element.metadata.comments,
-        views: element.metadata.views
-      },
-      duration: element.metadata.duration
-    };
-
-    // Call analysis API
-    const response = await fetch('/api/content/analyze', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(analysisData)
-    });
-
-    if (!response.ok) {
-      throw new Error(`Analysis failed: ${response.status}`);
-    }
-
-    const analysisResult = await response.json();
-    
-    // Update element with analysis results
-    element.analysis = analysisResult.analysis;
-    element.metadata.isAnalyzing = false;
-    element.metadata.isAnalyzed = true;
-    element.updatedAt = new Date();
-
-    console.log(`[CreatorContent] Analysis completed for element ${elementId}`);
-    
-  } catch (error) {
-    console.error(`[CreatorContent] Analysis failed for element ${elementId}:`, error);
-    
-    // Update element with error state
-    element.metadata.isAnalyzing = false;
-    element.metadata.isAnalyzed = false;
-    element.metadata.analysisError = error instanceof Error ? error.message : 'Analysis failed';
-    element.updatedAt = new Date();
-  }
-}
-
-/**
- * Adds creator content to canvas with analysis
+ * Adds creator content to canvas following exact same flow as URL content
  */
 export async function addCreatorContentToCanvas(
   content: CreatorContent,
-  viewport: Viewport,
-  addElementCallback: (element: any) => void,
   creatorHandle?: string
 ): Promise<{ success: boolean; elementId?: string; error?: string }> {
   try {
-    // Create the canvas element
-    const element = createCreatorContentElement(content, viewport, creatorHandle);
+    const elementId = generateId();
+    const { addElement, updateElement } = useCanvasStore.getState();
     
-    // Add to canvas immediately
-    addElementCallback(element);
+    // Get the current project ID from the URL
+    const projectId = window.location.pathname.split('/canvas/')[1];
     
-    // Start analysis in background
-    setTimeout(async () => {
-      await triggerContentAnalysis(element.id, element);
-      // Element will be updated through the canvas store
-    }, 1000); // Small delay to let the element render first
+    if (!projectId) {
+      return { success: false, error: 'No project selected' };
+    }
 
-    return { success: true, elementId: element.id };
+    // Extract handle from URL or use provided one
+    const handle = creatorHandle || 
+      extractHandleFromUrl(content.content_url) || 
+      'unknown_creator';
+
+    // Create title from caption or handle
+    let title = `Loading ${content.platform} content...`;
+
+    // Create element with scraping state - EXACT same structure as SocialMediaModal
+    const newElement = {
+      id: elementId,
+      type: 'content' as const,
+      x: Math.random() * 400 + 100,
+      y: Math.random() * 300 + 100,
+      width: 320,
+      height: 280,
+      title: title,
+      url: content.content_url.trim(),
+      platform: content.platform,
+      thumbnail: getPlatformPlaceholder(content.platform || 'content'),
+      metadata: {
+        isScraping: true,
+        contentScope: 'single',
+        startedAt: new Date().toISOString(),
+        creatorId: content.creator_id // Keep this to identify creator content
+      }
+    };
+
+    // Add element to canvas
+    addElement(newElement);
+
+    // Prepare processed data in the format expected by the analysis
+    const processedData = {
+      title: content.caption?.substring(0, 50) || `@${handle} content`,
+      description: content.caption || '',
+      caption: content.caption || '',
+      thumbnailUrl: content.thumbnail_url,
+      videoUrl: content.video_url,
+      contentUrl: content.content_url,
+      duration: content.duration_seconds,
+      postedDate: content.posted_date,
+      metrics: {
+        likes: Number(content.likes) || 0,
+        comments: Number(content.comments) || 0,
+        views: Number(content.views) || 0
+      },
+      hashtags: [],
+      authorName: handle,
+      author: {
+        name: handle,
+        handle: `@${handle}`
+      },
+      rawData: content.raw_data || {}
+    };
+
+    // Start "mock" scraping process
+    const response = await fetch('/api/content/mock-scrape', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        url: content.content_url.trim(),
+        projectId: projectId,
+        processedData: processedData,
+        platform: content.platform
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      
+      // Update element to show error
+      updateElement(newElement.id, {
+        metadata: {
+          isScraping: false,
+          scrapingError: errorData.error || 'Failed to process content'
+        }
+      });
+      
+      throw new Error(errorData.error || 'Failed to process content');
+    }
+
+    const result = await response.json();
+    
+    // Start polling for scrape completion
+    if (result.success && result.scrapeId) {
+      // Update element with scrape ID
+      updateElement(newElement.id, {
+        metadata: {
+          ...newElement.metadata,
+          scrapeId: result.scrapeId,
+          status: result.status
+        }
+      });
+      
+      // Start polling in the background
+      pollForCompletion(newElement.id, result.scrapeId, projectId);
+    }
+
+    return { success: true, elementId: newElement.id };
     
   } catch (error) {
-    console.error('[CreatorContent] Failed to add content to canvas:', error);
+    console.error('[CreatorContent] Failed to add content:', error);
     return { 
       success: false, 
       error: error instanceof Error ? error.message : 'Failed to add content' 
@@ -223,20 +338,6 @@ function extractHandleFromUrl(url: string): string | null {
   } catch {
     return null;
   }
-}
-
-/**
- * Generate placeholder thumbnail for content
- */
-function generatePlaceholderThumbnail(platform: string): string {
-  const colors = {
-    instagram: 'E4405F',
-    youtube: 'FF0000',
-    tiktok: '000000'
-  };
-  
-  const color = colors[platform as keyof typeof colors] || 'E4405F';
-  return `https://via.placeholder.com/320x400/${color}/ffffff?text=${encodeURIComponent(platform.toUpperCase())}+Content`;
 }
 
 /**

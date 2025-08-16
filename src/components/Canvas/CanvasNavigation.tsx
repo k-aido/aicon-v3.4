@@ -197,18 +197,6 @@ export const CanvasNavigation: React.FC<CanvasNavigationProps> = ({ lastSaved })
       <CreditCounter />
 
       {/* Separator */}
-      <div className="mx-3 h-6 w-px bg-gray-300"></div>
-
-      {/* Delete Button */}
-      <button
-        onClick={handleDeleteCanvas}
-        className="px-3 py-2 bg-red-500 hover:bg-red-600 text-white rounded-md text-sm flex items-center gap-2 transition-colors"
-        title="Delete canvas"
-        disabled={!workspaceId}
-      >
-        <Trash2 className="w-4 h-4" />
-        Delete
-      </button>
     </nav>
   );
 };

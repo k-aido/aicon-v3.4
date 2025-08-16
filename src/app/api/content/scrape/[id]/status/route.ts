@@ -53,6 +53,25 @@ export async function GET(
       );
     }
 
+    // Check if this is a mock scrape first
+    if (scrapeId.startsWith('mock-')) {
+      const mockScrape = global.mockScrapes?.get(scrapeId);
+      if (mockScrape) {
+        console.log(`[Status API] Found mock scrape: ${scrapeId}`);
+        return NextResponse.json({
+          scrapeId: mockScrape.id,
+          status: 'completed',
+          url: mockScrape.url,
+          platform: mockScrape.platform,
+          processedData: mockScrape.processed_data,
+          error: null,
+          createdAt: mockScrape.scraping_started_at,
+          updatedAt: mockScrape.scraping_completed_at,
+          creditsDeducted: false // Mock scrapes don't use credits
+        });
+      }
+    }
+
     // Get user authentication
     const userId = await getUserIdFromCookies();
     if (!userId) {

@@ -44,7 +44,20 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    console.log(`[Content Analysis] Analyzing ${platform} content: ${elementId}`);
+    // Validate metrics object
+    if (!metrics || typeof metrics !== 'object') {
+      return NextResponse.json({ 
+        error: 'Missing or invalid metrics object' 
+      }, { status: 400 });
+    }
+
+    console.log(`[Content Analysis] Analyzing ${platform} content: ${elementId}`, {
+      contentUrl,
+      hasCaption: !!caption,
+      metrics,
+      duration,
+      requestBody: body
+    });
 
     // Prepare content for analysis
     const contentData = {

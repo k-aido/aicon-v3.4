@@ -347,11 +347,12 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
   // Auto-analyze content when added to canvas (MOCK ONLY - for elements without real scraping)
   useEffect(() => {
     elements.forEach(element => {
-      // Skip if element has real scraping data or is being scraped
+      // Skip if element has real scraping data or is being scraped, or is creator content
       const metadata = (element as any).metadata;
       const hasRealScraping = metadata?.scrapeId || metadata?.isScraping || metadata?.processedData;
+      const isCreatorContent = metadata?.creatorId; // Creator content has creatorId in metadata
       
-      if (element.type === 'content' && !metadata?.isAnalyzed && !metadata?.isAnalyzing && !hasRealScraping) {
+      if (element.type === 'content' && !metadata?.isAnalyzed && !metadata?.isAnalyzing && !hasRealScraping && !isCreatorContent) {
         // Mark as analyzing
         updateElement(element.id, {
           metadata: { ...(element as any).metadata, isAnalyzing: true }
@@ -554,34 +555,25 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
     setCreatorSearchPanel({ isOpen: false });
   };
 
-  const handleAddCreatorContentToCanvas = (content: any) => {
-    // Convert creator content to canvas element
-    const newElement = {
-      id: `creator-content-${Date.now()}-${Math.random().toString(36).substring(7)}`,
-      type: 'content' as const,
-      x: Math.random() * 400 + 100,
-      y: Math.random() * 300 + 100,
-      width: 320,
-      height: 280,
-      title: content.caption?.substring(0, 50) + '...' || 'Instagram Content',
-      url: content.content_url,
-      platform: 'instagram',
-      thumbnail: content.thumbnail_url,
-      metadata: {
-        creatorId: content.creator_id,
-        likes: content.likes,
-        comments: content.comments,
-        views: content.views,
-        postedDate: content.posted_date,
-        duration: content.duration_seconds,
-        rawData: content.raw_data
+  const handleAddCreatorContentToCanvas = async (content: any) => {
+    try {
+      // Import the creator content helper
+      const { addCreatorContentToCanvas } = await import('@/lib/canvas/creatorContentHelpers');
+      
+      // Add content to canvas with proper analysis integration
+      const result = await addCreatorContentToCanvas(
+        content,
+        content.creator_handle || 'unknown'
+      );
+      
+      if (result.success) {
+        console.log(`[AiconCanvas] Successfully added creator content to canvas: ${result.elementId}`);
+      } else {
+        console.error(`[AiconCanvas] Failed to add creator content to canvas: ${result.error}`);
       }
-    };
-
-    addElement(newElement);
-    
-    // Optional: Close the panel after adding
-    // handleCloseCreatorSearch();
+    } catch (error) {
+      console.error('[AiconCanvas] Error adding creator content to canvas:', error);
+    }
   };
 
   if (isLoading) {
@@ -653,7 +645,6 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
         isOpen={creatorSearchPanel.isOpen}
         onClose={handleCloseCreatorSearch}
         onAddContentToCanvas={handleAddCreatorContentToCanvas}
-        viewport={viewport}
       />
     </div>
   );

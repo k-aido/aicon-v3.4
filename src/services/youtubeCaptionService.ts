@@ -1,4 +1,4 @@
-import fetch from 'node-fetch';
+// Using built-in fetch API (available in Node.js 18+ and all modern browsers)
 import { parseStringPromise } from 'xml2js';
 
 class YouTubeCaptionService {

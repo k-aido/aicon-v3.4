@@ -1,5 +1,5 @@
 import FormData from 'form-data';
-import fetch from 'node-fetch';
+// Note: This service is server-side only and uses Node.js-specific modules
 
 interface TranscriptionOptions {
   language?: string;

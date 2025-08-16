@@ -25,7 +25,6 @@ interface CreatorSearchPanelProps {
   isOpen: boolean;
   onClose: () => void;
   onAddContentToCanvas?: (element: any) => void;
-  viewport: { x: number; y: number; zoom: number };
 }
 
 interface SearchState {
@@ -53,8 +52,7 @@ const PLATFORMS = [
 export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
   isOpen,
   onClose,
-  onAddContentToCanvas,
-  viewport
+  onAddContentToCanvas
 }) => {
   const { showSuccess, showError, showInfo } = useToast();
   const rateLimit = useCreatorSearchRateLimit();
@@ -370,9 +368,7 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
       const creatorHandle = validation.handle;
       
       const result = await addCreatorContentToCanvas(
-        content, 
-        viewport, 
-        onAddContentToCanvas,
+        content,
         creatorHandle
       );
 
@@ -402,7 +398,7 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
       
       showError('Failed to Add Content', error.message || 'Could not add content to canvas');
     }
-  }, [validation.handle, viewport, onAddContentToCanvas, searchInput, showTutorial, showSuccess, showError, onClose]);
+  }, [validation.handle, onAddContentToCanvas, searchInput, showTutorial, showSuccess, showError, onClose]);
 
   const formatCount = (count: number): string => {
     if (count >= 1000000) {

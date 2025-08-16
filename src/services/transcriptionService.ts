@@ -174,11 +174,11 @@ class TranscriptionService {
       
       // Handle different response formats
       if (responseFormat === 'text') {
-        return { text: result };
+        return { text: result as string };
       } else if (responseFormat === 'verbose_json') {
         return result as TranscriptionResult;
       } else {
-        return { text: result.text || result };
+        return { text: (result as any).text || result as string };
       }
       
     } catch (error) {
@@ -265,7 +265,7 @@ class TranscriptionService {
       parts.push(`Topics: ${content.hashtags.join(', ')}`);
     }
     
-    return parts.join('. ') || undefined;
+    return parts.join('. ') || '';
   }
 }
 

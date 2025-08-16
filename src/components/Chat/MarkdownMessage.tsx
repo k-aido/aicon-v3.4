@@ -27,7 +27,8 @@ export const MarkdownMessage: React.FC<MarkdownMessageProps> = ({ content, class
         li: ({ children }) => <li className="leading-relaxed">{children}</li>,
         
         // Customize code blocks
-        code: ({ inline, children, className }) => {
+        code: (props: any) => {
+          const { inline, children, className } = props;
           if (inline) {
             return (
               <code className="px-1.5 py-0.5 bg-gray-100 text-gray-800 rounded text-sm font-mono">

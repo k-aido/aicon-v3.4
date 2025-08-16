@@ -1,4 +1,4 @@
-import * as ytdl from 'ytdl-core';
+import ytdl from 'ytdl-core';
 import { put, del } from '@vercel/blob';
 import TranscriptionService from './transcriptionService';
 import * as fs from 'fs';
@@ -6,7 +6,7 @@ import * as path from 'path';
 import { Readable } from 'stream';
 
 class YouTubeTranscriptionService {
-  private transcriptionService: TranscriptionService;
+  private transcriptionService: TranscriptionService | null = null;
   
   constructor() {
     // Only initialize if we have a valid Groq API key
@@ -14,6 +14,7 @@ class YouTubeTranscriptionService {
       this.transcriptionService = new TranscriptionService();
     } catch (error) {
       console.warn('[YouTubeTranscription] Transcription service not available:', error);
+      this.transcriptionService = null;
     }
   }
 
@@ -199,6 +200,12 @@ class YouTubeTranscriptionService {
                     
                     // Transcribe the audio
                     try {
+                      if (!this.transcriptionService) {
+                        console.error('[YouTubeTranscription] Transcription service not available');
+                        fs.unlinkSync(audioPath);
+                        resolve(null);
+                        return;
+                      }
                       const audioBuffer = fs.readFileSync(audioPath);
                       const result = await this.transcriptionService.transcribeFromBuffer(
                         audioBuffer,
@@ -344,6 +351,16 @@ class YouTubeTranscriptionService {
           console.log('[YouTubeTranscription] File size:', fs.statSync(audioPath).size, 'bytes');
           
           try {
+            // Check if transcription service is available
+            if (!this.transcriptionService) {
+              console.error('[YouTubeTranscription] Transcription service not available');
+              if (fs.existsSync(audioPath)) {
+                fs.unlinkSync(audioPath);
+              }
+              resolve(null);
+              return;
+            }
+            
             // Read the file into a buffer
             const audioBuffer = fs.readFileSync(audioPath);
             
@@ -447,10 +464,11 @@ class YouTubeTranscriptionService {
             console.log('[YouTubeTranscription] Uploaded to blob:', blob.url);
             
             // Transcribe from the blob URL
-            const result = await this.transcriptionService.transcribeFromUrl(
-              blob.url,
-              { response_format: 'verbose_json' }
-            );
+            const result = this.transcriptionService ? 
+              await this.transcriptionService.transcribeFromUrl(
+                blob.url,
+                { response_format: 'verbose_json' }
+              ) : null;
             
             // Clean up the blob
             await del(blob.url);

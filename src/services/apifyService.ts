@@ -191,6 +191,9 @@ class ApifyService {
    */
   async getRunStatus(runId: string): Promise<ApifyRunResult> {
     const run = await this.client.run(runId).get();
+    if (!run) {
+      throw new Error(`Run ${runId} not found`);
+    }
     return {
       runId: run.id,
       status: run.status,
@@ -204,7 +207,7 @@ class ApifyService {
   async getRunResults(runId: string): Promise<ScrapedContent | null> {
     const run = await this.client.run(runId).get();
     
-    if (run.status !== 'SUCCEEDED') {
+    if (!run || run.status !== 'SUCCEEDED') {
       return null;
     }
 
@@ -214,7 +217,7 @@ class ApifyService {
       return null;
     }
 
-    const rawData = items[0];
+    const rawData: any = items[0];
     
     // Add detailed logging for YouTube data
     if (rawData.url?.includes('youtube.com') || rawData.url?.includes('youtu.be')) {

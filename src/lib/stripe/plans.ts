@@ -14,7 +14,7 @@ export const PLANS: PlanConfig[] = [
     id: 'basic',
     name: 'Basic',
     description: 'Perfect for individual creators getting started',
-    price: 29,
+    price: 49,
     priceId: process.env.NEXT_PUBLIC_STRIPE_BASIC_PRICE_ID || 'price_basic_placeholder',
     credits: 1000,
     features: [
@@ -29,7 +29,7 @@ export const PLANS: PlanConfig[] = [
     id: 'pro',
     name: 'Pro',
     description: 'For professional creators and small teams',
-    price: 79,
+    price: 99,
     priceId: process.env.NEXT_PUBLIC_STRIPE_PRO_PRICE_ID || 'price_pro_placeholder',
     credits: 3000,
     features: [
@@ -46,7 +46,7 @@ export const PLANS: PlanConfig[] = [
     id: 'agency',
     name: 'Agency',
     description: 'For agencies and larger teams',
-    price: 149,
+    price: 249,
     priceId: process.env.NEXT_PUBLIC_STRIPE_AGENCY_PRICE_ID || 'price_agency_placeholder',
     credits: 5000,
     features: [

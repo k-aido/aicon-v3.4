@@ -101,7 +101,7 @@ export const InsufficientCreditsModal: React.FC<InsufficientCreditsModalProps> =
                 </div>
                 <div className="text-right">
                   <p className="text-xs text-purple-200">Starting from</p>
-                  <p className="font-bold">$29/mo</p>
+                  <p className="font-bold">$49/mo</p>
                 </div>
               </div>
             </button>

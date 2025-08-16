@@ -116,15 +116,42 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Already subscribed to this plan' }, { status: 400 });
     }
     
-    // Update the subscription with the new price
+    // Determine if this is an upgrade or downgrade
+    const currentPrice = subscription.items.data[0].price;
+    const isUpgrade = (newPrice.unit_amount || 0) > (currentPrice.unit_amount || 0);
+    
+    console.log('Price comparison:', {
+      current: currentPrice.unit_amount,
+      new: newPrice.unit_amount,
+      isUpgrade
+    });
+    
+    // Update the subscription with appropriate proration behavior
     console.log('Updating subscription with new price...');
-    const updatedSubscription = await stripe.subscriptions.update(account.stripe_subscription_id, {
+    const updateParams: any = {
       items: [{
         id: subscription.items.data[0].id,
         price: newPrice.id,
       }],
-      proration_behavior: 'create_prorations', // This creates prorated charges/credits
-    });
+      // Always create prorations for both upgrades and downgrades
+      proration_behavior: 'always_invoice',
+    };
+    
+    // For upgrades, ensure immediate payment
+    if (isUpgrade) {
+      // This will charge the customer immediately for the prorated amount
+      updateParams.payment_behavior = 'pending_if_incomplete';
+      // Optionally, you can also set this to require immediate payment
+      // updateParams.payment_behavior = 'error_if_incomplete';
+    } else {
+      // For downgrades, allow the change even if payment fails (they get credit)
+      updateParams.payment_behavior = 'allow_incomplete';
+    }
+    
+    const updatedSubscription = await stripe.subscriptions.update(
+      account.stripe_subscription_id, 
+      updateParams
+    );
 
     console.log('Subscription updated successfully:', {
       id: updatedSubscription.id,
@@ -139,7 +166,11 @@ export async function POST(request: NextRequest) {
         id: updatedSubscription.id,
         status: updatedSubscription.status,
         price_id: updatedSubscription.items.data[0].price.id
-      }
+      },
+      isUpgrade,
+      message: isUpgrade 
+        ? 'Your plan has been upgraded and you will be charged the prorated difference immediately.'
+        : 'Your plan has been downgraded. The prorated credit will be applied to your next invoice.'
     });
 
   } catch (error: any) {

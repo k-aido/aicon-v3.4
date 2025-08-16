@@ -136,7 +136,8 @@ function BillingPageContent() {
 
       if (response.ok) {
         setShowPlanChangeModal(false);
-        showSuccess('Plan Changed!', `Successfully switched to ${selectedPlan.name} plan.`);
+        const message = responseData.message || `Successfully switched to ${selectedPlan.name} plan.`;
+        showSuccess('Plan Changed!', message);
         
         // Poll for updates until the plan change is reflected
         const pollForUpdate = async (attempts = 0) => {

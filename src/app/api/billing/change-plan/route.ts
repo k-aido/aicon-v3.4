@@ -9,11 +9,18 @@ const supabase = createClient(
 );
 
 export async function POST(request: NextRequest) {
+  console.log('[Change Plan API] Received POST request');
+  
   try {
-    const { newPriceLookupKey } = await request.json();
+    const body = await request.json();
+    console.log('[Change Plan API] Request body:', body);
+    const { newPriceId, newPriceLookupKey } = body;
 
-    if (!newPriceLookupKey) {
-      return NextResponse.json({ error: 'Price lookup key is required' }, { status: 400 });
+    // Support both price ID and lookup key for backwards compatibility
+    const priceIdentifier = newPriceId || newPriceLookupKey;
+    
+    if (!priceIdentifier) {
+      return NextResponse.json({ error: 'Price ID or lookup key is required' }, { status: 400 });
     }
 
     // Get session from cookies
@@ -59,20 +66,38 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No active subscription found' }, { status: 404 });
     }
 
-    // Get the new price using lookup key
-    console.log('Looking up price with key:', newPriceLookupKey);
-    const prices = await stripe.prices.list({
-      lookup_keys: [newPriceLookupKey],
-      expand: ['data.product']
-    });
-
-    console.log('Found prices:', prices.data.length);
-    if (prices.data.length === 0) {
-      console.error('No price found for lookup key:', newPriceLookupKey);
-      return NextResponse.json({ error: 'Invalid plan selected' }, { status: 400 });
+    // Get the new price - try direct ID first, then lookup key
+    let newPrice;
+    
+    // Check if it looks like a price ID (starts with 'price_')
+    if (priceIdentifier.startsWith('price_')) {
+      console.log('Looking up price by ID:', priceIdentifier);
+      try {
+        newPrice = await stripe.prices.retrieve(priceIdentifier, {
+          expand: ['product']
+        });
+        console.log('Found price by ID:', newPrice.id);
+      } catch (error) {
+        console.log('Price ID not found, trying as lookup key');
+      }
     }
+    
+    // If not found by ID, try as lookup key
+    if (!newPrice) {
+      console.log('Looking up price with lookup key:', priceIdentifier);
+      const prices = await stripe.prices.list({
+        lookup_keys: [priceIdentifier],
+        expand: ['data.product']
+      });
 
-    const newPrice = prices.data[0];
+      if (prices.data.length === 0) {
+        console.error('No price found for identifier:', priceIdentifier);
+        return NextResponse.json({ error: 'Invalid plan selected' }, { status: 400 });
+      }
+      
+      newPrice = prices.data[0];
+    }
+    
     console.log('New price details:', { id: newPrice.id, lookup_key: newPrice.lookup_key });
 
     // Get current subscription from Stripe

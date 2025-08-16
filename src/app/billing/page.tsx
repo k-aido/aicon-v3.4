@@ -109,7 +109,7 @@ function BillingPageContent() {
     }
   };
 
-  const handleChangePlan = async (planId: string, lookupKey: string) => {
+  const handleChangePlan = async (planId: string) => {
     const plan = PLANS.find(p => p.id === planId);
     if (!plan) return;
 
@@ -121,16 +121,14 @@ function BillingPageContent() {
     if (!selectedPlan) return;
     
     setIsProcessing(true);
-    const lookupKey = getLookupKey(selectedPlan.id);
-    if (!lookupKey) return;
 
     try {
-      console.log('Changing to plan:', selectedPlan.id, 'with lookup key:', lookupKey);
+      console.log('Changing to plan:', selectedPlan.id, 'with price ID:', selectedPlan.priceId);
       
       const response = await fetch('/api/billing/change-plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ newPriceLookupKey: lookupKey }),
+        body: JSON.stringify({ newPriceId: selectedPlan.priceId }),
       });
 
       const responseData = await response.json();
@@ -250,16 +248,6 @@ function BillingPageContent() {
 
   const totalCredits = (account?.promotional_credits || 0) + (account?.monthly_credits_remaining || 0);
   const currentPlanId = subscription?.plan_id;
-  
-  // Map plan IDs to lookup keys
-  const getLookupKey = (planId: string) => {
-    const lookupMap: Record<string, string> = {
-      'basic': 'basic_monthly',
-      'pro': 'pro_monthly', 
-      'agency': 'agency_monthly'
-    };
-    return lookupMap[planId];
-  };
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
@@ -442,10 +430,7 @@ function BillingPageContent() {
                       onClick={() => {
                         if (subscription) {
                           // Existing subscriber: change plan via API
-                          const lookupKey = getLookupKey(plan.id);
-                          if (lookupKey) {
-                            handleChangePlan(plan.id, lookupKey);
-                          }
+                          handleChangePlan(plan.id);
                         } else {
                           // New subscriber: use checkout
                           handleSubscribe(plan.id, plan.priceId);
@@ -479,20 +464,20 @@ function BillingPageContent() {
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="flex justify-between py-2 border-b">
-              <span className="text-gray-600">Content Analysis</span>
-              <span className="font-medium">1 credit</span>
+              <span className="text-gray-600">Content Scraping</span>
+              <span className="font-medium">50 credits per scrape</span>
             </div>
             <div className="flex justify-between py-2 border-b">
-              <span className="text-gray-600">Script Generation</span>
-              <span className="font-medium">5 credits</span>
+              <span className="text-gray-600">AI Chat Message</span>
+              <span className="font-medium">100 credits per message</span>
             </div>
             <div className="flex justify-between py-2 border-b">
               <span className="text-gray-600">Voice Generation</span>
-              <span className="font-medium">10 credits/minute</span>
+              <span className="font-medium text-gray-400">Coming soon</span>
             </div>
             <div className="flex justify-between py-2 border-b">
               <span className="text-gray-600">Avatar Generation</span>
-              <span className="font-medium">20 credits/minute</span>
+              <span className="font-medium text-gray-400">Coming soon</span>
             </div>
           </div>
         </div>

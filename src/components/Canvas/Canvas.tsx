@@ -658,23 +658,6 @@ const CanvasComponent: React.FC<CanvasProps> = ({
         })}
       </div>
       
-      {/* Top-Right Canvas Controls */}
-      <div className="absolute top-4 right-4 bg-white rounded-lg shadow-lg p-2 flex gap-2">
-        <button 
-          onClick={() => {
-            if (selectedElementIds.length > 0) {
-              handleMultipleElementDelete(selectedElementIds);
-            }
-          }}
-          className={`px-3 py-2 hover:bg-gray-100 rounded text-xs font-medium outline-none focus:outline-none ${
-            selectedElementIds.length > 0 ? 'bg-red-500 text-white hover:bg-red-600' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-          }`}
-          title="Delete Selected"
-          disabled={selectedElementIds.length === 0}
-        >
-          Delete ({selectedElementIds.length})
-        </button>
-      </div>
       
       {/* Debug Info - Selection State */}
       <div className="absolute top-4 left-4 bg-black/80 text-white rounded-lg shadow-lg p-2 text-xs font-mono">

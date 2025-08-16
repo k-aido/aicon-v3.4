@@ -69,7 +69,7 @@ async function getCachedContent(handle: string): Promise<{ creator: Creator | nu
 }
 
 // Scrape Instagram data using Apify synchronous API
-async function scrapeInstagramData(handle: string, filter: string): Promise<{ content: any[]; error?: string }> {
+async function scrapeInstagramData(handle: string, filter: string, contentType: 'all' | 'reels' | 'posts' = 'all'): Promise<{ content: any[]; error?: string }> {
   const apifyToken = process.env.APIFY_API_TOKEN;
   
   if (!apifyToken) {
@@ -77,47 +77,177 @@ async function scrapeInstagramData(handle: string, filter: string): Promise<{ co
   }
 
   try {
-    const apifyUrl = `https://api.apify.com/v2/acts/apify~instagram-scraper/run-sync-get-dataset-items?token=${apifyToken}`;
+    let postsResponse: Response | null = null;
+    let reelsResponse: Response | null = null;
     
-    const response = await fetch(apifyUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
+    // Determine what to fetch based on contentType
+    const promises: Promise<Response>[] = [];
+    
+    if (contentType === 'all' || contentType === 'posts') {
+      // Fetch regular posts
+      const postsPayload = {
         directUrls: [`https://www.instagram.com/${handle.replace('@', '')}/`],
         resultsType: "posts",
-        resultsLimit: 30,
+        resultsLimit: contentType === 'posts' ? 30 : 20, // More if only posts
         addParentData: true,
-      })
-    });
-
-    if (!response.ok) {
-      const errorData = await response.text();
-      console.error('Apify API error:', response.status, errorData);
+      };
       
-      if (response.status === 403) {
-        return { content: [], error: 'This account is private and cannot be accessed' };
-      }
-      if (response.status === 404) {
-        return { content: [], error: 'Instagram account not found' };
-      }
-      if (response.status === 429) {
-        return { content: [], error: 'Rate limit exceeded. Please try again later' };
-      }
+      console.log('[Creator Search] Instagram Scraper request:', {
+        url: 'https://api.apify.com/v2/acts/apify~instagram-scraper/run-sync-get-dataset-items',
+        handle: handle.replace('@', ''),
+        payload: postsPayload
+      });
       
-      return { content: [], error: `Failed to scrape Instagram data: ${response.status}` };
+      promises.push(
+        fetch(`https://api.apify.com/v2/acts/apify~instagram-scraper/run-sync-get-dataset-items?token=${apifyToken}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(postsPayload)
+        })
+      );
+    }
+    
+    if (contentType === 'all' || contentType === 'reels') {
+      // Fetch reels - Note: This actor expects 'username' field, not 'profiles'
+      const reelsPayload = {
+        username: [handle.replace('@', '')],
+        resultsLimit: contentType === 'reels' ? 30 : 20, // More if only reels
+      };
+      
+      console.log('[Creator Search] Instagram Reel Scraper request:', {
+        url: 'https://api.apify.com/v2/acts/apify~instagram-reel-scraper/run-sync-get-dataset-items',
+        handle: handle.replace('@', ''),
+        payload: reelsPayload
+      });
+      
+      promises.push(
+        fetch(`https://api.apify.com/v2/acts/apify~instagram-reel-scraper/run-sync-get-dataset-items?token=${apifyToken}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(reelsPayload)
+        })
+      );
+    }
+    
+    // Execute the fetches
+    const responses = await Promise.all(promises);
+    
+    // Assign responses based on what was fetched
+    if (contentType === 'all') {
+      postsResponse = responses[0];
+      reelsResponse = responses[1];
+    } else if (contentType === 'posts') {
+      postsResponse = responses[0];
+    } else if (contentType === 'reels') {
+      reelsResponse = responses[0];
     }
 
-    // This endpoint returns results directly (sync), so handle the response
-    const data = await response.json();
+    // Handle posts response
+    let posts: any[] = [];
+    if (postsResponse && postsResponse.ok) {
+      const postsData = await postsResponse.json();
+      if (Array.isArray(postsData)) {
+        posts = postsData;
+        console.log(`[Creator Search] Fetched ${posts.length} regular posts for ${handle}`);
+      }
+    } else if (postsResponse) {
+      console.error('Failed to fetch posts:', postsResponse.status);
+      
+      if (postsResponse.status === 403) {
+        return { content: [], error: 'This account is private and cannot be accessed' };
+      }
+      if (postsResponse.status === 404) {
+        return { content: [], error: 'Instagram account not found' };
+      }
+      if (postsResponse.status === 429) {
+        return { content: [], error: 'Rate limit exceeded. Please try again later' };
+      }
+    }
 
-    // The data is returned directly as an array of posts
-    if (!Array.isArray(data) || data.length === 0) {
+    // Handle reels response
+    let reels: any[] = [];
+    if (reelsResponse && reelsResponse.ok) {
+      const reelsData = await reelsResponse.json();
+      console.log(`[Creator Search] Reel Scraper response type:`, typeof reelsData, 'isArray:', Array.isArray(reelsData));
+      if (Array.isArray(reelsData)) {
+        // Transform reel data to match post format for consistency
+        reels = reelsData.map((reel: any) => {
+          // Extract thumbnail URL from available data
+          // Note: Instagram Reel Scraper doesn't provide direct thumbnail URLs
+          // This is a known limitation we'll address in a future update
+          let thumbnailUrl = reel.thumbnailUrl || 
+                           reel.displayUrl || 
+                           reel.imageUrl || 
+                           '';
+          
+          return {
+            ...reel,
+            url: reel.url || `https://www.instagram.com/reel/${reel.shortCode}/`,
+            displayUrl: thumbnailUrl, // Use our extracted/constructed thumbnail
+            thumbnailUrl: thumbnailUrl, // Also set thumbnailUrl directly
+            isVideo: true,
+            productType: 'clips',
+            type: 'reel',
+            likesCount: reel.likesCount,
+            commentsCount: reel.commentsCount,
+            videoViewCount: reel.videoViewCount,
+            videoDuration: reel.videoDuration,
+            caption: reel.caption,
+            timestamp: reel.timestamp,
+            ownerFullName: reel.ownerFullName,
+            ownerUsername: reel.ownerUsername,
+            ownerId: reel.ownerId,
+          };
+        });
+        console.log(`[Creator Search] Successfully fetched ${reels.length} reels for ${handle}`);
+      } else {
+        console.error('[Creator Search] Unexpected reels response format:', reelsData);
+      }
+    } else if (reelsResponse) {
+      const errorText = await reelsResponse.text();
+      console.error('[Creator Search] Failed to fetch reels:', {
+        status: reelsResponse.status,
+        statusText: reelsResponse.statusText,
+        errorBody: errorText,
+        handle: handle
+      });
+      // Don't fail completely if reels fetch fails, just log it
+    }
+
+    // Combine and sort content
+    const allContent = [...posts, ...reels];
+    
+    if (allContent.length === 0) {
       return { content: [], error: 'No content found for this creator' };
     }
 
-    return { content: data };
+    // Sort based on filter
+    let sortedContent = allContent;
+    switch (filter) {
+      case 'top_likes':
+        sortedContent = allContent.sort((a, b) => (b.likesCount || 0) - (a.likesCount || 0));
+        break;
+      case 'top_comments':
+        sortedContent = allContent.sort((a, b) => (b.commentsCount || 0) - (a.commentsCount || 0));
+        break;
+      case 'top_views':
+        sortedContent = allContent.sort((a, b) => (b.videoViewCount || b.likesCount || 0) - (a.videoViewCount || a.likesCount || 0));
+        break;
+      case 'most_recent':
+        sortedContent = allContent.sort((a, b) => {
+          const dateA = new Date(a.timestamp || 0).getTime();
+          const dateB = new Date(b.timestamp || 0).getTime();
+          return dateB - dateA;
+        });
+        break;
+    }
+
+    // Limit to top 30 results after sorting
+    return { content: sortedContent.slice(0, 30) };
   } catch (error) {
     console.error('Error scraping Instagram data:', error);
     return { content: [], error: 'Failed to connect to scraping service' };
@@ -127,7 +257,7 @@ async function scrapeInstagramData(handle: string, filter: string): Promise<{ co
 export async function POST(request: NextRequest) {
   try {
     const body: CreatorSearchRequest = await request.json();
-    const { platform, searchQuery, filter, userId } = body;
+    const { platform, searchQuery, filter, contentType = 'all', userId } = body;
 
     // Validate request
     if (!platform || platform !== 'instagram') {
@@ -198,7 +328,7 @@ export async function POST(request: NextRequest) {
     // No cache, scrape Instagram data directly
     console.log(`[Creator Search] No cached content, starting scrape for ${handle}`);
     
-    const { content: scrapedContent, error } = await scrapeInstagramData(handle, filter);
+    const { content: scrapedContent, error } = await scrapeInstagramData(handle, filter, contentType);
     if (error) {
       return NextResponse.json({ 
         error: error 
@@ -276,45 +406,75 @@ export async function POST(request: NextRequest) {
         }
 
         // Process and insert content with proper type conversion
-        const contentRecords = scrapedContent.map((post: any) => ({
-          creator_id: creatorRecord!.id,
-          platform: 'instagram',
-          content_url: post.url || post.link || '',
-          thumbnail_url: post.displayUrl || post.thumbnailUrl || post.thumbnailSrc || '',
-          video_url: post.videoUrl || null,
-          caption: post.caption || post.text || '',
-          likes: safeParseInt(post.likesCount || post.likes),
-          comments: safeParseInt(post.commentsCount || post.comments),
-          views: safeParseInt(post.videoViewCount || post.views),
-          posted_date: safeParseTimestamp(post.timestamp),
-          duration_seconds: safeParseInt(post.videoDuration || post.duration),
-          cached_until: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // Cache for 30 days
-          raw_data: {
-            media_type: post.isVideo ? 'video' : (post.sidecarItems?.length > 1 ? 'carousel' : 'image'),
-            hashtags: post.hashtags || [],
-            mentions: post.mentions || [],
-            isVideo: post.isVideo,
-            sidecarItems: post.sidecarItems,
-            originalData: post // Store original for debugging
+        const contentRecords = scrapedContent.map((post: any) => {
+          // Determine the correct URL - check if it's a reel
+          let contentUrl = post.url || post.link || '';
+          
+          // Check if this is a reel based on various indicators
+          const isReel = post.productType === 'clips' || 
+                        post.type === 'reel' || 
+                        contentUrl.includes('/reel/') ||
+                        (post.isVideo && post.videoDuration && post.videoDuration <= 90);
+          
+          // Ensure reel URLs are in the correct format
+          if (isReel && contentUrl && !contentUrl.includes('/reel/')) {
+            // Convert regular post URL to reel URL if it's actually a reel
+            const shortCode = contentUrl.match(/\/p\/([^\/]+)/)?.[1] || post.shortCode;
+            if (shortCode) {
+              contentUrl = `https://www.instagram.com/reel/${shortCode}/`;
+              console.log(`[Creator Search] Converted to reel URL: ${contentUrl}`);
+            }
           }
-        }));
+          
+          return {
+            creator_id: creatorRecord!.id,
+            platform: 'instagram',
+            content_url: contentUrl,
+            thumbnail_url: post.thumbnailUrl || post.displayUrl || post.images?.[0] || post.thumbnailSrc || '',
+            video_url: post.videoUrl || null,
+            caption: post.caption || post.text || '',
+            likes: safeParseInt(post.likesCount || post.likes),
+            comments: safeParseInt(post.commentsCount || post.comments),
+            views: safeParseInt(post.videoViewCount || post.views),
+            posted_date: safeParseTimestamp(post.timestamp),
+            duration_seconds: safeParseInt(post.videoDuration || post.duration),
+            cached_until: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // Cache for 30 days
+            raw_data: {
+              media_type: isReel ? 'reel' : (post.isVideo ? 'video' : (post.sidecarItems?.length > 1 ? 'carousel' : 'image')),
+              productType: post.productType,
+              shortCode: post.shortCode,
+              hashtags: post.hashtags || [],
+              mentions: post.mentions || [],
+              isVideo: post.isVideo,
+              isReel: isReel,
+              sidecarItems: post.sidecarItems,
+              originalData: post // Store original for debugging
+            }
+          };
+        });
 
         // Debug: Log processed content structure
         console.log('Sample processed content record:', JSON.stringify(contentRecords[0], null, 2));
         console.log(`Processing ${contentRecords.length} content records...`);
 
-        // Insert content in batches to avoid size limits
+        // Insert content in batches using upsert to handle duplicates
         const batchSize = 10;
-        let successfulInserts = 0;
+        let successfulUpserts = 0;
         
         for (let i = 0; i < contentRecords.length; i += batchSize) {
           const batch = contentRecords.slice(i, i + batchSize);
-          const { error: contentError } = await supabaseAdmin
+          
+          // Use upsert to update existing records or insert new ones
+          const { data: upsertedData, error: contentError } = await supabaseAdmin
             .from('creator_content')
-            .insert(batch);
+            .upsert(batch, {
+              onConflict: 'content_url,platform',
+              ignoreDuplicates: false // Update existing records with new data
+            })
+            .select();
 
           if (contentError) {
-            console.error(`Error inserting content batch ${Math.floor(i/batchSize) + 1}:`, {
+            console.error(`Error upserting content batch ${Math.floor(i/batchSize) + 1}:`, {
               error: contentError,
               message: contentError.message,
               details: contentError.details,
@@ -322,12 +482,12 @@ export async function POST(request: NextRequest) {
               sampleRecord: batch[0]
             });
           } else {
-            successfulInserts += batch.length;
-            console.log(`Successfully inserted batch ${Math.floor(i/batchSize) + 1} (${batch.length} records)`);
+            successfulUpserts += upsertedData?.length || 0;
+            console.log(`Successfully upserted batch ${Math.floor(i/batchSize) + 1} (${upsertedData?.length || 0} records)`);
           }
         }
 
-        console.log(`Content insertion summary: ${successfulInserts}/${contentRecords.length} records inserted successfully`);
+        console.log(`Content upsert summary: ${successfulUpserts}/${contentRecords.length} records processed successfully`);
 
         // Create search record
         const { data: searchRecord, error: searchError } = await supabaseAdmin
@@ -347,13 +507,17 @@ export async function POST(request: NextRequest) {
           console.error('Error creating search record:', searchError);
         }
 
-        // Fetch the stored content to return in response
+        // Always fetch the stored content to return in response, regardless of upsert results
         const { data: storedContent, error: fetchError } = await supabaseAdmin
           .from('creator_content')
           .select('*')
           .eq('creator_id', creatorRecord!.id)
-          .order('likes', { ascending: false })
-          .limit(20);
+          .eq('platform', 'instagram')
+          .order(filter === 'most_recent' ? 'posted_date' : 
+                 filter === 'top_comments' ? 'comments' :
+                 filter === 'top_views' ? 'views' : 'likes', 
+                 { ascending: false })
+          .limit(30);
 
         if (fetchError) {
           console.error('Error fetching stored content:', fetchError);
@@ -366,7 +530,7 @@ export async function POST(request: NextRequest) {
           message: `Found ${storedContent?.length || 0} posts for @${handle}`
         };
 
-        console.log(`[Creator Search] Successfully scraped and stored ${contentRecords.length} posts for ${handle}`);
+        console.log(`[Creator Search] Successfully processed ${successfulUpserts} new/updated posts for ${handle}`);
         console.log(`[Creator Search] Returning ${storedContent?.length || 0} content items in response`);
         return NextResponse.json(response);
 

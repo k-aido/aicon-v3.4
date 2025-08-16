@@ -3,6 +3,7 @@ export interface CreatorSearchRequest {
   platform: 'instagram';
   searchQuery: string;
   filter: 'top_likes' | 'top_comments' | 'top_views' | 'most_recent';
+  contentType?: 'all' | 'reels' | 'posts';
   userId: string;
 }
 

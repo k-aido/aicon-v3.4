@@ -600,7 +600,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   return (
     <div className="h-full flex overflow-hidden rounded-lg bg-white">
       {/* Collapsible Conversation Sidebar */}
-      <div className={`${isSidebarOpen ? 'w-60' : 'w-0'} transition-all duration-300 bg-gray-900 border-r border-gray-700 overflow-hidden`}>
+      <div className={`${isSidebarOpen ? 'w-60 border-r border-gray-700' : 'w-0'} transition-all duration-300 bg-gray-900 overflow-hidden`}>
         <div className="w-60 h-full flex flex-col">
           {/* New Chat Button */}
           <div className="p-3 border-b border-gray-700">

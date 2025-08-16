@@ -179,7 +179,7 @@ class YouTubeTranscriptionService {
                 
                 console.log('[YouTubeTranscription] Attempting direct download from URL...');
                 try {
-                  const fetch = require('node-fetch');
+                  // Using built-in fetch API
                   const response = await fetch(directUrlFormat.url, {
                     headers: {
                       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
@@ -191,7 +191,8 @@ class YouTubeTranscriptionService {
                   
                   if (response.ok) {
                     console.log('[YouTubeTranscription] Direct URL download successful, status:', response.status);
-                    const buffer = await response.buffer();
+                    const arrayBuffer = await response.arrayBuffer();
+                    const buffer = Buffer.from(arrayBuffer);
                     console.log('[YouTubeTranscription] Downloaded buffer size:', buffer.length);
                     
                     // Save to file

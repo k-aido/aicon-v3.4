@@ -175,27 +175,35 @@ async function scrapeInstagramData(handle: string, filter: string, contentType: 
       console.log(`[Creator Search] Reel Scraper response type:`, typeof reelsData, 'isArray:', Array.isArray(reelsData));
       if (Array.isArray(reelsData)) {
         // Transform reel data to match post format for consistency
-        reels = reelsData.map((reel: any) => ({
-          ...reel,
-          url: reel.url || `https://www.instagram.com/reel/${reel.shortCode}/`,
-          displayUrl: reel.images?.[0] || reel.thumbnailUrl,
-          isVideo: true,
-          productType: 'clips',
-          type: 'reel',
-          likesCount: reel.likesCount,
-          commentsCount: reel.commentsCount,
-          videoViewCount: reel.videoViewCount,
-          videoDuration: reel.videoDuration,
-          caption: reel.caption,
-          timestamp: reel.timestamp,
-          ownerFullName: reel.ownerFullName,
-          ownerUsername: reel.ownerUsername,
-          ownerId: reel.ownerId,
-        }));
+        reels = reelsData.map((reel: any) => {
+          // Extract thumbnail URL from available data
+          // Note: Instagram Reel Scraper doesn't provide direct thumbnail URLs
+          // This is a known limitation we'll address in a future update
+          let thumbnailUrl = reel.thumbnailUrl || 
+                           reel.displayUrl || 
+                           reel.imageUrl || 
+                           '';
+          
+          return {
+            ...reel,
+            url: reel.url || `https://www.instagram.com/reel/${reel.shortCode}/`,
+            displayUrl: thumbnailUrl, // Use our extracted/constructed thumbnail
+            thumbnailUrl: thumbnailUrl, // Also set thumbnailUrl directly
+            isVideo: true,
+            productType: 'clips',
+            type: 'reel',
+            likesCount: reel.likesCount,
+            commentsCount: reel.commentsCount,
+            videoViewCount: reel.videoViewCount,
+            videoDuration: reel.videoDuration,
+            caption: reel.caption,
+            timestamp: reel.timestamp,
+            ownerFullName: reel.ownerFullName,
+            ownerUsername: reel.ownerUsername,
+            ownerId: reel.ownerId,
+          };
+        });
         console.log(`[Creator Search] Successfully fetched ${reels.length} reels for ${handle}`);
-        if (reels.length > 0) {
-          console.log('[Creator Search] Sample reel data:', JSON.stringify(reels[0], null, 2).substring(0, 500));
-        }
       } else {
         console.error('[Creator Search] Unexpected reels response format:', reelsData);
       }
@@ -422,7 +430,7 @@ export async function POST(request: NextRequest) {
             creator_id: creatorRecord!.id,
             platform: 'instagram',
             content_url: contentUrl,
-            thumbnail_url: post.displayUrl || post.images?.[0] || post.thumbnailUrl || post.thumbnailSrc || '',
+            thumbnail_url: post.thumbnailUrl || post.displayUrl || post.images?.[0] || post.thumbnailSrc || '',
             video_url: post.videoUrl || null,
             caption: post.caption || post.text || '',
             likes: safeParseInt(post.likesCount || post.likes),

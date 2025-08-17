@@ -414,7 +414,7 @@ function BillingPageContent() {
 
                   {isEnterprise ? (
                     <a
-                      href="mailto:sales@aicon.ai"
+                      href="mailto:hello@aicon.store"
                       className="w-full block text-center px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
                     >
                       Contact Sales

@@ -101,28 +101,39 @@ export async function POST(request: NextRequest) {
     }
 
     // Format the content for RAG usage
-    const formattedContent = contentData.map(item => ({
-      id: item.id,
-      scrapeId: item.scrape_id,
-      platform: item.content_scrapes.platform,
-      url: item.content_scrapes.url,
-      title: item.title,
-      description: item.description,
-      transcript: item.transcript,
-      captions: item.captions,
-      metrics: item.metrics,
-      processedData: item.content_scrapes.processed_data,
-      analysis: {
-        hookAnalysis: item.hook_analysis,
-        bodyAnalysis: item.body_analysis,
-        ctaAnalysis: item.cta_analysis,
-        keyTopics: item.key_topics || [],
-        engagementTactics: item.engagement_tactics || [],
-        sentiment: item.sentiment,
-        complexity: item.complexity
-      },
-      analyzedAt: item.analyzed_at
-    }));
+    const formattedContent = contentData.map(item => {
+      // Extract creator info from processed_data
+      const processedData = item.content_scrapes.processed_data || {};
+      const creatorUsername = processedData.authorUsername || 
+                            processedData.ownerUsername || 
+                            processedData.channelTitle ||
+                            processedData.author ||
+                            'Unknown Creator';
+      
+      return {
+        id: item.id,
+        scrapeId: item.scrape_id,
+        platform: item.content_scrapes.platform,
+        url: item.content_scrapes.url,
+        title: item.title,
+        description: item.description,
+        transcript: item.transcript,
+        captions: item.captions,
+        metrics: item.metrics,
+        processedData: item.content_scrapes.processed_data,
+        creatorUsername: creatorUsername,
+        analysis: {
+          hookAnalysis: item.hook_analysis,
+          bodyAnalysis: item.body_analysis,
+          ctaAnalysis: item.cta_analysis,
+          keyTopics: item.key_topics || [],
+          engagementTactics: item.engagement_tactics || [],
+          sentiment: item.sentiment,
+          complexity: item.complexity
+        },
+        analyzedAt: item.analyzed_at
+      };
+    });
 
     console.log(`[Library API] Returning ${formattedContent.length} analyzed content items`);
 

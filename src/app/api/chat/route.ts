@@ -228,40 +228,36 @@ export async function POST(request: NextRequest) {
     let systemMessage = 'You are an AI assistant helping with content creation and analysis.';
     
     if (connectedContent && connectedContent.length > 0) {
-      systemMessage += '\n\nYou have access to analyzed content that should inform your responses. Use these insights to create new, inspired content:\n\n';
+      systemMessage += '\n\nIMPORTANT: The following analyzed content is automatically available to you from the connected content pieces on the canvas. You should reference and use these insights to inform your responses, create inspired content, and provide relevant suggestions. You DO NOT need the user to mention these pieces - they are always available to you in this conversation.\n\n';
       
-      connectedContent.forEach((content: any, index: number) => {
-        systemMessage += `===== Content ${index + 1}: ${content.title} (${content.platform}) =====\n`;
-        systemMessage += `URL: ${content.url}\n`;
-        
-        if (content.analysis) {
-          systemMessage += `\nHook Analysis: ${content.analysis.hookAnalysis}\n`;
-          systemMessage += `Body Analysis: ${content.analysis.bodyAnalysis}\n`;
-          systemMessage += `CTA Analysis: ${content.analysis.ctaAnalysis}\n`;
-          
-          if (content.keyTopics?.length > 0) {
-            systemMessage += `Key Topics: ${content.keyTopics.join(', ')}\n`;
-          }
-          
-          if (content.engagementTactics?.length > 0) {
-            systemMessage += `Engagement Tactics: ${content.engagementTactics.join(', ')}\n`;
-          }
-          
-          systemMessage += `Sentiment: ${content.analysis.sentiment || 'neutral'}\n`;
-          systemMessage += `Complexity: ${content.analysis.complexity || 'moderate'}\n`;
+      // Format connected content as JSON
+      const connectedContentJSON = connectedContent.map((content: any, index: number) => ({
+        contentId: index + 1,
+        title: content.title,
+        platform: content.platform,
+        url: content.url,
+        creatorUsername: content.creatorUsername || 'Unknown Creator',
+        analysis: {
+          hookAnalysis: content.analysis?.hookAnalysis || '',
+          bodyAnalysis: content.analysis?.bodyAnalysis || '',
+          ctaAnalysis: content.analysis?.ctaAnalysis || '',
+          keyTopics: content.keyTopics || [],
+          engagementTactics: content.engagementTactics || [],
+          sentiment: content.analysis?.sentiment || 'neutral',
+          complexity: content.analysis?.complexity || 'moderate'
+        },
+        metrics: {
+          views: content.metrics?.views || 0,
+          likes: content.metrics?.likes || 0,
+          comments: content.metrics?.comments || 0
         }
-        
-        if (content.metrics) {
-          systemMessage += `\nPerformance Metrics:\n`;
-          if (content.metrics.views) systemMessage += `- Views: ${content.metrics.views.toLocaleString()}\n`;
-          if (content.metrics.likes) systemMessage += `- Likes: ${content.metrics.likes.toLocaleString()}\n`;
-          if (content.metrics.comments) systemMessage += `- Comments: ${content.metrics.comments.toLocaleString()}\n`;
-        }
-        
-        systemMessage += '\n';
-      });
+      }));
       
-      systemMessage += '\nWhen generating content, incorporate successful patterns and tactics from the analyzed content above. Be specific about which techniques you are adapting and why they work.';
+      systemMessage += 'Connected Content Analysis (JSON format):\n```json\n';
+      systemMessage += JSON.stringify(connectedContentJSON, null, 2);
+      systemMessage += '\n```\n\n';
+      
+      systemMessage += 'When generating content, incorporate successful patterns and tactics from the analyzed content above. Be specific about which techniques you are adapting and why they work. When referencing content, mention it naturally by creator name and title (e.g., "@alexhormozi\'s video about business growth" or "the Instagram reel by @garyvee"). DO NOT mention contentId numbers or say "Content #1" - always use natural references with creator names and titles.';
     }
 
     let response;

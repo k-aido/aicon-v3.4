@@ -350,10 +350,27 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     // Parse mentions from input
     const { cleanText, mentionIds } = parseMentionsFromText(input.trim());
     
-    console.log('[ChatInterface] Sending message with mentions:', { 
+    // Automatically include ALL connected content (not just mentioned ones)
+    // Get all connected content IDs that have analysis
+    const allConnectedContentIds = connectedContent
+      .filter(content => {
+        const metadata = (content as any).metadata;
+        return metadata?.scrapeId || metadata?.analysis || metadata?.isAnalyzed;
+      })
+      .map(content => {
+        const metadata = (content as any).metadata;
+        return metadata?.scrapeId || content.id.toString();
+      });
+    
+    // Combine mentioned IDs with all connected content IDs (remove duplicates)
+    const contentIdsToInclude = [...new Set([...mentionIds, ...allConnectedContentIds])];
+    
+    console.log('[ChatInterface] Sending message with content:', { 
       originalInput: input,
       cleanText, 
       mentionIds,
+      allConnectedContentIds,
+      totalContentIds: contentIdsToInclude,
       activeConversationId: currentActiveConversationId
     });
     
@@ -389,16 +406,17 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
     
     try {
-      // Fetch analysis for mentioned content
-      console.log('[ChatInterface] Fetching analysis for IDs:', mentionIds);
-      const contentAnalysis = await fetchContentAnalysis(mentionIds);
-      console.log('[ChatInterface] Fetched content analysis:', contentAnalysis);
+      // Fetch analysis for all connected content (not just mentioned)
+      console.log('[ChatInterface] Fetching analysis for all connected content IDs:', contentIdsToInclude);
+      const contentAnalysis = await fetchContentAnalysis(contentIdsToInclude);
+      console.log('[ChatInterface] Fetched content analysis for', contentAnalysis.length, 'pieces of content:', contentAnalysis);
       
       // Prepare connected content for RAG
       const connectedContentForChat = contentAnalysis.map((content: any) => ({
         title: content.title,
         platform: content.platform,
         url: content.url,
+        creatorUsername: content.creatorUsername || 'Unknown Creator',
         analysis: content.analysis,
         metrics: content.metrics,
         keyTopics: content.analysis?.keyTopics || [],
@@ -773,6 +791,18 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
           </div>
         </div>
 
+        {/* Connected Content Indicator */}
+        {connectedContent.length > 0 && (
+          <div className="border-t border-gray-200 bg-blue-50 px-4 py-2">
+            <div className="flex items-center gap-2 text-xs text-blue-600">
+              <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+              <span>
+                {connectedContent.length} connected {connectedContent.length === 1 ? 'piece' : 'pieces'} of content automatically included in context
+              </span>
+            </div>
+          </div>
+        )}
+        
         {/* Input Area - Container allows drag */}
         <div className="border-t border-gray-200 bg-white p-4">
           <div className="space-y-3">

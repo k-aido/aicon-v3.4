@@ -68,8 +68,8 @@ async function getCachedContent(handle: string): Promise<{ creator: Creator | nu
   }
 }
 
-// Scrape Instagram data using Apify synchronous API
-async function scrapeInstagramData(handle: string, filter: string, contentType: 'all' | 'reels' | 'posts' = 'all'): Promise<{ content: any[]; error?: string }> {
+// Scrape Instagram data using Apify synchronous API - Always fetches reels
+async function scrapeInstagramReels(handle: string, filter: string): Promise<{ content: any[]; error?: string }> {
   const apifyToken = process.env.APIFY_API_TOKEN;
   
   if (!apifyToken) {
@@ -77,96 +77,25 @@ async function scrapeInstagramData(handle: string, filter: string, contentType: 
   }
 
   try {
-    let postsResponse: Response | null = null;
-    let reelsResponse: Response | null = null;
+    // Only fetch reels
+    const reelsPayload = {
+      username: [handle.replace('@', '')],
+      resultsLimit: 30,
+    };
     
-    // Determine what to fetch based on contentType
-    const promises: Promise<Response>[] = [];
+    console.log('[Creator Search] Instagram Reel Scraper request:', {
+      url: 'https://api.apify.com/v2/acts/apify~instagram-reel-scraper/run-sync-get-dataset-items',
+      handle: handle.replace('@', ''),
+      payload: reelsPayload
+    });
     
-    if (contentType === 'all' || contentType === 'posts') {
-      // Fetch regular posts
-      const postsPayload = {
-        directUrls: [`https://www.instagram.com/${handle.replace('@', '')}/`],
-        resultsType: "posts",
-        resultsLimit: contentType === 'posts' ? 30 : 20, // More if only posts
-        addParentData: true,
-      };
-      
-      console.log('[Creator Search] Instagram Scraper request:', {
-        url: 'https://api.apify.com/v2/acts/apify~instagram-scraper/run-sync-get-dataset-items',
-        handle: handle.replace('@', ''),
-        payload: postsPayload
-      });
-      
-      promises.push(
-        fetch(`https://api.apify.com/v2/acts/apify~instagram-scraper/run-sync-get-dataset-items?token=${apifyToken}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(postsPayload)
-        })
-      );
-    }
-    
-    if (contentType === 'all' || contentType === 'reels') {
-      // Fetch reels - Note: This actor expects 'username' field, not 'profiles'
-      const reelsPayload = {
-        username: [handle.replace('@', '')],
-        resultsLimit: contentType === 'reels' ? 30 : 20, // More if only reels
-      };
-      
-      console.log('[Creator Search] Instagram Reel Scraper request:', {
-        url: 'https://api.apify.com/v2/acts/apify~instagram-reel-scraper/run-sync-get-dataset-items',
-        handle: handle.replace('@', ''),
-        payload: reelsPayload
-      });
-      
-      promises.push(
-        fetch(`https://api.apify.com/v2/acts/apify~instagram-reel-scraper/run-sync-get-dataset-items?token=${apifyToken}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(reelsPayload)
-        })
-      );
-    }
-    
-    // Execute the fetches
-    const responses = await Promise.all(promises);
-    
-    // Assign responses based on what was fetched
-    if (contentType === 'all') {
-      postsResponse = responses[0];
-      reelsResponse = responses[1];
-    } else if (contentType === 'posts') {
-      postsResponse = responses[0];
-    } else if (contentType === 'reels') {
-      reelsResponse = responses[0];
-    }
-
-    // Handle posts response
-    let posts: any[] = [];
-    if (postsResponse && postsResponse.ok) {
-      const postsData = await postsResponse.json();
-      if (Array.isArray(postsData)) {
-        posts = postsData;
-        console.log(`[Creator Search] Fetched ${posts.length} regular posts for ${handle}`);
-      }
-    } else if (postsResponse) {
-      console.error('Failed to fetch posts:', postsResponse.status);
-      
-      if (postsResponse.status === 403) {
-        return { content: [], error: 'This account is private and cannot be accessed' };
-      }
-      if (postsResponse.status === 404) {
-        return { content: [], error: 'Instagram account not found' };
-      }
-      if (postsResponse.status === 429) {
-        return { content: [], error: 'Rate limit exceeded. Please try again later' };
-      }
-    }
+    const reelsResponse = await fetch(`https://api.apify.com/v2/acts/apify~instagram-reel-scraper/run-sync-get-dataset-items?token=${apifyToken}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(reelsPayload)
+    });
 
     // Handle reels response
     let reels: any[] = [];
@@ -177,12 +106,19 @@ async function scrapeInstagramData(handle: string, filter: string, contentType: 
         // Transform reel data to match post format for consistency
         reels = reelsData.map((reel: any) => {
           // Extract thumbnail URL from available data
-          // Note: Instagram Reel Scraper doesn't provide direct thumbnail URLs
-          // This is a known limitation we'll address in a future update
+          // Instagram Reel Scraper may provide thumbnail in different fields
           let thumbnailUrl = reel.thumbnailUrl || 
                            reel.displayUrl || 
                            reel.imageUrl || 
+                           reel.thumbnail ||
+                           reel.coverImageUrl ||
+                           reel.videoCoverImageUrl ||
                            '';
+          
+          // Debug: Log what data we're getting for the first reel
+          if (reelsData.indexOf(reel) === 0) {
+            console.log('[Creator Search] First reel full data:', JSON.stringify(reel, null, 2));
+          }
           
           return {
             ...reel,
@@ -215,30 +151,39 @@ async function scrapeInstagramData(handle: string, filter: string, contentType: 
         errorBody: errorText,
         handle: handle
       });
-      // Don't fail completely if reels fetch fails, just log it
+      
+      if (reelsResponse.status === 403) {
+        return { content: [], error: 'This account is private and cannot be accessed' };
+      }
+      if (reelsResponse.status === 404) {
+        return { content: [], error: 'Instagram account not found' };
+      }
+      if (reelsResponse.status === 429) {
+        return { content: [], error: 'Rate limit exceeded. Please try again later' };
+      }
+      
+      return { content: [], error: 'Failed to fetch reels' };
     }
 
-    // Combine and sort content
-    const allContent = [...posts, ...reels];
-    
-    if (allContent.length === 0) {
-      return { content: [], error: 'No content found for this creator' };
+    // Check if we have reels
+    if (reels.length === 0) {
+      return { content: [], error: 'No reels found for this creator' };
     }
 
-    // Sort based on filter
-    let sortedContent = allContent;
+    // Sort reels based on filter
+    let sortedContent = reels;
     switch (filter) {
       case 'top_likes':
-        sortedContent = allContent.sort((a, b) => (b.likesCount || 0) - (a.likesCount || 0));
+        sortedContent = reels.sort((a, b) => (b.likesCount || 0) - (a.likesCount || 0));
         break;
       case 'top_comments':
-        sortedContent = allContent.sort((a, b) => (b.commentsCount || 0) - (a.commentsCount || 0));
+        sortedContent = reels.sort((a, b) => (b.commentsCount || 0) - (a.commentsCount || 0));
         break;
       case 'top_views':
-        sortedContent = allContent.sort((a, b) => (b.videoViewCount || b.likesCount || 0) - (a.videoViewCount || a.likesCount || 0));
+        sortedContent = reels.sort((a, b) => (b.videoViewCount || b.likesCount || 0) - (a.videoViewCount || a.likesCount || 0));
         break;
       case 'most_recent':
-        sortedContent = allContent.sort((a, b) => {
+        sortedContent = reels.sort((a, b) => {
           const dateA = new Date(a.timestamp || 0).getTime();
           const dateB = new Date(b.timestamp || 0).getTime();
           return dateB - dateA;
@@ -328,7 +273,7 @@ export async function POST(request: NextRequest) {
     // No cache, scrape Instagram data directly
     console.log(`[Creator Search] No cached content, starting scrape for ${handle}`);
     
-    const { content: scrapedContent, error } = await scrapeInstagramData(handle, filter, contentType);
+    const { content: scrapedContent, error } = await scrapeInstagramReels(handle, filter);
     if (error) {
       return NextResponse.json({ 
         error: error 
@@ -430,7 +375,7 @@ export async function POST(request: NextRequest) {
             creator_id: creatorRecord!.id,
             platform: 'instagram',
             content_url: contentUrl,
-            thumbnail_url: post.thumbnailUrl || post.displayUrl || post.images?.[0] || post.thumbnailSrc || '',
+            thumbnail_url: post.thumbnailUrl || post.displayUrl || post.images?.[0] || post.thumbnailSrc || post.thumbnail || '',
             video_url: post.videoUrl || null,
             caption: post.caption || post.text || '',
             likes: safeParseInt(post.likesCount || post.likes),
@@ -454,8 +399,15 @@ export async function POST(request: NextRequest) {
         });
 
         // Debug: Log processed content structure
-        console.log('Sample processed content record:', JSON.stringify(contentRecords[0], null, 2));
-        console.log(`Processing ${contentRecords.length} content records...`);
+        if (contentRecords.length > 0) {
+          console.log('Sample processed content record:', JSON.stringify(contentRecords[0], null, 2));
+          console.log(`Processing ${contentRecords.length} content records...`);
+          console.log('Thumbnail URLs being stored:', contentRecords.slice(0, 3).map(r => ({
+            url: r.content_url,
+            thumbnail: r.thumbnail_url,
+            hasThumb: !!r.thumbnail_url && r.thumbnail_url.length > 0
+          })));
+        }
 
         // Insert content in batches using upsert to handle duplicates
         const batchSize = 10;
@@ -521,6 +473,23 @@ export async function POST(request: NextRequest) {
 
         if (fetchError) {
           console.error('Error fetching stored content:', fetchError);
+        }
+
+        // Debug: Log thumbnail URLs in the response
+        if (storedContent && storedContent.length > 0) {
+          console.log('[Creator Search] Sample stored content:', {
+            id: storedContent[0].id,
+            thumbnail_url: storedContent[0].thumbnail_url,
+            content_url: storedContent[0].content_url,
+            hasThumb: !!storedContent[0].thumbnail_url
+          });
+          console.log('[Creator Search] Thumbnail URLs in response:', 
+            storedContent.slice(0, 5).map((c: any) => ({ 
+              id: c.id, 
+              thumbnail_url: c.thumbnail_url,
+              length: c.thumbnail_url?.length || 0
+            }))
+          );
         }
 
         const response: CreatorSearchResponse = {

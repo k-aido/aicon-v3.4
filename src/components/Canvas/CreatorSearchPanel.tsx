@@ -3,6 +3,7 @@ import { X, Search, Loader2, Plus, Heart, MessageCircle, Eye, AlertCircle, Clock
 import type { CreatorSearchRequest, CreatorSearchResponse, CreatorContent } from '@/types/creator-search';
 import { addCreatorContentToCanvas } from '../../../lib/canvas/creatorContentHelpers';
 import { useToast } from '@/components/Modal/ToastContainer';
+import { getProxiedImageUrl } from '@/utils/imageProxy';
 
 interface CreatorSearchPanelProps {
   isOpen: boolean;
@@ -26,11 +27,7 @@ const FILTERS = [
   { value: 'most_recent', label: 'Most Recent' }
 ] as const;
 
-const CONTENT_TYPES = [
-  { value: 'all', label: 'All Content', icon: '📱' },
-  { value: 'reels', label: 'Reels Only', icon: '🎬' },
-  { value: 'posts', label: 'Posts Only', icon: '🖼️' }
-] as const;
+// Removed CONTENT_TYPES - all content is reels by default
 
 const PLATFORMS = [
   { id: 'instagram', name: 'Instagram', active: true },
@@ -48,7 +45,7 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
   const [selectedPlatform, setSelectedPlatform] = useState('instagram');
   const [searchInput, setSearchInput] = useState('');
   const [selectedFilter, setSelectedFilter] = useState<'top_likes' | 'top_comments' | 'top_views' | 'most_recent'>('top_likes');
-  const [selectedContentType, setSelectedContentType] = useState<'all' | 'reels' | 'posts'>('all');
+  // Content type is always 'reels' for Instagram
   const [searchState, setSearchState] = useState<SearchState>({
     searchId: null,
     status: 'idle',
@@ -122,7 +119,7 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
         platform: 'instagram',
         searchQuery: searchInput.trim(),
         filter: selectedFilter,
-        contentType: selectedContentType,
+        contentType: 'reels', // Always search for reels
         userId: '5cedf725-3b56-4764-bbe0-0117a0ba7f49'
       };
 
@@ -144,6 +141,8 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
       if (data.status === 'completed' && data.content) {
         console.log('Search API Response:', data);
         console.log('Content sample:', data.content[0]);
+        console.log('First content thumbnail_url:', data.content[0]?.thumbnail_url);
+        console.log('All thumbnail URLs:', data.content.map((c: any) => c.thumbnail_url));
         setSearchState({
           searchId: data.searchId,
           status: 'completed',
@@ -364,27 +363,7 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
               </select>
             </div>
 
-            {/* Content Type Selector */}
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-300 mb-2">Content Type</label>
-              <div className="grid grid-cols-3 gap-2">
-                {CONTENT_TYPES.map((type) => (
-                  <button
-                    key={type.value}
-                    onClick={() => setSelectedContentType(type.value as any)}
-                    disabled={selectedPlatform !== 'instagram'}
-                    className={`px-3 py-2 text-sm font-medium rounded-lg border transition-colors flex items-center justify-center gap-1 ${
-                      selectedContentType === type.value
-                        ? 'bg-blue-600 border-blue-600 text-white'
-                        : 'border-gray-600 text-gray-300 hover:border-gray-500 disabled:opacity-50'
-                    }`}
-                  >
-                    <span>{type.icon}</span>
-                    <span>{type.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
+            {/* Removed Content Type Selector - All content is Reels by default */}
 
             {/* Search Button */}
             <button
@@ -456,15 +435,24 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
                 
                 {/* Content Grid */}
                 <div className="grid grid-cols-2 gap-3 mb-4">
-                  {searchState.results.slice(0, displayedResults).map((content, index) => (
+                  {searchState.results.slice(0, displayedResults).map((content, index) => {
+                    const imgSrc = getProxiedImageUrl(content.thumbnail_url) || 'https://via.placeholder.com/300x300?text=No+Image';
+                    console.log(`[CreatorSearchPanel] Rendering content ${index}:`, {
+                      id: content.id,
+                      thumbnail_url: content.thumbnail_url,
+                      proxiedUrl: imgSrc
+                    });
+                    
+                    return (
                     <div key={content.id} className="group relative bg-gray-800 rounded-lg overflow-hidden hover:bg-gray-750 transition-colors">
                       {/* Thumbnail */}
                       <div className="relative aspect-square">
                         <img
-                          src={content.thumbnail_url || 'https://via.placeholder.com/300x300?text=No+Image'}
+                          src={imgSrc}
                           alt="Content thumbnail"
                           className="w-full h-full object-cover"
                           onError={(e) => {
+                            console.warn('[CreatorSearchPanel] Failed to load thumbnail:', content.thumbnail_url);
                             (e.target as HTMLImageElement).src = 'https://via.placeholder.com/300x300?text=No+Image';
                           }}
                         />
@@ -528,7 +516,8 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
                         </div>
                       </div>
                     </div>
-                  ))}
+                  );
+                  })}
                 </div>
 
                 {/* Load More Button */}

@@ -58,13 +58,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Update account with stripe_customer_id
+    // Update account with stripe_customer_id (don't set credits here - they're set during account creation)
     const { error: updateError } = await supabase
       .from('accounts')
       .update({ 
         stripe_customer_id: stripeCustomer.id,
-        promotional_credits: 100, // Give new users 100 free credits to start
-        monthly_credits_remaining: 0, // Will be set when they subscribe
         credits_reset_date: new Date().toISOString().split('T')[0],
       })
       .eq('id', accountId);

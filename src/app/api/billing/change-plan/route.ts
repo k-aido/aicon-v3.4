@@ -9,11 +9,18 @@ const supabase = createClient(
 );
 
 export async function POST(request: NextRequest) {
+  console.log('[Change Plan API] Received POST request');
+  
   try {
-    const { newPriceLookupKey } = await request.json();
+    const body = await request.json();
+    console.log('[Change Plan API] Request body:', body);
+    const { newPriceId, newPriceLookupKey } = body;
 
-    if (!newPriceLookupKey) {
-      return NextResponse.json({ error: 'Price lookup key is required' }, { status: 400 });
+    // Support both price ID and lookup key for backwards compatibility
+    const priceIdentifier = newPriceId || newPriceLookupKey;
+    
+    if (!priceIdentifier) {
+      return NextResponse.json({ error: 'Price ID or lookup key is required' }, { status: 400 });
     }
 
     // Get session from cookies
@@ -59,20 +66,38 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No active subscription found' }, { status: 404 });
     }
 
-    // Get the new price using lookup key
-    console.log('Looking up price with key:', newPriceLookupKey);
-    const prices = await stripe.prices.list({
-      lookup_keys: [newPriceLookupKey],
-      expand: ['data.product']
-    });
-
-    console.log('Found prices:', prices.data.length);
-    if (prices.data.length === 0) {
-      console.error('No price found for lookup key:', newPriceLookupKey);
-      return NextResponse.json({ error: 'Invalid plan selected' }, { status: 400 });
+    // Get the new price - try direct ID first, then lookup key
+    let newPrice;
+    
+    // Check if it looks like a price ID (starts with 'price_')
+    if (priceIdentifier.startsWith('price_')) {
+      console.log('Looking up price by ID:', priceIdentifier);
+      try {
+        newPrice = await stripe.prices.retrieve(priceIdentifier, {
+          expand: ['product']
+        });
+        console.log('Found price by ID:', newPrice.id);
+      } catch (error) {
+        console.log('Price ID not found, trying as lookup key');
+      }
     }
+    
+    // If not found by ID, try as lookup key
+    if (!newPrice) {
+      console.log('Looking up price with lookup key:', priceIdentifier);
+      const prices = await stripe.prices.list({
+        lookup_keys: [priceIdentifier],
+        expand: ['data.product']
+      });
 
-    const newPrice = prices.data[0];
+      if (prices.data.length === 0) {
+        console.error('No price found for identifier:', priceIdentifier);
+        return NextResponse.json({ error: 'Invalid plan selected' }, { status: 400 });
+      }
+      
+      newPrice = prices.data[0];
+    }
+    
     console.log('New price details:', { id: newPrice.id, lookup_key: newPrice.lookup_key });
 
     // Get current subscription from Stripe
@@ -91,15 +116,42 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Already subscribed to this plan' }, { status: 400 });
     }
     
-    // Update the subscription with the new price
+    // Determine if this is an upgrade or downgrade
+    const currentPrice = subscription.items.data[0].price;
+    const isUpgrade = (newPrice.unit_amount || 0) > (currentPrice.unit_amount || 0);
+    
+    console.log('Price comparison:', {
+      current: currentPrice.unit_amount,
+      new: newPrice.unit_amount,
+      isUpgrade
+    });
+    
+    // Update the subscription with appropriate proration behavior
     console.log('Updating subscription with new price...');
-    const updatedSubscription = await stripe.subscriptions.update(account.stripe_subscription_id, {
+    const updateParams: any = {
       items: [{
         id: subscription.items.data[0].id,
         price: newPrice.id,
       }],
-      proration_behavior: 'create_prorations', // This creates prorated charges/credits
-    });
+      // Always create prorations for both upgrades and downgrades
+      proration_behavior: 'always_invoice',
+    };
+    
+    // For upgrades, ensure immediate payment
+    if (isUpgrade) {
+      // This will charge the customer immediately for the prorated amount
+      updateParams.payment_behavior = 'pending_if_incomplete';
+      // Optionally, you can also set this to require immediate payment
+      // updateParams.payment_behavior = 'error_if_incomplete';
+    } else {
+      // For downgrades, allow the change even if payment fails (they get credit)
+      updateParams.payment_behavior = 'allow_incomplete';
+    }
+    
+    const updatedSubscription = await stripe.subscriptions.update(
+      account.stripe_subscription_id, 
+      updateParams
+    );
 
     console.log('Subscription updated successfully:', {
       id: updatedSubscription.id,
@@ -114,7 +166,11 @@ export async function POST(request: NextRequest) {
         id: updatedSubscription.id,
         status: updatedSubscription.status,
         price_id: updatedSubscription.items.data[0].price.id
-      }
+      },
+      isUpgrade,
+      message: isUpgrade 
+        ? 'Your plan has been upgraded and you will be charged the prorated difference immediately.'
+        : 'Your plan has been downgraded. The prorated credit will be applied to your next invoice.'
     });
 
   } catch (error: any) {

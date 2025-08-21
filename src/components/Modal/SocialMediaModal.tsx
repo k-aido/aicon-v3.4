@@ -105,12 +105,25 @@ export const SocialMediaModal: React.FC<SocialMediaModalProps> = ({ isOpen, onCl
             const currentElement = elements.find(el => el.id === elementId);
             const currentMetadata = (currentElement as any)?.metadata || {};
             
+            // Transform the analysis data to match the expected format in AnalysisPanel
+            const transformedAnalysis = {
+              hook: analysisData.analysis?.hook_analysis || '',
+              hookScore: 8, // Default score
+              contentStrategy: analysisData.analysis?.body_analysis || '',
+              keyInsights: analysisData.analysis?.key_topics || [],
+              improvements: analysisData.analysis?.engagement_tactics || [],
+              sentiment: analysisData.analysis?.sentiment || 'positive',
+              complexity: analysisData.analysis?.complexity || 'moderate',
+              // Also include the raw analysis for compatibility
+              ...analysisData.analysis
+            };
+            
             updateElement(elementId, {
               metadata: {
                 ...currentMetadata,
                 isAnalyzing: false,
                 isAnalyzed: true,
-                analysis: analysisData.analysis,
+                analysis: transformedAnalysis,
                 processedData: statusData.processedData,
                 scrapeId: scrapeId
               }

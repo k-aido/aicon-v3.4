@@ -43,9 +43,6 @@ export const CanvasNavigation: React.FC<CanvasNavigationProps> = ({ lastSaved })
     if (trimmedValue && trimmedValue !== canvasTitle && workspaceId) {
       const newTitle = trimmedValue.slice(0, 50);
       
-      // Update local state immediately for responsive UI
-      setCanvasTitle(newTitle);
-      
       try {
         console.log('[CanvasNavigation] Saving title change:', { 
           workspaceId, 
@@ -53,16 +50,19 @@ export const CanvasNavigation: React.FC<CanvasNavigationProps> = ({ lastSaved })
           newTitle 
         });
         
-        // Persist to database
+        // Persist to database FIRST before updating store
+        // This prevents the autosave from triggering with the new title
         const success = await canvasPersistence.updateWorkspace(workspaceId, {
           title: newTitle
         });
         
         if (success) {
           console.log('[CanvasNavigation] Title saved successfully');
+          // Only update the store after successful save
+          setCanvasTitle(newTitle);
         } else {
           console.error('[CanvasNavigation] Failed to save title');
-          // Could optionally revert the title here or show an error message
+          // Don't update the store if save failed
         }
       } catch (error) {
         console.error('[CanvasNavigation] Error saving title:', error);
@@ -197,18 +197,6 @@ export const CanvasNavigation: React.FC<CanvasNavigationProps> = ({ lastSaved })
       <CreditCounter />
 
       {/* Separator */}
-      <div className="mx-3 h-6 w-px bg-gray-300"></div>
-
-      {/* Delete Button */}
-      <button
-        onClick={handleDeleteCanvas}
-        className="px-3 py-2 bg-red-500 hover:bg-red-600 text-white rounded-md text-sm flex items-center gap-2 transition-colors"
-        title="Delete canvas"
-        disabled={!workspaceId}
-      >
-        <Trash2 className="w-4 h-4" />
-        Delete
-      </button>
     </nav>
   );
 };

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Globe, UserSearch } from 'lucide-react';
+import { UserSearch } from 'lucide-react';
 import { AIChatIcon, InstagramIcon, TikTokIcon, YouTubeIcon, ProfilesIcon } from '@/components/icons/PngIcons';
 import { ContentPiece, ChatData, FolderData } from '@/types/canvas';
 
@@ -25,8 +25,7 @@ const tools: Tool[] = [
   { id: 'creator-search', icon: UserSearch, label: 'Search Creators', color: '#10B981', type: 'creator-search' },
   { id: 'instagram', icon: InstagramIcon, label: 'Instagram', color: '#E4405F', type: 'content', platform: 'instagram' },
   { id: 'tiktok', icon: TikTokIcon, label: 'TikTok', color: '#000000', type: 'content', platform: 'tiktok' },
-  { id: 'youtube', icon: YouTubeIcon, label: 'YouTube', color: '#FF0000', type: 'content', platform: 'youtube' },
-  { id: 'website', icon: Globe, label: 'Website URL', color: '#3B82F6', type: 'content', platform: 'unknown' }
+  { id: 'youtube', icon: YouTubeIcon, label: 'YouTube', color: '#FF0000', type: 'content', platform: 'youtube' }
 ];
 
 interface CanvasToolbarProps {

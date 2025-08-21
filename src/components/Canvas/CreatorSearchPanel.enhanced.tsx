@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import type { CreatorSearchRequest, CreatorSearchResponse, CreatorContent } from '@/types/creator-search';
 import { addCreatorContentToCanvas } from '../../../lib/canvas/creatorContentHelpers';
+import type { Viewport } from '@/types';
 import { useToast } from '@/components/Modal/ToastContainer';
 import { useCreatorSearchRateLimit } from '../../../lib/rateLimit';
 import { useSearchCache } from '../../../lib/searchCache';
@@ -370,8 +371,8 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
       const creatorHandle = validation.handle;
       
       const result = await addCreatorContentToCanvas(
-        content, 
-        viewport, 
+        content,
+        viewport,
         onAddContentToCanvas,
         creatorHandle
       );
@@ -402,7 +403,7 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
       
       showError('Failed to Add Content', error.message || 'Could not add content to canvas');
     }
-  }, [validation.handle, viewport, onAddContentToCanvas, searchInput, showTutorial, showSuccess, showError, onClose]);
+  }, [validation.handle, onAddContentToCanvas, searchInput, showTutorial, showSuccess, showError, onClose]);
 
   const formatCount = (count: number): string => {
     if (count >= 1000000) {

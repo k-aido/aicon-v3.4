@@ -3,6 +3,7 @@ import { X, Search, Loader2, Plus, Heart, MessageCircle, Eye, AlertCircle, Clock
 import type { CreatorSearchRequest, CreatorSearchResponse, CreatorContent } from '@/types/creator-search';
 import { addCreatorContentToCanvas } from '../../../lib/canvas/creatorContentHelpers';
 import { useToast } from '@/components/Modal/ToastContainer';
+import { getProxiedImageUrl } from '@/utils/imageProxy';
 
 interface CreatorSearchPanelProps {
   isOpen: boolean;
@@ -26,6 +27,8 @@ const FILTERS = [
   { value: 'most_recent', label: 'Most Recent' }
 ] as const;
 
+// Removed CONTENT_TYPES - all content is reels by default
+
 const PLATFORMS = [
   { id: 'instagram', name: 'Instagram', active: true },
   { id: 'youtube', name: 'YouTube', active: false, comingSoon: true },
@@ -42,6 +45,7 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
   const [selectedPlatform, setSelectedPlatform] = useState('instagram');
   const [searchInput, setSearchInput] = useState('');
   const [selectedFilter, setSelectedFilter] = useState<'top_likes' | 'top_comments' | 'top_views' | 'most_recent'>('top_likes');
+  // Content type is always 'reels' for Instagram
   const [searchState, setSearchState] = useState<SearchState>({
     searchId: null,
     status: 'idle',
@@ -50,6 +54,7 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
     error: null
   });
   const [displayedResults, setDisplayedResults] = useState(10);
+  const [addingContentIds, setAddingContentIds] = useState<Set<string>>(new Set());
 
   // Clean input on platform change
   useEffect(() => {
@@ -114,6 +119,7 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
         platform: 'instagram',
         searchQuery: searchInput.trim(),
         filter: selectedFilter,
+        contentType: 'reels', // Always search for reels
         userId: '5cedf725-3b56-4764-bbe0-0117a0ba7f49'
       };
 
@@ -135,6 +141,8 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
       if (data.status === 'completed' && data.content) {
         console.log('Search API Response:', data);
         console.log('Content sample:', data.content[0]);
+        console.log('First content thumbnail_url:', data.content[0]?.thumbnail_url);
+        console.log('All thumbnail URLs:', data.content.map((c: any) => c.thumbnail_url));
         setSearchState({
           searchId: data.searchId,
           status: 'completed',
@@ -172,10 +180,19 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
   };
 
   const handleAddToCanvas = async (content: CreatorContent) => {
+    // Prevent duplicate adds
+    if (addingContentIds.has(content.id)) {
+      console.log('[CreatorSearchPanel] Already adding content:', content.id);
+      return;
+    }
+    
     try {
       if (!onAddContentToCanvas) {
         throw new Error('Canvas integration not available');
       }
+
+      // Mark as adding
+      setAddingContentIds(prev => new Set(prev).add(content.id));
 
       // Extract creator handle from search input
       const creatorHandle = searchInput.replace('@', '').replace(/.*instagram\.com\//, '');
@@ -204,6 +221,13 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
       
       // Show error toast
       showError('Failed to Add Content', error.message || 'Could not add content to canvas');
+    } finally {
+      // Remove from adding set
+      setAddingContentIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(content.id);
+        return newSet;
+      });
     }
   };
 
@@ -323,7 +347,7 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
             </div>
 
             {/* Filter Dropdown */}
-            <div className="mb-6">
+            <div className="mb-4">
               <label className="block text-sm font-medium text-gray-300 mb-2">Sort By</label>
               <select
                 value={selectedFilter}
@@ -338,6 +362,8 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
                 ))}
               </select>
             </div>
+
+            {/* Removed Content Type Selector - All content is Reels by default */}
 
             {/* Search Button */}
             <button
@@ -409,15 +435,24 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
                 
                 {/* Content Grid */}
                 <div className="grid grid-cols-2 gap-3 mb-4">
-                  {searchState.results.slice(0, displayedResults).map((content, index) => (
+                  {searchState.results.slice(0, displayedResults).map((content, index) => {
+                    const imgSrc = getProxiedImageUrl(content.thumbnail_url) || 'https://via.placeholder.com/300x300?text=No+Image';
+                    console.log(`[CreatorSearchPanel] Rendering content ${index}:`, {
+                      id: content.id,
+                      thumbnail_url: content.thumbnail_url,
+                      proxiedUrl: imgSrc
+                    });
+                    
+                    return (
                     <div key={content.id} className="group relative bg-gray-800 rounded-lg overflow-hidden hover:bg-gray-750 transition-colors">
                       {/* Thumbnail */}
                       <div className="relative aspect-square">
                         <img
-                          src={content.thumbnail_url || 'https://via.placeholder.com/300x300?text=No+Image'}
+                          src={imgSrc}
                           alt="Content thumbnail"
                           className="w-full h-full object-cover"
                           onError={(e) => {
+                            console.warn('[CreatorSearchPanel] Failed to load thumbnail:', content.thumbnail_url);
                             (e.target as HTMLImageElement).src = 'https://via.placeholder.com/300x300?text=No+Image';
                           }}
                         />
@@ -425,10 +460,19 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
                         {/* Add to Canvas Button */}
                         <button
                           onClick={() => handleAddToCanvas(content)}
-                          className="absolute top-2 right-2 w-8 h-8 bg-green-600 hover:bg-green-700 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                          title="Add to canvas"
+                          disabled={addingContentIds.has(content.id)}
+                          className={`absolute top-2 right-2 w-8 h-8 ${
+                            addingContentIds.has(content.id) 
+                              ? 'bg-gray-600 cursor-not-allowed' 
+                              : 'bg-green-600 hover:bg-green-700'
+                          } text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity`}
+                          title={addingContentIds.has(content.id) ? "Adding..." : "Add to canvas"}
                         >
-                          <Plus className="w-4 h-4" />
+                          {addingContentIds.has(content.id) ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Plus className="w-4 h-4" />
+                          )}
                         </button>
                       </div>
                       
@@ -472,7 +516,8 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
                         </div>
                       </div>
                     </div>
-                  ))}
+                  );
+                  })}
                 </div>
 
                 {/* Load More Button */}

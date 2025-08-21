@@ -90,11 +90,14 @@ class ApifyService {
       duration: 'all',
       features: 'all',
       sort: 'r'  // relevance
+      // Removed customMapFunction as it might be filtering out data
     };
 
     console.log('[ApifyService] Starting YouTube scrape with apidojo/youtube-scraper:', url);
+    console.log('[ApifyService] Input configuration:', JSON.stringify(input));
     
     const run = await this.client.actor(this.ACTORS.youtube).call(input);
+    console.log('[ApifyService] YouTube scrape started with run ID:', run.id);
     return { runId: run.id };
   }
 
@@ -176,7 +179,7 @@ class ApifyService {
       resultsPerPage: 100,
       shouldDownloadCovers: true,  // Enable thumbnail download
       shouldDownloadSubtitles: true, // Enable subtitles for transcripts
-      shouldDownloadVideos: false   // Skip video download to save time/cost
+      shouldDownloadVideos: true    // Enable video URL for transcription
     };
 
     const run = await this.client.actor(this.ACTORS.tiktok).call(input);
@@ -188,6 +191,9 @@ class ApifyService {
    */
   async getRunStatus(runId: string): Promise<ApifyRunResult> {
     const run = await this.client.run(runId).get();
+    if (!run) {
+      throw new Error(`Run ${runId} not found`);
+    }
     return {
       runId: run.id,
       status: run.status,
@@ -201,7 +207,7 @@ class ApifyService {
   async getRunResults(runId: string): Promise<ScrapedContent | null> {
     const run = await this.client.run(runId).get();
     
-    if (run.status !== 'SUCCEEDED') {
+    if (!run || run.status !== 'SUCCEEDED') {
       return null;
     }
 
@@ -211,7 +217,57 @@ class ApifyService {
       return null;
     }
 
-    const rawData = items[0];
+    const rawData: any = items[0];
+    
+    // Add detailed logging for YouTube data
+    if (rawData.url?.includes('youtube.com') || rawData.url?.includes('youtu.be')) {
+      console.log('[ApifyService] Full YouTube raw data keys:', Object.keys(rawData));
+      console.log('[ApifyService] YouTube data sample:', {
+        hasStreamingData: !!rawData.streamingData,
+        streamingDataKeys: rawData.streamingData ? Object.keys(rawData.streamingData) : null,
+        formatsCount: rawData.streamingData?.formats?.length || 0,
+        firstFormat: rawData.streamingData?.formats?.[0] ? {
+          itag: rawData.streamingData.formats[0].itag,
+          mimeType: rawData.streamingData.formats[0].mimeType,
+          hasUrl: !!rawData.streamingData.formats[0].url
+        } : null,
+        hasCaptions: !!rawData.captions,
+        captionTracksCount: rawData.captions?.captionTracks?.length || 0,
+        captionsStructure: rawData.captions ? {
+          keys: Object.keys(rawData.captions),
+          type: typeof rawData.captions,
+          isArray: Array.isArray(rawData.captions)
+        } : null
+      });
+      
+      // Log the entire raw data for debugging (truncated for large objects)
+      const dataStr = JSON.stringify(rawData);
+      console.log('[ApifyService] YouTube raw data preview (first 1000 chars):', dataStr.substring(0, 1000));
+      
+      // Log captions specifically if present
+      if (rawData.captions) {
+        console.log('[ApifyService] Captions data:', {
+          type: typeof rawData.captions,
+          length: typeof rawData.captions === 'string' ? rawData.captions.length : undefined,
+          preview: typeof rawData.captions === 'string' ? 
+            rawData.captions.substring(0, 200) : 
+            JSON.stringify(rawData.captions).substring(0, 500)
+        });
+        
+        // Log the first caption track if available
+        if (rawData.captions.captionTracks && rawData.captions.captionTracks[0]) {
+          const firstTrack = rawData.captions.captionTracks[0];
+          console.log('[ApifyService] First caption track:', {
+            languageCode: firstTrack.languageCode,
+            languageName: firstTrack.languageName,
+            isTranslatable: firstTrack.isTranslatable,
+            urlLength: firstTrack.url ? firstTrack.url.length : 0,
+            urlPreview: firstTrack.url ? firstTrack.url.substring(0, 100) : null
+          });
+        }
+      }
+    }
+    
     return this.normalizeScrapedData(rawData);
   }
 
@@ -281,6 +337,9 @@ class ApifyService {
         hasTitle: !!data.title,
         hasThumbnails: !!data.thumbnails,
         hasThumbnail: !!data.thumbnail,
+        hasStreamingData: !!data.streamingData,
+        hasFormats: !!data.streamingData?.formats,
+        formatsLength: data.streamingData?.formats?.length || 0,
         topLevelKeys: Object.keys(data).slice(0, 20)
       });
       
@@ -306,6 +365,34 @@ class ApifyService {
         }
       }
       
+      // Extract video URL from streamingData formats
+      let videoUrl = null;
+      if (data.streamingData?.formats && Array.isArray(data.streamingData.formats)) {
+        console.log('[ApifyService] Processing streamingData formats:', data.streamingData.formats.length, 'formats found');
+        
+        // Find the best format with both video and audio
+        const mp4Format = data.streamingData.formats.find((f: any) => 
+          f.mimeType?.includes('video/mp4') && f.url
+        );
+        
+        if (mp4Format) {
+          videoUrl = mp4Format.url;
+          console.log('[ApifyService] Found YouTube video URL from streamingData');
+        } else {
+          console.log('[ApifyService] No suitable MP4 format with URL found in streamingData');
+          // Log what formats are available
+          data.streamingData.formats.slice(0, 3).forEach((f: any, i: number) => {
+            console.log(`[ApifyService] Format ${i}:`, {
+              mimeType: f.mimeType,
+              hasUrl: !!f.url,
+              itag: f.itag
+            });
+          });
+        }
+      } else {
+        console.log('[ApifyService] No streamingData.formats found in YouTube data');
+      }
+      
       console.log('[ApifyService] YouTube thumbnail extraction:', {
         thumbnailsType: Array.isArray(data.thumbnails) ? 'array' : typeof data.thumbnails,
         thumbnailsLength: Array.isArray(data.thumbnails) ? data.thumbnails.length : null,
@@ -320,12 +407,38 @@ class ApifyService {
         commentsArray = data.commentsList;
       }
       
+      // Extract transcript from captions if available
+      let transcript = null;
+      
+      // Check if captions is a simple string/text (some scrapers return it directly)
+      if (typeof data.captions === 'string' && data.captions.length > 0) {
+        transcript = data.captions;
+        console.log('[ApifyService] Found caption text directly in data.captions');
+      }
+      // Check for caption tracks structure
+      else if (data.captions?.captionTracks && Array.isArray(data.captions.captionTracks)) {
+        // YouTube captions are available but need to be fetched from the caption URL
+        const englishCaptions = data.captions.captionTracks.find((track: any) => 
+          track.language_code === 'en' || track.vss_id === '.en'
+        );
+        if (englishCaptions) {
+          console.log('[ApifyService] YouTube captions available (would need separate fetch)');
+          // Note: To actually get the captions, we'd need to fetch from englishCaptions.base_url
+          // This would require additional processing
+        }
+      }
+      // Check for other possible caption fields
+      else if (data.subtitles || data.transcript || data.transcription) {
+        transcript = data.subtitles || data.transcript || data.transcription;
+        console.log('[ApifyService] Found transcript in alternative field');
+      }
+      
       normalized = {
         platform,
         url: data.url || `https://youtube.com/watch?v=${data.videoId || data.video_id || data.id}`,
         title: data.title,
         description: data.description,
-        transcript: data.subtitles?.[0]?.text || data.captions?.[0]?.text || data.transcript,
+        transcript: transcript || data.subtitles?.[0]?.text || data.captions?.[0]?.text || data.transcript,
         viewCount: parseInt(data.viewCount || data.view_count || data.views || data.statistics?.viewCount || 0),
         likeCount: parseInt(data.likeCount || data.like_count || data.likes || data.statistics?.likeCount || 0),
         commentCount: parseInt(data.commentCount || data.comment_count || data.comments || data.statistics?.commentCount || 0),
@@ -334,6 +447,7 @@ class ApifyService {
         authorName: data.channelName || data.channel_name || data.channelTitle || data.channel_title || data.channel?.title || data.channel?.name || data.snippet?.channelTitle,
         authorId: data.channelId || data.channel_id || data.channel?.id || data.snippet?.channelId,
         thumbnailUrl,
+        videoUrl, // Include the extracted video URL
         hashtags: this.extractHashtags(data.description || ''),
         mentions: this.extractMentions(data.description || ''),
         comments: commentsArray.slice(0, 50).map((c: any) => ({
@@ -355,6 +469,8 @@ class ApifyService {
         hasCoverUrl: !!data.coverUrl,
         hasVideoMeta: !!data.videoMeta,
         hasVideo: !!data.video,
+        hasMediaUrls: !!data.mediaUrls,
+        mediaUrlsContent: data.mediaUrls ? data.mediaUrls : 'not present',
         topLevelKeys: Object.keys(data).slice(0, 20) // First 20 keys
       });
       
@@ -385,6 +501,32 @@ class ApifyService {
         extracted: thumbnailUrl
       });
       
+      // Extract video URL from more possible fields
+      // Check mediaUrls array first (new format from scraper)
+      let tiktokVideoUrl = null;
+      
+      if (data.mediaUrls && Array.isArray(data.mediaUrls) && data.mediaUrls.length > 0) {
+        // mediaUrls is an array of video URLs from the scraper
+        tiktokVideoUrl = data.mediaUrls[0];
+        console.log('[ApifyService] Found TikTok video URL in mediaUrls array');
+      } else {
+        // Fallback to other possible fields
+        tiktokVideoUrl = data.videoUrl || 
+                        data.video_url || 
+                        data.videoUrlNoWatermark || 
+                        data.video_url_no_watermark ||
+                        data.downloadUrl ||
+                        data.download_url ||
+                        data.videoMeta?.downloadUrl ||
+                        data.video?.playUrl ||
+                        data.video?.downloadUrl;
+      }
+      
+      if (!tiktokVideoUrl) {
+        console.log('[ApifyService] Warning: No video URL found for TikTok content. Available keys:', Object.keys(data).slice(0, 20));
+        console.log('[ApifyService] mediaUrls content:', data.mediaUrls);
+      }
+      
       normalized = {
         platform,
         url: data.webVideoUrl || data.web_video_url || data.url,
@@ -400,7 +542,7 @@ class ApifyService {
         authorName: data.authorMeta?.name || data.author_meta?.name || data.author?.uniqueId || data.author?.unique_id,
         authorId: data.authorMeta?.id || data.author_meta?.id || data.author?.id,
         thumbnailUrl,
-        videoUrl: data.videoUrl || data.video_url || data.videoUrlNoWatermark || data.video_url_no_watermark,
+        videoUrl: tiktokVideoUrl,
         hashtags: data.hashtags || this.extractHashtags(data.text || ''),
         mentions: data.mentions || this.extractMentions(data.text || ''),
         comments: data.comments?.slice(0, 50)?.map((c: any) => ({

@@ -105,10 +105,12 @@ export async function POST(request: NextRequest) {
 
         // Get the plan details
         const priceId = subscription.items.data[0]?.price.id;
+        
+        // Simply look for the price ID in either column
         const { data: plan } = await supabase
           .from('billing_plans')
           .select('id, monthly_credits')
-          .eq('stripe_price_id', priceId)
+          .or(`stripe_live_price_id.eq.${priceId},stripe_test_price_id.eq.${priceId}`)
           .single();
 
         // Get subscription period from items
@@ -136,28 +138,38 @@ export async function POST(request: NextRequest) {
         }
 
         // Update account with subscription and credits
+        // Always update the stripe_subscription_id even if plan doesn't exist
+        const { data: newSubRecord } = await supabase
+          .from('billing_subscriptions')
+          .select('id')
+          .eq('stripe_subscription_id', subscription.id)
+          .single();
+
+        const updateData: any = {
+          subscription_id: newSubRecord?.id,
+          stripe_subscription_id: subscription.id,
+        };
+
+        // If we have plan details, update credits
         if (plan) {
-          // Get the subscription record we just created
-          const { data: newSubRecord } = await supabase
-            .from('billing_subscriptions')
-            .select('id')
-            .eq('stripe_subscription_id', subscription.id)
-            .single();
+          updateData.monthly_credit_allocation = plan.monthly_credits;
+          updateData.monthly_credits_remaining = plan.monthly_credits;
+          updateData.credits_reset_date = new Date().toISOString().split('T')[0];
+        } else {
+          console.warn(`Plan not found for price ID: ${priceId}. Subscription will be created without credit allocation.`);
+          // Set default credits for unknown plans
+          updateData.monthly_credit_allocation = 1000; // Default to basic tier
+          updateData.monthly_credits_remaining = 1000;
+          updateData.credits_reset_date = new Date().toISOString().split('T')[0];
+        }
 
-          const { error: accountError } = await supabase
-            .from('accounts')
-            .update({
-              subscription_id: newSubRecord?.id,
-              stripe_subscription_id: subscription.id,
-              monthly_credit_allocation: plan.monthly_credits,
-              monthly_credits_remaining: plan.monthly_credits,
-              credits_reset_date: new Date().toISOString().split('T')[0],
-            })
-            .eq('id', customer.account_id);
+        const { error: accountError } = await supabase
+          .from('accounts')
+          .update(updateData)
+          .eq('id', customer.account_id);
 
-          if (accountError) {
-            console.error('Error updating account:', accountError);
-          }
+        if (accountError) {
+          console.error('Error updating account:', accountError);
         }
 
         console.log('Subscription created successfully:', subscription.id);
@@ -182,11 +194,11 @@ export async function POST(request: NextRequest) {
         
         // Check if plan changed
         if (newPriceId !== existingSub.stripe_price_id) {
-          // Get new plan details
+          // Get new plan details - check both live and test price columns
           const { data: newPlan } = await supabase
             .from('billing_plans')
             .select('id, monthly_credits')
-            .eq('stripe_price_id', newPriceId)
+            .or(`stripe_live_price_id.eq.${newPriceId},stripe_test_price_id.eq.${newPriceId}`)
             .single();
 
           // Get subscription period from items
@@ -211,30 +223,40 @@ export async function POST(request: NextRequest) {
             break;
           }
 
-          // Update account credits if plan changed
-          if (newPlan) {
-            // Get customer account
-            const { data: customer } = await supabase
-              .from('billing_customers')
-              .select('account_id')
-              .eq('stripe_customer_id', subscription.customer as string)
-              .single();
+          // Update account - always update subscription ID
+          // Get customer account
+          const { data: customer } = await supabase
+            .from('billing_customers')
+            .select('account_id')
+            .eq('stripe_customer_id', subscription.customer as string)
+            .single();
 
-            if (customer) {
-              const { error: accountError } = await supabase
-                .from('accounts')
-                .update({
-                  subscription_id: existingSub.id,
-                  stripe_subscription_id: subscription.id,
-                  monthly_credit_allocation: newPlan.monthly_credits,
-                  monthly_credits_remaining: newPlan.monthly_credits, // Reset credits on plan change
-                  credits_reset_date: new Date().toISOString().split('T')[0],
-                })
-                .eq('id', customer.account_id);
+          if (customer) {
+            const updateData: any = {
+              subscription_id: existingSub.id,
+              stripe_subscription_id: subscription.id,
+            };
 
-              if (accountError) {
-                console.error('Error updating account credits:', accountError);
-              }
+            // Update credits if plan details are available
+            if (newPlan) {
+              updateData.monthly_credit_allocation = newPlan.monthly_credits;
+              updateData.monthly_credits_remaining = newPlan.monthly_credits; // Reset credits on plan change
+              updateData.credits_reset_date = new Date().toISOString().split('T')[0];
+            } else {
+              console.warn(`Plan not found for price ID: ${newPriceId}. Using default credits.`);
+              // Set default credits for unknown plans
+              updateData.monthly_credit_allocation = 1000; // Default to basic tier
+              updateData.monthly_credits_remaining = 1000;
+              updateData.credits_reset_date = new Date().toISOString().split('T')[0];
+            }
+
+            const { error: accountError } = await supabase
+              .from('accounts')
+              .update(updateData)
+              .eq('id', customer.account_id);
+
+            if (accountError) {
+              console.error('Error updating account:', accountError);
             }
           }
         } else {

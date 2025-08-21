@@ -65,30 +65,58 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get user's account for credit check
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('account_id')
-      .eq('id', userId)
-      .single();
+    // Check if this is a mock scrape first
+    let scrapeRecord: any;
+    let userData: any;
+    
+    if (scrapeId.startsWith('mock-')) {
+      const mockScrape = global.mockScrapes?.get(scrapeId);
+      if (!mockScrape) {
+        return NextResponse.json(
+          { error: 'Mock scrape record not found' },
+          { status: 404 }
+        );
+      }
+      scrapeRecord = mockScrape;
+      // For mock scrapes, we still need user data for billing usage tracking
+      const { data: userDataResult, error: userError } = await supabase
+        .from('users')
+        .select('account_id')
+        .eq('id', userId)
+        .single();
+      
+      if (userError || !userDataResult?.account_id) {
+        return NextResponse.json({ error: 'Account not found' }, { status: 404 });
+      }
+      userData = userDataResult;
+    } else {
+      // Get user's account for credit check
+      const { data: userDataResult, error: userError } = await supabase
+        .from('users')
+        .select('account_id')
+        .eq('id', userId)
+        .single();
 
-    if (userError || !userData?.account_id) {
-      return NextResponse.json({ error: 'Account not found' }, { status: 404 });
-    }
+      if (userError || !userDataResult?.account_id) {
+        return NextResponse.json({ error: 'Account not found' }, { status: 404 });
+      }
+      userData = userDataResult;
 
-    // Get scrape record with processed data
-    const { data: scrapeRecord, error: scrapeError } = await supabase
-      .from('content_scrapes')
-      .select('*')
-      .eq('id', scrapeId)
-      .eq('user_id', userId)
-      .single();
+      // Get scrape record with processed data
+      const { data: scrapeRecordResult, error: scrapeError } = await supabase
+        .from('content_scrapes')
+        .select('*')
+        .eq('id', scrapeId)
+        .eq('user_id', userId)
+        .single();
 
-    if (scrapeError || !scrapeRecord) {
-      return NextResponse.json(
-        { error: 'Scrape record not found' },
-        { status: 404 }
-      );
+      if (scrapeError || !scrapeRecordResult) {
+        return NextResponse.json(
+          { error: 'Scrape record not found' },
+          { status: 404 }
+        );
+      }
+      scrapeRecord = scrapeRecordResult;
     }
 
     if (scrapeRecord.status !== 'completed') {
@@ -98,27 +126,29 @@ export async function POST(
       );
     }
 
-    // Check if analysis already exists
-    const { data: existingAnalysis } = await supabase
-      .from('content_analysis')
-      .select('*')
-      .eq('scrape_id', scrapeId)
-      .single();
+    // Check if analysis already exists (skip for mock scrapes)
+    if (!scrapeId.startsWith('mock-')) {
+      const { data: existingAnalysis } = await supabase
+        .from('content_analysis')
+        .select('*')
+        .eq('scrape_id', scrapeId)
+        .single();
 
-    if (existingAnalysis) {
-      console.log('[Analyze API] Using existing analysis:', existingAnalysis.id);
-      
-      // If requested, add to library
-      if (addToLibrary) {
-        await addToContentLibrary(existingAnalysis, scrapeRecord.project_id, userId);
+      if (existingAnalysis) {
+        console.log('[Analyze API] Using existing analysis:', existingAnalysis.id);
+        
+        // If requested, add to library
+        if (addToLibrary) {
+          await addToContentLibrary(existingAnalysis, scrapeRecord.project_id, userId);
+        }
+        
+        return NextResponse.json({
+          success: true,
+          analysisId: existingAnalysis.id,
+          analysis: existingAnalysis,
+          cached: true
+        });
       }
-      
-      return NextResponse.json({
-        success: true,
-        analysisId: existingAnalysis.id,
-        analysis: existingAnalysis,
-        cached: true
-      });
     }
 
     // Credits have already been deducted when scraping completed
@@ -136,7 +166,39 @@ export async function POST(
       analysisResult = createMockAnalysis(contentData, platform);
     }
 
-    // Store analysis in database
+    // For mock scrapes, return analysis directly without storing
+    if (scrapeId.startsWith('mock-')) {
+      const mockAnalysis = {
+        id: `mock-analysis-${Date.now()}`,
+        scrape_id: scrapeId,
+        project_id: scrapeRecord.project_id,
+        title: contentData.title || contentData.caption?.substring(0, 100),
+        description: contentData.description,
+        transcript: contentData.transcript,
+        captions: contentData.caption,
+        metrics: contentData.metrics,
+        hook_analysis: analysisResult.hookAnalysis,
+        body_analysis: analysisResult.bodyAnalysis,
+        cta_analysis: analysisResult.ctaAnalysis,
+        key_topics: analysisResult.keyTopics,
+        engagement_tactics: analysisResult.engagementTactics,
+        sentiment: analysisResult.sentiment,
+        complexity: analysisResult.complexity,
+        ai_model_used: analysisResult.modelUsed,
+        tokens_used: analysisResult.tokensUsed,
+        analyzed_at: new Date().toISOString()
+      };
+      
+      console.log(`[Analyze API] Mock analysis completed for scrape ${scrapeId}`);
+      
+      return NextResponse.json({
+        success: true,
+        analysisId: mockAnalysis.id,
+        analysis: mockAnalysis
+      });
+    }
+
+    // Store analysis in database for real scrapes
     const { data: newAnalysis, error: analysisError } = await supabase
       .from('content_analysis')
       .insert({

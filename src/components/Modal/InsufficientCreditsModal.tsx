@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Zap, CreditCard, TrendingUp, AlertCircle } from 'lucide-react';
+import { X, TrendingUp, AlertCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 interface InsufficientCreditsModalProps {
@@ -21,11 +21,6 @@ export const InsufficientCreditsModal: React.FC<InsufficientCreditsModalProps> =
 
   const handleUpgrade = () => {
     router.push('/billing');
-    onClose();
-  };
-
-  const handleBuyCredits = () => {
-    router.push('/billing?tab=credits');
     onClose();
   };
 
@@ -84,9 +79,8 @@ export const InsufficientCreditsModal: React.FC<InsufficientCreditsModalProps> =
             </div>
           </div>
 
-          {/* Options */}
-          <div className="space-y-3">
-            {/* Upgrade Plan Option */}
+          {/* Upgrade Option */}
+          <div>
             <button
               onClick={handleUpgrade}
               className="w-full p-4 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-xl hover:from-purple-700 hover:to-purple-800 transition-all transform hover:scale-[1.02] shadow-lg"
@@ -101,29 +95,7 @@ export const InsufficientCreditsModal: React.FC<InsufficientCreditsModalProps> =
                 </div>
                 <div className="text-right">
                   <p className="text-xs text-purple-200">Starting from</p>
-                  <p className="font-bold">$29/mo</p>
-                </div>
-              </div>
-            </button>
-
-            {/* Buy Credits Option */}
-            <button
-              onClick={handleBuyCredits}
-              className="w-full p-4 bg-white border-2 border-gray-200 rounded-xl hover:border-purple-500 hover:bg-purple-50 transition-all transform hover:scale-[1.02]"
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-purple-100 rounded-lg">
-                    <Zap className="w-5 h-5 text-purple-600" />
-                  </div>
-                  <div className="text-left">
-                    <p className="font-semibold text-gray-900">Buy Credit Pack</p>
-                    <p className="text-xs text-gray-600">One-time purchase</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs text-gray-600">Starting from</p>
-                  <p className="font-bold text-gray-900">$10</p>
+                  <p className="font-bold">$49/mo</p>
                 </div>
               </div>
             </button>
@@ -136,8 +108,8 @@ export const InsufficientCreditsModal: React.FC<InsufficientCreditsModalProps> =
               <div className="text-sm text-blue-800">
                 <p className="font-medium mb-1">Did you know?</p>
                 <p className="text-xs">
-                  Each AI chat response uses 100 credits. Upgrade your plan for more monthly credits 
-                  or purchase a credit pack for immediate access.
+                  Each AI chat response uses 100 credits. Upgrade your plan to get more monthly credits 
+                  and unlock additional features.
                 </p>
               </div>
             </div>

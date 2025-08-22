@@ -266,6 +266,8 @@ export async function addCreatorContentToCanvas(
         creatorId: content.creator_id // Keep this to identify creator content
       }
     };
+    
+    console.log('[CreatorContent] Creating element with ID:', elementId, 'type:', typeof elementId);
 
     // Add element to canvas - use store directly OR callback if provided
     if (onAddContentToCanvas && typeof onAddContentToCanvas === 'function') {

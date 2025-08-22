@@ -465,7 +465,13 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
         // Update existing elements and add new ones
         updated.forEach(el => {
           if (currentElementMap.has(String(el.id))) {
-            console.log('🔥 ✅ Updating existing element:', { id: el.id, type: el.type });
+            console.log('🔥 ✅ Updating existing element:', { 
+              id: el.id, 
+              idType: typeof el.id,
+              type: el.type,
+              x: el.x,
+              y: el.y
+            });
             updateElement(el.id, el as any);
           } else {
             console.log('🔥 ➕ Adding new element:', { id: el.id, type: el.type });

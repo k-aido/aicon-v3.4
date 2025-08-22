@@ -1,7 +1,20 @@
 import React, { useState } from 'react';
-import { UserSearch } from 'lucide-react';
-import { AIChatIcon, InstagramIcon, TikTokIcon, YouTubeIcon, TextIcon } from '@/components/icons/PngIcons';
+import { 
+  AIChatLightIcon, 
+  InstagramLightIcon, 
+  TikTokLightIcon, 
+  YouTubeLightIcon, 
+  TextLightIcon, 
+  CreatorSearchIcon,
+  AIChatDarkIcon,
+  InstagramDarkIcon,
+  TikTokDarkIcon,
+  YouTubeDarkIcon,
+  TextDarkIcon,
+  CreatorSearchDarkIcon
+} from '@/components/icons/PngIcons';
 import { useCanvasStore } from '@/store/canvasStore';
+import { useDarkMode } from '@/contexts/DarkModeContext';
 
 interface Tool {
   id: string;
@@ -12,14 +25,7 @@ interface Tool {
   platform?: string;
 }
 
-const tools: Tool[] = [
-  { id: 'ai-chat', icon: AIChatIcon, label: 'AI Chat', color: '#8B5CF6', type: 'chat' },
-  { id: 'creator-search', icon: UserSearch, label: 'Search Creators', color: '#10B981', type: 'creator-search' },
-  { id: 'text', icon: TextIcon, label: 'Text', color: '#000000', type: 'text' },
-  { id: 'instagram', icon: InstagramIcon, label: 'Instagram', color: '#E4405F', type: 'content', platform: 'instagram' },
-  { id: 'tiktok', icon: TikTokIcon, label: 'TikTok', color: '#000000', type: 'content', platform: 'tiktok' },
-  { id: 'youtube', icon: YouTubeIcon, label: 'YouTube', color: '#FF0000', type: 'content', platform: 'youtube' }
-];
+// Remove tools from here - will be defined inside component
 
 interface CanvasSidebarProps {
   onOpenSocialMediaModal?: (platform?: string) => void;
@@ -31,6 +37,17 @@ export const CanvasSidebar: React.FC<CanvasSidebarProps> = ({ onOpenSocialMediaM
   const [activeTool, setActiveTool] = useState<string | null>(null);
   const [hoveredTool, setHoveredTool] = useState<string | null>(null);
   const { addElement, elements } = useCanvasStore();
+  const { isDarkMode } = useDarkMode();
+
+  // Define tools based on dark mode
+  const tools: Tool[] = [
+    { id: 'ai-chat', icon: isDarkMode ? AIChatDarkIcon : AIChatLightIcon, label: 'AI Chat', color: '#8B5CF6', type: 'chat' },
+    { id: 'creator-search', icon: isDarkMode ? CreatorSearchDarkIcon : CreatorSearchIcon, label: 'Search Creators', color: '#10B981', type: 'creator-search' },
+    { id: 'text', icon: isDarkMode ? TextDarkIcon : TextLightIcon, label: 'Text', color: '#000000', type: 'text' },
+    { id: 'instagram', icon: isDarkMode ? InstagramDarkIcon : InstagramLightIcon, label: 'Instagram', color: '#E4405F', type: 'content', platform: 'instagram' },
+    { id: 'tiktok', icon: isDarkMode ? TikTokDarkIcon : TikTokLightIcon, label: 'TikTok', color: '#000000', type: 'content', platform: 'tiktok' },
+    { id: 'youtube', icon: isDarkMode ? YouTubeDarkIcon : YouTubeLightIcon, label: 'YouTube', color: '#FF0000', type: 'content', platform: 'youtube' }
+  ];
 
   const handleDragStart = (e: React.DragEvent, tool: Tool) => {
     setDraggingTool(tool);
@@ -39,7 +56,7 @@ export const CanvasSidebar: React.FC<CanvasSidebarProps> = ({ onOpenSocialMediaM
     
     // Create ghost image
     const dragImage = document.createElement('div');
-    dragImage.className = 'bg-white rounded-lg shadow-lg p-3 flex items-center gap-2';
+    dragImage.className = `${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-lg p-3 flex items-center gap-2`;
     dragImage.innerHTML = `<span style="color: ${tool.color}">${tool.label}</span>`;
     dragImage.style.position = 'absolute';
     dragImage.style.top = '-1000px';
@@ -139,7 +156,10 @@ export const CanvasSidebar: React.FC<CanvasSidebarProps> = ({ onOpenSocialMediaM
 
   return (
     <div
-      className="fixed left-4 top-1/2 -translate-y-1/2 bg-white rounded-lg shadow-lg z-30 p-1.5"
+      className={`fixed left-4 top-1/2 -translate-y-1/2 rounded-lg shadow-lg z-30 p-1.5 transition-colors duration-200`}
+      style={{
+        backgroundColor: isDarkMode ? '#30302e' : '#ffffff'
+      }}
       data-toolbar
     >
       <div className="flex flex-col gap-1.5">
@@ -154,8 +174,10 @@ export const CanvasSidebar: React.FC<CanvasSidebarProps> = ({ onOpenSocialMediaM
                 onClick={() => handleToolClick(tool)}
                 onMouseEnter={() => setHoveredTool(tool.id)}
                 onMouseLeave={() => setHoveredTool(null)}
-                className={`relative p-2.5 rounded-md transition-all duration-150 cursor-pointer hover:bg-gray-100 active:scale-95 ${
-                  activeTool === tool.id ? 'bg-gray-100' : ''
+                className={`relative p-2.5 rounded-md transition-all duration-150 cursor-pointer active:scale-95 ${
+                  isDarkMode 
+                    ? `hover:bg-gray-700 ${activeTool === tool.id ? 'bg-gray-700' : ''}`
+                    : `hover:bg-gray-100 ${activeTool === tool.id ? 'bg-gray-100' : ''}`
                 } ${draggingTool?.id === tool.id ? 'opacity-50' : ''}`}
               >
                 <Icon className="w-6 h-6" size={24} style={{ color: tool.color }} />

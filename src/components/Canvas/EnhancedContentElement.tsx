@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Youtube, Instagram, Video, ExternalLink, X, Edit, Save, 
   MoreHorizontal, Play, Eye, ThumbsUp, Clock, User,
   BarChart3, Zap, RefreshCw, Copy, Share
 } from 'lucide-react';
-import { ContentElement as ContentElementType, Connection, Platform } from '@/types';
+import { ContentElement as ContentElementType, Connection, Platform, Position } from '@/types';
 import { ConnectionPoint } from './ConnectionPoint';
 import { useElementDrag } from '@/hooks/useElementDrag';
 import { SimpleResize } from './SimpleResize';
@@ -16,9 +16,9 @@ interface EnhancedContentElementProps {
   connecting: number | null;
   connections: Connection[];
   onSelect: (element: ContentElementType, event?: React.MouseEvent) => void;
-  onUpdate: (id: number, updates: Partial<ContentElementType>) => void;
-  onDelete: (id: number) => void;
-  onConnectionStart: (elementId: number) => void;
+  onUpdate: (id: string | number, updates: Partial<ContentElementType>) => void;
+  onDelete: (id: string | number) => void;
+  onConnectionStart: (elementId: string | number) => void;
   onOpenAnalysisPanel?: (element: ContentElementType) => void;
   onReanalyze?: (element: ContentElementType) => void;
   onDuplicate?: (element: ContentElementType) => void;
@@ -116,10 +116,14 @@ export const EnhancedContentElement: React.FC<EnhancedContentElementProps> = ({
   const analysis = (element as any).analysis;
   const metadata = (element as any).metadata;
 
+  const handleDragUpdate = useCallback((id: string | number, position: Position) => {
+    onUpdate(id, { x: position.x, y: position.y });
+  }, [onUpdate]);
+
   const { isDragging, localPosition, handleMouseDown, setElementRef } = useElementDrag({
     elementId: element.id,
     initialPosition: { x: element.x, y: element.y },
-    onUpdate: (id, position) => onUpdate(id, position),
+    onUpdate: handleDragUpdate,
     onSelect: (event) => onSelect(element, event)
   });
 

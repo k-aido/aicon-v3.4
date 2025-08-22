@@ -51,11 +51,12 @@ export const ContentSelector: React.FC<ContentSelectorProps> = ({
     setConnectedContent(contentElements);
   }, [chatElementId, connections, allElements]);
 
-  const toggleContent = (contentId: number) => {
-    if (selectedContentIds.includes(contentId)) {
-      onContentSelectionChange(selectedContentIds.filter(id => id !== contentId));
+  const toggleContent = (contentId: string | number) => {
+    const numericId = typeof contentId === 'number' ? contentId : Number(contentId);
+    if (selectedContentIds.includes(numericId)) {
+      onContentSelectionChange(selectedContentIds.filter(id => id !== numericId));
     } else {
-      onContentSelectionChange([...selectedContentIds, contentId]);
+      onContentSelectionChange([...selectedContentIds, numericId]);
     }
   };
 
@@ -63,7 +64,7 @@ export const ContentSelector: React.FC<ContentSelectorProps> = ({
     if (selectedContentIds.length === connectedContent.length) {
       onContentSelectionChange([]);
     } else {
-      onContentSelectionChange(connectedContent.map(c => c.id));
+      onContentSelectionChange(connectedContent.map(c => typeof c.id === 'number' ? c.id : Number(c.id)));
     }
   };
 
@@ -112,7 +113,7 @@ export const ContentSelector: React.FC<ContentSelectorProps> = ({
       {/* Content List */}
       <div className={`${expandedView ? 'max-h-96' : 'max-h-48'} overflow-y-auto`}>
         {connectedContent.map((content) => {
-          const isSelected = selectedContentIds.includes(content.id);
+          const isSelected = selectedContentIds.includes(typeof content.id === 'number' ? content.id : Number(content.id));
           const metadata = (content as any).metadata;
           const processedData = metadata?.processedData;
           

@@ -381,26 +381,27 @@ const CanvasComponent: React.FC<CanvasProps> = ({
 
     if (isCtrlCmd) {
       // Toggle selection - ensure we're working with current state
-      const currentlySelected = selectedElementIds.includes(element.id);
+      const currentlySelected = selectedElementIds.some(id => String(id) === String(element.id));
       
       if (currentlySelected) {
         // Remove from selection
-        const newSelection = selectedElementIds.filter(id => id !== element.id);
+        const newSelection = selectedElementIds.filter(id => String(id) !== String(element.id));
         setSelectedElementIds(newSelection);
         
         // Update selectedElement if we're deselecting the current one
-        if (selectedElement?.id === element.id) {
-          const remaining = elements.find(el => newSelection.includes(el.id));
+        if (selectedElement && String(selectedElement.id) === String(element.id)) {
+          const remaining = elements.find(el => newSelection.some(selId => String(selId) === String(el.id)));
           setSelectedElement(remaining || null);
         }
       } else {
-        // Add to selection
-        const newSelection = [...selectedElementIds, element.id];
+        // Add to selection - convert element.id to number if it's numeric
+        const numericId = typeof element.id === 'string' && !isNaN(Number(element.id)) ? Number(element.id) : element.id;
+        const newSelection = [...selectedElementIds, numericId as number];
         setSelectedElementIds(newSelection);
         setSelectedElement(element);
       }
       
-      setLastClickedElementId(element.id);
+      setLastClickedElementId(typeof element.id === 'number' ? element.id : Number(element.id));
       
       // Log for debugging
       console.log('Multi-select toggle:', {
@@ -411,18 +412,19 @@ const CanvasComponent: React.FC<CanvasProps> = ({
       });
     } else if (isShift && lastClickedElementId !== null) {
       // Range selection
-      const currentIndex = elements.findIndex(el => el.id === element.id);
-      const lastIndex = elements.findIndex(el => el.id === lastClickedElementId);
+      const currentIndex = elements.findIndex(el => String(el.id) === String(element.id));
+      const lastIndex = elements.findIndex(el => String(el.id) === String(lastClickedElementId));
       const start = Math.min(currentIndex, lastIndex);
       const end = Math.max(currentIndex, lastIndex);
-      const rangeIds = elements.slice(start, end + 1).map(el => el.id);
+      const rangeIds = elements.slice(start, end + 1).map(el => typeof el.id === 'number' ? el.id : Number(el.id));
       setSelectedElementIds(rangeIds);
       setSelectedElement(element);
     } else {
       // Single selection
-      setSelectedElementIds([element.id]);
+      const numericId = typeof element.id === 'string' && !isNaN(Number(element.id)) ? Number(element.id) : element.id;
+      setSelectedElementIds([numericId as number]);
       setSelectedElement(element);
-      setLastClickedElementId(element.id);
+      setLastClickedElementId(numericId as number);
     }
   }, [elements, lastClickedElementId, selectedElement, selectedElementIds, setSelectedElement]);
 
@@ -494,7 +496,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
     },
     onPaste: handleSmartPaste,
     onSelectAll: () => {
-      setSelectedElementIds(elements.map(el => el.id));
+      setSelectedElementIds(elements.map(el => typeof el.id === 'number' ? el.id : Number(el.id)));
     }
   });
 
@@ -513,7 +515,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
       setConnecting(null);
     } else {
       // Start connection
-      setConnecting(elementId);
+      setConnecting(typeof elementId === 'number' ? elementId : Number(elementId));
     }
   }, [connecting, setConnections, setConnecting]);
 
@@ -676,7 +678,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
               <ContentElement
                 key={`content-${element.id}`}
                 element={element}
-                selected={selectedElementIds.includes(element.id)}
+                selected={selectedElementIds.some(id => String(id) === String(element.id))}
                 connecting={connecting}
                 connections={connections}
                 onSelect={(el, event) => handleElementSelect(el, event)}
@@ -692,7 +694,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
               <ChatElement
                 key={`chat-${element.id}`}
                 element={element}
-                selected={selectedElementIds.includes(element.id)}
+                selected={selectedElementIds.some(id => String(id) === String(element.id))}
                 connecting={connecting}
                 connections={connections}
                 allElements={elements}
@@ -707,7 +709,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
               <TextComponent
                 key={`text-${element.id}`}
                 element={element}
-                selected={selectedElementIds.includes(element.id)}
+                selected={selectedElementIds.some(id => String(id) === String(element.id))}
                 connecting={connecting}
                 connections={connections}
                 onSelect={handleElementSelect}

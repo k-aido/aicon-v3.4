@@ -30,10 +30,10 @@ const MemoizedCanvasElement = memo<{
   connections: Connection[];
   allElements: CanvasElement[];
   onSelect: (element: CanvasElement) => void;
-  onPositionChange: (id: number, position: Position) => void;
-  onConnect: (id: number) => void;
-  onDelete: (id: number) => void;
-  onUpdate: (id: number, updates: Partial<CanvasElement>) => void;
+  onPositionChange: (id: string | number, position: Position) => void;
+  onConnect: (id: string | number) => void;
+  onDelete: (id: string | number) => void;
+  onUpdate: (id: string | number, updates: Partial<CanvasElement>) => void;
   onOpenAnalysisPanel?: (content: ContentElementType) => void;
 }>(({
   element,
@@ -112,7 +112,7 @@ const OptimizedCanvas: React.FC<CanvasProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, zoom: 1 });
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
-  const [selectedElementIds, setSelectedElementIds] = useState<number[]>([]);
+  const [selectedElementIds, setSelectedElementIds] = useState<(string | number)[]>([]);
 
   // Convert elements array to object for virtualization
   const elementsMap = useMemo(() => {
@@ -180,14 +180,14 @@ const OptimizedCanvas: React.FC<CanvasProps> = ({
     setSelectedElementIds([element.id]);
   }, [setSelectedElement]);
 
-  const handleElementPositionChange = useCallback((id: number, position: Position) => {
+  const handleElementPositionChange = useCallback((id: string | number, position: Position) => {
     setElements(prev => prev.map(el => 
-      el.id === id ? { ...el, x: position.x, y: position.y } : el
+      String(el.id) === String(id) ? { ...el, x: position.x, y: position.y } : el
     ));
   }, [setElements]);
 
-  const handleElementConnect = useCallback((id: number) => {
-    if (connecting && connecting !== id) {
+  const handleElementConnect = useCallback((id: string | number) => {
+    if (connecting && String(connecting) !== String(id)) {
       const newConnection: Connection = {
         id: Date.now(),
         from: connecting,
@@ -196,21 +196,21 @@ const OptimizedCanvas: React.FC<CanvasProps> = ({
       setConnections(prev => [...prev, newConnection]);
       setConnecting(null);
     } else {
-      setConnecting(id);
+      setConnecting(typeof id === 'number' ? id : Number(id));
     }
   }, [connecting, setConnections, setConnecting]);
 
-  const handleElementDelete = useCallback((id: number) => {
-    setElements(prev => prev.filter(el => el.id !== id));
-    setConnections(prev => prev.filter(conn => conn.from !== id && conn.to !== id));
-    if (selectedElement?.id === id) {
+  const handleElementDelete = useCallback((id: string | number) => {
+    setElements(prev => prev.filter(el => String(el.id) !== String(id)));
+    setConnections(prev => prev.filter(conn => String(conn.from) !== String(id) && String(conn.to) !== String(id)));
+    if (selectedElement && String(selectedElement.id) === String(id)) {
       setSelectedElement(null);
     }
   }, [setElements, setConnections, selectedElement, setSelectedElement]);
 
-  const handleElementUpdate = useCallback((id: number, updates: Partial<CanvasElement>) => {
+  const handleElementUpdate = useCallback((id: string | number, updates: Partial<CanvasElement>) => {
     setElements(prev => prev.map(el => 
-      el.id === id ? { ...el, ...updates } as CanvasElement : el
+      String(el.id) === String(id) ? { ...el, ...updates } as CanvasElement : el
     ));
   }, [setElements]);
 
@@ -283,9 +283,9 @@ const OptimizedCanvas: React.FC<CanvasProps> = ({
 
   // Visible connections (only render connections for visible elements)
   const visibleConnections = useMemo(() => {
-    const visibleIds = new Set(visibleElements.map(({ id }) => parseInt(id)));
+    const visibleIds = new Set(visibleElements.map(({ id }) => String(id)));
     return connections.filter(conn => 
-      visibleIds.has(conn.from) || visibleIds.has(conn.to)
+      visibleIds.has(String(conn.from)) || visibleIds.has(String(conn.to))
     );
   }, [connections, visibleElements]);
 

@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { X } from 'lucide-react';
-import { ChatElement as ChatElementType, Connection, CanvasElement } from '@/types';
+import { ChatElement as ChatElementType, Connection, CanvasElement, Position } from '@/types';
 import { ConnectionPoint } from './ConnectionPoint';
 import { ChatInterface } from '@/components/Chat/ChatInterface';
 import { useElementDrag } from '@/hooks/useElementDrag';
@@ -13,9 +13,9 @@ interface ChatElementProps {
   connections: Connection[];
   allElements: CanvasElement[];
   onSelect: (element: ChatElementType, event?: React.MouseEvent) => void;
-  onUpdate: (id: number, updates: Partial<ChatElementType>) => void;
-  onDelete: (id: number) => void;
-  onConnectionStart: (elementId: number) => void;
+  onUpdate: (id: string | number, updates: Partial<ChatElementType>) => void;
+  onDelete: (id: string | number) => void;
+  onConnectionStart: (elementId: string | number) => void;
 }
 
 /**
@@ -38,10 +38,14 @@ export const ChatElement: React.FC<ChatElementProps> = React.memo(({
     conn.from === element.id || conn.to === element.id
   );
 
+  const handleDragUpdate = useCallback((id: string | number, position: Position) => {
+    onUpdate(id, { x: position.x, y: position.y });
+  }, [onUpdate]);
+
   const { isDragging, localPosition, handleMouseDown, setElementRef } = useElementDrag({
     elementId: element.id,
     initialPosition: { x: element.x, y: element.y },
-    onUpdate,
+    onUpdate: handleDragUpdate,
     onSelect: (event) => onSelect(element, event)
   });
 

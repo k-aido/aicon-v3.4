@@ -575,7 +575,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
                     } as any}
                     connections={connections as any}
                     allElements={elements as any}
-                    onDelete={(id: number) => handleElementDelete(id.toString())}
+                    onDelete={(id: string | number) => handleElementDelete(String(id))}
                   />
                 </div>
               );

@@ -14,7 +14,7 @@ interface ChatInterfaceProps {
   element: ChatElement;
   connections: Connection[];
   allElements: CanvasElement[];
-  onDelete?: (id: number) => void;
+  onDelete?: (id: string | number) => void;
 }
 
 // Available LLM models
@@ -71,8 +71,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   // Subscribe to store changes for this element's conversations
   // Force re-render when conversations change
   const storeConversations = useChatStore((state) => state.conversations);
-  const conversations = storeConversations[element.id] || [];
-  const [activeConversationId, setActiveConversationId] = useState(() => getActiveConversation(element.id));
+  const conversations = storeConversations[Number(element.id)] || [];
+  const [activeConversationId, setActiveConversationId] = useState(() => getActiveConversation(Number(element.id)));
   
   // Get current conversation and messages
   const activeConversation = conversations.find(conv => conv.id === activeConversationId);
@@ -82,14 +82,14 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   // Load conversations from localStorage on mount
   useEffect(() => {
     console.log(`[ChatInterface] Loading conversations for element ${element.id}`);
-    loadFromLocalStorage(element.id);
-    const activeId = getActiveConversation(element.id);
+    loadFromLocalStorage(Number(element.id));
+    const activeId = getActiveConversation(Number(element.id));
     setActiveConversationId(activeId);
   }, [element.id, loadFromLocalStorage, getActiveConversation]);
   
   // Save active conversation when it changes
   useEffect(() => {
-    setActiveConversation(element.id, activeConversationId);
+    setActiveConversation(Number(element.id), activeConversationId);
   }, [activeConversationId, element.id, setActiveConversation]);
 
   // Load conversations from database on mount
@@ -149,7 +149,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
           );
           
           if (conversationsWithMessages.length > 0) {
-            setStoreConversations(element.id, conversationsWithMessages);
+            setStoreConversations(Number(element.id), conversationsWithMessages);
             setActiveConversationId(conversationsWithMessages[0].id);
           }
         }
@@ -358,7 +358,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       
       // Update state with new conversation
       workingConversations = [...conversations, newConversation];
-      setStoreConversations(element.id, workingConversations);
+      setStoreConversations(Number(element.id), workingConversations);
       setActiveConversationId(newConversationId);
       currentActiveConversationId = newConversationId;
     }
@@ -409,7 +409,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         ? { ...conv, messages: updatedMessages, lastMessageAt: new Date() }
         : conv
     );
-    setStoreConversations(element.id, updatedConversations);
+    setStoreConversations(Number(element.id), updatedConversations);
     
     // Clear input and mentioned content
     setInput('');
@@ -500,7 +500,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
               ? { ...conv, messages: currentMessages } // Revert to original messages
               : conv
           );
-          setStoreConversations(element.id, revertedConversations);
+          setStoreConversations(Number(element.id), revertedConversations);
           
           // Show the modal
           setShowCreditsModal(true);
@@ -561,7 +561,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         finalConversations: finalConversations.map(c => ({ id: c.id, messageCount: c.messages.length }))
       });
       
-      setStoreConversations(element.id, finalConversations);
+      setStoreConversations(Number(element.id), finalConversations);
     } catch (error) {
       console.error('Error calling AI API:', error);
       let errorContent = error instanceof Error ? error.message : 'Unknown error';
@@ -585,7 +585,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
               }
             : conv
         );
-        setStoreConversations(element.id, finalConversations);
+        setStoreConversations(Number(element.id), finalConversations);
       }
     } finally {
       setIsLoading(false);
@@ -612,7 +612,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       lastMessageAt: new Date()
     };
     const updatedConversations = [...conversations, newConversation];
-    setStoreConversations(element.id, updatedConversations);
+    setStoreConversations(Number(element.id), updatedConversations);
     setActiveConversationId(newConversation.id);
   };
 
@@ -636,7 +636,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
     
     const updatedConversations = conversations.filter(c => c.id !== id);
-    setStoreConversations(element.id, updatedConversations);
+    setStoreConversations(Number(element.id), updatedConversations);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

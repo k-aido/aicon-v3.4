@@ -725,8 +725,10 @@ const CanvasComponent: React.FC<CanvasProps> = ({
       </div>
 
       {/* Top-Right Credit Display */}
-      <div className="absolute top-4 right-4 z-30">
-        <SimpleCreditDisplay />
+      <div className="absolute top-4 right-4 z-50">
+        <div className="bg-white rounded-lg shadow-lg px-4 h-12 flex items-center">
+          <SimpleCreditDisplay />
+        </div>
       </div>
 
       {/* Bottom-Right Canvas Controls */}

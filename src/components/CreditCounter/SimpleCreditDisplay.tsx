@@ -85,24 +85,24 @@ export default function SimpleCreditDisplay() {
 
   if (loading && !credits) {
     return (
-      <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-lg">
-        <Coins className="h-4 w-4 text-gray-400 animate-pulse" />
+      <div className="flex items-center gap-2">
+        <Coins className="h-5 w-5 text-gray-400 animate-pulse" />
       </div>
     );
   }
 
   if (error && !credits) {
     return (
-      <div className="flex items-center gap-2 px-3 py-1.5 bg-red-50 rounded-lg">
-        <Coins className="h-4 w-4 text-red-400" />
+      <div className="flex items-center gap-2">
+        <Coins className="h-5 w-5 text-red-400" />
       </div>
     );
   }
 
   return (
-    <div className={`group relative flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all ${getCreditsBackground()}`}>
-      <Coins className={`h-4 w-4 ${getCreditsColor()}`} />
-      <span className={`text-sm font-semibold ${getCreditsColor()}`}>
+    <div className="group relative flex items-center gap-2">
+      <Coins className={`h-5 w-5 ${getCreditsColor()}`} />
+      <span className={`text-sm font-medium ${getCreditsColor()}`}>
         {credits ? formatNumber(credits.total) : '0'}
       </span>
 

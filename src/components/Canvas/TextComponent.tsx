@@ -6,16 +6,17 @@ import { Connection } from '@/types';
 import { ConnectionPoint } from './ConnectionPoint';
 import { useElementDrag } from '@/hooks/useElementDrag';
 import { SimpleResize } from './SimpleResize';
+import { complexToSimpleConnections } from '@/utils/typeAdapters';
 
 interface TextComponentProps {
-  element: TextData;
+  element: TextData | any; // Accept both type systems
   selected: boolean;
-  connecting: string | null;
-  connections: Connection[];
-  onSelect: (element: TextData, event?: React.MouseEvent) => void;
-  onUpdate: (id: number, updates: Partial<TextData>) => void;
-  onDelete: (id: string) => void;
-  onConnectionStart: (elementId: string) => void;
+  connecting: string | number | null;
+  connections: Connection[] | any[]; // Accept both connection types
+  onSelect: (element: any, event?: React.MouseEvent) => void;
+  onUpdate: (id: number | string, updates: any) => void;
+  onDelete: (id: string | number) => void;
+  onConnectionStart: (elementId: string | number) => void;
 }
 
 export const TextComponent: React.FC<TextComponentProps> = React.memo(({
@@ -32,24 +33,38 @@ export const TextComponent: React.FC<TextComponentProps> = React.memo(({
   const [localContent, setLocalContent] = useState(element.content);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const hasConnections = connections.some(conn => 
+  // Convert connections to simple format if needed
+  const simpleConnections = connections[0] && 'source' in connections[0] 
+    ? complexToSimpleConnections(connections as any)
+    : connections as Connection[];
+
+  const hasConnections = simpleConnections.some(conn => 
     conn.from === Number(element.id) || conn.to === Number(element.id)
   );
 
+  // Handle both type systems
+  const elementId = typeof element.id === 'string' ? element.id : element.id.toString();
+  const position = element.position || { x: element.x, y: element.y };
+  const dimensions = element.dimensions || { width: element.width, height: element.height };
+  
   const { isDragging, localPosition, handleMouseDown, setElementRef } = useElementDrag({
     elementId: Number(element.id),
-    initialPosition: element.position,
-    onUpdate: (id, position) => onUpdate(id, { 
-      x: position.x, 
-      y: position.y,
-      position: position 
-    }),
+    initialPosition: position,
+    onUpdate: (id, pos) => {
+      // Update both formats
+      const updates: any = { 
+        x: pos.x, 
+        y: pos.y,
+        position: pos 
+      };
+      onUpdate(id, updates);
+    },
     onSelect: (event) => onSelect(element, event)
   });
 
   const handleConnectionClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    onConnectionStart(element.id);
+    onConnectionStart(elementId);
   };
 
   const handleResize = (newWidth: number, newHeight: number) => {
@@ -112,8 +127,8 @@ export const TextComponent: React.FC<TextComponentProps> = React.memo(({
       }}
     >
       <SimpleResize
-        width={element.dimensions.width}
-        height={element.dimensions.height}
+        width={dimensions.width}
+        height={dimensions.height}
         minWidth={200}
         minHeight={150}
         onResize={handleResize}
@@ -159,7 +174,7 @@ export const TextComponent: React.FC<TextComponentProps> = React.memo(({
               onClick={(e) => {
                 e.stopPropagation();
                 console.log('🗑️ [TextComponent] Delete button clicked:', { elementId: element.id });
-                onDelete(element.id);
+                onDelete(elementId);
               }}
               onMouseDown={(e) => e.stopPropagation()}
               className="p-1 hover:bg-gray-700 rounded transition-colors ml-auto"

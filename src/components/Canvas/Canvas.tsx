@@ -8,6 +8,13 @@ import { ContentElement } from './ContentElement';
 import { ChatElement } from './ChatElement';
 import { TextComponent } from './TextComponent';
 import { useCanvasStore } from '@/store/canvasStore';
+import { 
+  createTextElement, 
+  createChatElement, 
+  createContentElement,
+  simpleToComplexElement,
+  complexToSimpleElement
+} from '@/utils/typeAdapters';
 
 // Generate truly unique numeric IDs for canvas elements
 let idCounter = Math.floor(Math.random() * 1000000); // Start with random base to avoid conflicts
@@ -246,24 +253,26 @@ const CanvasComponent: React.FC<CanvasProps> = ({
   };
 
   // Handle element updates
-  const handleElementUpdate = useCallback((id: number, updates: Partial<CanvasElement>) => {
-    console.log('🔧 [Canvas] handleElementUpdate called:', { id, updates });
+  const handleElementUpdate = useCallback((id: number | string, updates: Partial<CanvasElement>) => {
+    const numericId = typeof id === 'string' ? parseInt(id) : id;
+    console.log('🔧 [Canvas] handleElementUpdate called:', { id, numericId, updates });
     setElements(prev => {
-      const updated = prev.map(el => el.id === id ? { ...el, ...updates } as CanvasElement : el);
+      const updated = prev.map(el => el.id === numericId ? { ...el, ...updates } as CanvasElement : el);
       console.log('🔧 [Canvas] Elements after update:', updated.map(e => ({ id: e.id, type: e.type, title: (e as any).title || 'N/A' })));
       return updated;
     });
   }, [setElements]);
 
   // Handle element deletion (single)
-  const handleElementDelete = useCallback(async (id: number) => {
-    console.log('🗑️ [Canvas] handleElementDelete called:', { id });
+  const handleElementDelete = useCallback(async (id: number | string) => {
+    const numericId = typeof id === 'string' ? parseInt(id) : id;
+    console.log('🗑️ [Canvas] handleElementDelete called:', { id, numericId });
     
     // Get project ID from URL
     const projectId = window.location.pathname.split('/canvas/')[1];
     
     // Find element to delete
-    const elementToDelete = elements.find(el => el.id === id);
+    const elementToDelete = elements.find(el => el.id === numericId);
     
     // Clean up content data for ContentElements
     if (elementToDelete && elementToDelete.type === 'content' && (elementToDelete as any).metadata?.scrapeId) {
@@ -284,7 +293,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
     
     setElements(prev => {
       const beforeDelete = prev.map(e => ({ id: e.id, type: e.type, title: (e as any).title || 'N/A' }));
-      const afterDelete = prev.filter(el => el.id !== id);
+      const afterDelete = prev.filter(el => el.id !== numericId);
       console.log('🗑️ [Canvas] Elements before delete filter:', beforeDelete);
       console.log('🗑️ [Canvas] Elements after delete filter:', afterDelete.map(e => ({ id: e.id, type: e.type, title: (e as any).title || 'N/A' })));
       console.log('🗑️ [Canvas] Filter removed', beforeDelete.length - afterDelete.length, 'elements');
@@ -292,17 +301,17 @@ const CanvasComponent: React.FC<CanvasProps> = ({
     });
     setConnections(prev => {
       const beforeConnFilter = prev.length;
-      const afterConnFilter = prev.filter(conn => conn.from !== id && conn.to !== id);
+      const afterConnFilter = prev.filter(conn => conn.from !== numericId && conn.to !== numericId);
       console.log('🗑️ [Canvas] Connections filter - before:', beforeConnFilter, 'after:', afterConnFilter.length);
       return afterConnFilter;
     });
     setSelectedElementIds(prev => {
       const beforeSelFilter = prev.length;
-      const afterSelFilter = prev.filter(selId => selId !== id);
+      const afterSelFilter = prev.filter(selId => selId !== numericId);
       console.log('🗑️ [Canvas] Selected IDs filter - before:', beforeSelFilter, 'after:', afterSelFilter.length);
       return afterSelFilter;
     });
-    if (selectedElement?.id === id) {
+    if (selectedElement?.id === numericId) {
       setSelectedElement(null);
     }
   }, [elements, setElements, setConnections, selectedElement, setSelectedElement]);
@@ -483,21 +492,22 @@ const CanvasComponent: React.FC<CanvasProps> = ({
   });
 
   // Handle connection creation
-  const handleConnectionStart = useCallback((elementId: number) => {
+  const handleConnectionStart = useCallback((elementId: number | string) => {
+    const numericId = typeof elementId === 'string' ? parseInt(elementId) : elementId;
     if (connecting) {
       // Complete connection
-      if (connecting !== elementId) {
+      if (connecting !== numericId) {
         const newConnection: Connection = {
           id: generateUniqueId(),
           from: connecting,
-          to: elementId
+          to: numericId
         };
         setConnections(prev => [...prev, newConnection]);
       }
       setConnecting(null);
     } else {
       // Start connection
-      setConnecting(elementId);
+      setConnecting(numericId);
     }
   }, [connecting, setConnections, setConnecting]);
 
@@ -689,14 +699,14 @@ const CanvasComponent: React.FC<CanvasProps> = ({
             return (
               <TextComponent
                 key={`text-${element.id}`}
-                element={element as any}
+                element={element}
                 selected={selectedElementIds.includes(element.id)}
-                connecting={connecting ? String(connecting) : null}
+                connecting={connecting}
                 connections={connections}
-                onSelect={(el, event) => handleElementSelect(el as any, event)}
-                onUpdate={handleElementUpdate as any}
-                onDelete={(id) => handleElementDelete(Number(id))}
-                onConnectionStart={(id) => handleConnectionStart(Number(id))}
+                onSelect={handleElementSelect}
+                onUpdate={handleElementUpdate}
+                onDelete={handleElementDelete}
+                onConnectionStart={handleConnectionStart}
               />
             );
           }

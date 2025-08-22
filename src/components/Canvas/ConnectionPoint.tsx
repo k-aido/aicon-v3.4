@@ -31,8 +31,7 @@ export const ConnectionPoint: React.FC<ConnectionPointProps> = React.memo(({
         boxShadow: '0 2px 6px rgba(30, 139, 255, 0.4)',
         zIndex: 50 
       }}
-      onClick={onClick}
-      onMouseDown={(e) => {
+      onClick={(e) => {
         e.stopPropagation();
         onClick(e);
       }}

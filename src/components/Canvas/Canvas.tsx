@@ -65,12 +65,23 @@ const CanvasComponent: React.FC<CanvasProps> = ({
   const [selectedElementIds, setSelectedElementIds] = useState<number[]>([]);
   const [lastClickedElementId, setLastClickedElementId] = useState<number | null>(null);
   
-  // Focus canvas on mount
+  // Focus canvas on mount and handle escape key
   useEffect(() => {
     if (canvasRef.current) {
       canvasRef.current.focus();
     }
-  }, []);
+    
+    // Handle escape key to cancel connection
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && connecting) {
+        console.log('[Canvas] Cancelling connection');
+        setConnecting(null);
+      }
+    };
+    
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [connecting, setConnecting]);
 
   // Canvas drag handling
   const { isDragging, handleMouseDown } = useCanvasDrag({
@@ -143,10 +154,13 @@ const CanvasComponent: React.FC<CanvasProps> = ({
 
   // Track mouse position for connection preview
   const handleMouseMove = (e: React.MouseEvent) => {
-    setMousePos({
-      x: (e.clientX - viewport.x) / viewport.zoom,
-      y: (e.clientY - viewport.y) / viewport.zoom
-    });
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (rect) {
+      setMousePos({
+        x: (e.clientX - rect.left - viewport.x) / viewport.zoom,
+        y: (e.clientY - rect.top - viewport.y) / viewport.zoom
+      });
+    }
   };
 
   // Handle drag over
@@ -608,7 +622,9 @@ const CanvasComponent: React.FC<CanvasProps> = ({
   return (
     <div 
       ref={canvasRef}
-      className={`flex-1 relative overflow-hidden transition-colors duration-200`}
+      className={`flex-1 relative overflow-hidden transition-colors duration-200 ${
+        connecting ? 'cursor-crosshair' : ''
+      }`}
       style={{ backgroundColor: isDarkMode ? darkModeColors.dark : darkModeColors.light }}
       data-canvas="true"
       tabIndex={0}
@@ -619,6 +635,13 @@ const CanvasComponent: React.FC<CanvasProps> = ({
       onFocus={(e) => {
         // Ensure canvas can receive keyboard events
         e.currentTarget.focus();
+      }}
+      onContextMenu={(e) => {
+        if (connecting) {
+          e.preventDefault();
+          console.log('[Canvas] Right-click cancelling connection');
+          setConnecting(null);
+        }
       }}
     >
       {/* Canvas Background - Draggable Area */}
@@ -673,22 +696,42 @@ const CanvasComponent: React.FC<CanvasProps> = ({
           {/* Connection Preview */}
           {connectionPreview && (
             <g>
+              {/* Thicker background line for visibility */}
+              <path
+                d={connectionPreview}
+                stroke="#1e8bff"
+                strokeWidth="4"
+                fill="none"
+                strokeOpacity="0.2"
+                className="pointer-events-none"
+              />
+              {/* Main connection line */}
               <path
                 d={connectionPreview}
                 stroke="#1e8bff"
                 strokeWidth="2"
                 fill="none"
-                strokeDasharray="5 3"
-                strokeOpacity="0.5"
-                className="pointer-events-none"
+                strokeDasharray="8 4"
+                strokeOpacity="0.8"
+                className="pointer-events-none animate-pulse"
+              />
+              {/* Cursor indicator */}
+              <circle
+                cx={mousePos.x}
+                cy={mousePos.y}
+                r="12"
+                fill="#1e8bff"
+                fillOpacity="0.3"
+                stroke="#1e8bff"
+                strokeWidth="2"
+                className="pointer-events-none animate-pulse"
               />
               <circle
                 cx={mousePos.x}
                 cy={mousePos.y}
-                r="8"
+                r="4"
                 fill="#1e8bff"
-                fillOpacity="0.5"
-                className="pointer-events-none connection-dot"
+                className="pointer-events-none"
               />
             </g>
           )}

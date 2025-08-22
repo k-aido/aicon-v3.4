@@ -8,6 +8,13 @@ import { ContentElement } from './ContentElement';
 import { ChatElement } from './ChatElement';
 import { TextComponent } from './TextComponent';
 import { useCanvasStore } from '@/store/canvasStore';
+import { 
+  createTextElement, 
+  createChatElement, 
+  createContentElement,
+  simpleToComplexElement,
+  complexToSimpleElement
+} from '@/utils/typeAdapters';
 
 // Generate truly unique numeric IDs for canvas elements
 let idCounter = Math.floor(Math.random() * 1000000); // Start with random base to avoid conflicts
@@ -488,7 +495,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
   const handleConnectionStart = useCallback((elementId: string | number) => {
     if (connecting) {
       // Complete connection
-      if (connecting !== elementId) {
+      if (String(connecting) !== String(elementId)) {
         const newConnection: Connection = {
           id: generateUniqueId(),
           from: connecting,
@@ -691,14 +698,14 @@ const CanvasComponent: React.FC<CanvasProps> = ({
             return (
               <TextComponent
                 key={`text-${element.id}`}
-                element={element as any}
+                element={element}
                 selected={selectedElementIds.includes(element.id)}
-                connecting={connecting ? String(connecting) : null}
+                connecting={connecting}
                 connections={connections}
-                onSelect={(el, event) => handleElementSelect(el as any, event)}
-                onUpdate={handleElementUpdate as any}
-                onDelete={(id) => handleElementDelete(Number(id))}
-                onConnectionStart={(id) => handleConnectionStart(Number(id))}
+                onSelect={handleElementSelect}
+                onUpdate={handleElementUpdate}
+                onDelete={handleElementDelete}
+                onConnectionStart={handleConnectionStart}
               />
             );
           }

@@ -2,7 +2,7 @@ import React, { useState, useRef, useCallback, useMemo } from 'react';
 import { ContentPieceComponent } from './ContentPieceComponent';
 import { CreatorContentElement } from './CreatorContentElement';
 import { FolderComponent } from './FolderComponent';
-import { TextComponent } from './TextComponent';
+import { TextComponentAdapter } from './TextComponentAdapter';
 import { ChatInterface } from '@/components/Chat/ChatInterface';
 import { ContextMenu, useContextMenu } from './ContextMenu';
 import { ContentDetailsPanel } from '../Sidebar/ContentDetailsPanel';
@@ -583,7 +583,7 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
 
             if (element.type === 'text') {
               return (
-                <TextComponent
+                <TextComponentAdapter
                   key={element.id}
                   element={element as TextData}
                   selected={isSelected}

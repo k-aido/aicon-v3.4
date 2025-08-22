@@ -172,15 +172,17 @@ const CanvasComponent: React.FC<CanvasProps> = ({
       
       if (tool.type === 'chat') {
         const chatId = generateUniqueId();
+        const welcomeMessage = {
+          id: 'welcome-' + Date.now(),
+          role: 'assistant' as const,
+          content: "👋 Hello! I'm your AI assistant. I can help you analyze content, answer questions, and provide insights. \n\n**Here's how to get started:**\n- Connect content elements to me by dragging from their connection points\n- Ask me questions about the connected content\n- I'll provide analysis and insights based on what you share\n\nWhat would you like to explore today?",
+          timestamp: new Date()
+        };
+        
         const defaultConversation = {
           id: 'default-' + chatId,
           title: 'Welcome Chat',
-          messages: [{
-            id: 'welcome-' + Date.now(),
-            role: 'assistant',
-            content: "👋 Hello! I'm your AI assistant. I can help you analyze content, answer questions, and provide insights. \n\n**Here's how to get started:**\n- Connect content elements to me by dragging from their connection points\n- Ask me questions about the connected content\n- I'll provide analysis and insights based on what you share\n\nWhat would you like to explore today?",
-            timestamp: new Date()
-          }],
+          messages: [welcomeMessage],
           createdAt: new Date(),
           lastMessageAt: new Date()
         };

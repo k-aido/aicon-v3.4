@@ -133,6 +133,7 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
 
   const handleConnectionClick = (e: React.MouseEvent) => {
     e.stopPropagation();
+    console.log('[ContentElement] Connection point clicked for element:', element.id);
     onConnectionStart(element.id);
   };
 
@@ -244,9 +245,12 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
       }}
       onMouseDown={(e) => {
         console.log('[ContentElement] onMouseDown triggered for element:', element.id);
-        // Only start drag if not clicking on resize handles or edit controls
-        if (!(e.target as HTMLElement).closest('[data-resize-handle]') && 
-            !(e.target as HTMLElement).closest('[data-no-drag]')) {
+        // Only start drag if not clicking on resize handles, edit controls, or connection points
+        const target = e.target as HTMLElement;
+        
+        if (!target.closest('[data-resize-handle]') && 
+            !target.closest('[data-no-drag]') &&
+            !target.closest('[data-connection-point]')) {
           console.log('[ContentElement] Calling handleMouseDown for element:', element.id);
           handleMouseDown(e);
         }

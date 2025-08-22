@@ -23,11 +23,21 @@ export const ConnectionPoint: React.FC<ConnectionPointProps> = React.memo(({
 
   return (
     <div 
-      className={`absolute ${positionClasses[position]} w-4 h-4 bg-[#1e8bff] rounded-full cursor-pointer hover:bg-[#1a7ae5] hover:scale-110 transition-all shadow-lg flex items-center justify-center z-20 opacity-100`}
+      data-connection-point="true"
+      className={`absolute ${positionClasses[position]} w-4 h-4 bg-[#1e8bff] rounded-full cursor-pointer hover:bg-[#1a7ae5] hover:scale-110 transition-all shadow-lg flex items-center justify-center pointer-events-auto ${
+        isVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
+      }`}
+      style={{ 
+        boxShadow: '0 2px 6px rgba(30, 139, 255, 0.4)',
+        zIndex: 50 
+      }}
       onClick={onClick}
-      style={{ boxShadow: '0 2px 6px rgba(30, 139, 255, 0.4)' }}
+      onMouseDown={(e) => {
+        e.stopPropagation();
+        onClick(e);
+      }}
     >
-      <div className="w-1.5 h-1.5 bg-white rounded-full" />
+      <div className="w-1.5 h-1.5 bg-white rounded-full pointer-events-none" />
     </div>
   );
 });

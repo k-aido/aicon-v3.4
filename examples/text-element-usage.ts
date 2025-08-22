@@ -2,44 +2,48 @@
  * Example: How to programmatically create and use Text Elements
  */
 
-import { TextData } from '@/types/canvas';
 import { useCanvasStore } from '@/store/canvasStore';
 
 // Example 1: Creating a text element
 const createTextElement = () => {
   const store = useCanvasStore.getState();
   
-  const newTextElement: TextData = {
-    id: `text-${Date.now()}`,
-    type: 'text',
-    position: { x: 300, y: 200 },
-    dimensions: { width: 400, height: 300 },
+  // Create element conforming to the store's Element interface
+  const newTextElement = {
+    id: Date.now(), // Using number ID as expected by the store
+    type: 'text' as const,
+    x: 300,
+    y: 200,
+    width: 400,
+    height: 300,
     title: 'Project Notes',
     content: 'Important context for the AI assistant...',
     lastModified: new Date(),
-    zIndex: 1,
-    isVisible: true,
-    isLocked: false,
-    createdAt: new Date(),
-    updatedAt: new Date()
+    // Optional properties from the Element interface
+    metadata: {
+      zIndex: 1,
+      isVisible: true,
+      isLocked: false,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    }
   };
   
   store.addElement(newTextElement);
 };
 
 // Example 2: Updating text content
-const updateTextContent = (elementId: string, newContent: string) => {
+const updateTextContent = (elementId: number | string, newContent: string) => {
   const store = useCanvasStore.getState();
   
   store.updateElement(elementId, {
     content: newContent,
-    lastModified: new Date(),
-    updatedAt: new Date()
+    lastModified: new Date()
   });
 };
 
 // Example 3: Connecting text to a chat element
-const connectTextToChat = (textElementId: string, chatElementId: string) => {
+const connectTextToChat = (textElementId: number | string, chatElementId: number | string) => {
   const store = useCanvasStore.getState();
   
   const connection = {

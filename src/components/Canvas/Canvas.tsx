@@ -321,14 +321,14 @@ const CanvasComponent: React.FC<CanvasProps> = ({
   }, [elements, setElements, setConnections, selectedElement, setSelectedElement]);
 
   // Handle multiple element deletion
-  const handleMultipleElementDelete = useCallback(async (ids: number[]) => {
+  const handleMultipleElementDelete = useCallback(async (ids: (string | number)[]) => {
     console.log('🗑️ [Canvas] handleMultipleElementDelete called:', { ids });
     
     // Get project ID from URL
     const projectId = window.location.pathname.split('/canvas/')[1];
     
     // Clean up content data for ContentElements
-    const elementsToDelete = elements.filter(el => ids.includes(el.id));
+    const elementsToDelete = elements.filter(el => ids.some(id => String(id) === String(el.id)));
     const cleanupPromises = elementsToDelete
       .filter(el => el.type === 'content' && (el as any).metadata?.scrapeId)
       .map(async (element) => {
@@ -354,7 +354,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
     
     setElements(prev => {
       const beforeDelete = prev.map(e => ({ id: e.id, type: e.type, title: (e as any).title || 'N/A' }));
-      const afterDelete = prev.filter(el => !ids.includes(el.id));
+      const afterDelete = prev.filter(el => !ids.some(id => String(id) === String(el.id)));
       console.log('🗑️ [Canvas] Elements before multiple delete filter:', beforeDelete);
       console.log('🗑️ [Canvas] Elements after multiple delete filter:', afterDelete.map(e => ({ id: e.id, type: e.type, title: (e as any).title || 'N/A' })));
       console.log('🗑️ [Canvas] Multiple delete filter removed', beforeDelete.length - afterDelete.length, 'elements');
@@ -363,7 +363,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
     setConnections(prev => {
       const beforeConnFilter = prev.length;
       const afterConnFilter = prev.filter(conn => 
-        !ids.includes(conn.from) && !ids.includes(conn.to)
+        !ids.some(id => String(id) === String(conn.from)) && !ids.some(id => String(id) === String(conn.to))
       );
       console.log('🗑️ [Canvas] Multiple delete connections filter - before:', beforeConnFilter, 'after:', afterConnFilter.length);
       return afterConnFilter;
@@ -483,7 +483,10 @@ const CanvasComponent: React.FC<CanvasProps> = ({
     enabled: true,
     onDelete: (elementIds: string[]) => {
       console.log('🔥 [Canvas] Keyboard delete triggered:', { elementIds, selectedElementIds });
-      const ids = elementIds.map(id => parseInt(id)).filter(id => !isNaN(id));
+      const ids = elementIds.map(id => {
+        const parsed = parseInt(id);
+        return !isNaN(parsed) ? parsed : id;
+      });
       console.log('🔥 [Canvas] Parsed IDs for deletion:', ids);
       if (ids.length > 0) {
         handleMultipleElementDelete(ids);

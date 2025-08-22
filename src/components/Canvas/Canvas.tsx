@@ -15,6 +15,7 @@ import {
   simpleToComplexElement,
   complexToSimpleElement
 } from '@/utils/typeAdapters';
+import SimpleCreditDisplay from '@/components/CreditCounter/SimpleCreditDisplay';
 
 // Generate truly unique numeric IDs for canvas elements
 let idCounter = Math.floor(Math.random() * 1000000); // Start with random base to avoid conflicts
@@ -721,6 +722,11 @@ const CanvasComponent: React.FC<CanvasProps> = ({
       <div className="absolute top-4 left-4 bg-black/80 text-white rounded-lg shadow-lg p-2 text-xs font-mono">
         <div>Selected IDs: [{selectedElementIds.join(', ')}]</div>
         <div>Count: {selectedElementIds.length}</div>
+      </div>
+
+      {/* Top-Right Credit Display */}
+      <div className="absolute top-4 right-4 z-30">
+        <SimpleCreditDisplay />
       </div>
 
       {/* Bottom-Right Canvas Controls */}

@@ -691,7 +691,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
                 key={`text-${element.id}`}
                 element={element as any}
                 selected={selectedElementIds.includes(element.id)}
-                connecting={connecting}
+                connecting={connecting ? String(connecting) : null}
                 connections={connections}
                 onSelect={(el, event) => handleElementSelect(el as any, event)}
                 onUpdate={handleElementUpdate}

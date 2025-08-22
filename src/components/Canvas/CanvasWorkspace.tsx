@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback, useMemo } from 'react';
 import { ContentPieceComponent } from './ContentPieceComponent';
 import { CreatorContentElement } from './CreatorContentElement';
 import { FolderComponent } from './FolderComponent';
+import { TextComponent } from './TextComponent';
 import { ChatInterface } from '@/components/Chat/ChatInterface';
 import { ContextMenu, useContextMenu } from './ContextMenu';
 import { ContentDetailsPanel } from '../Sidebar/ContentDetailsPanel';
@@ -15,7 +16,8 @@ import {
   CanvasElement, 
   ContentPiece, 
   FolderData, 
-  ChatData, 
+  ChatData,
+  TextData, 
   Connection, 
   CanvasState,
   Viewport,
@@ -330,6 +332,15 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
           childIds: [],
           isExpanded: true
         } as FolderData;
+      } else if (tool.type === 'text') {
+        newElement = {
+          ...baseElement,
+          type: 'text',
+          dimensions: { width: 400, height: 300 },
+          title: 'New Text',
+          content: '',
+          lastModified: new Date()
+        } as TextData;
       } else {
         // Content piece
         newElement = {
@@ -567,6 +578,22 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
                     onDelete={(id: number) => handleElementDelete(id.toString())}
                   />
                 </div>
+              );
+            }
+
+            if (element.type === 'text') {
+              return (
+                <TextComponent
+                  key={element.id}
+                  element={element as TextData}
+                  selected={isSelected}
+                  connecting={connecting}
+                  connections={connections}
+                  onSelect={() => selectElement(element.id)}
+                  onUpdate={handleElementUpdate}
+                  onDelete={handleElementDelete}
+                  onConnectionStart={handleConnectionStart}
+                />
               );
             }
 

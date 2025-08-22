@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "supabase": {
+      "command": "node",
+      "args": [
+        "/Users/kdo/Downloads/v.3.4-aicon/aicon-v3.4/node_modules/mcp-supabase/build/index.js"
+      ],
+      "env": {
+        "SUPABASE_URL": "https://cwwllnxxcnlquocvfuqd.supabase.co",
+        "SUPABASE_SERVICE_ROLE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN3d2xsbnh4Y25scXVvY3ZmdXFkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MzA5MzQxOCwiZXhwIjoyMDY4NjY5NDE4fQ.tPcIxEFiGvoxwSiWTAkhNN87Ezx0LmuVaIsmdjTAfQk"
+      }
+    }
+  }
+}

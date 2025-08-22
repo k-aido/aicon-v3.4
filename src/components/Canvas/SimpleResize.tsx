@@ -151,7 +151,7 @@ export const SimpleResize: React.FC<SimpleResizeProps> = ({
     position: 'absolute' as const,
     opacity: showHandle ? 1 : 0,
     transition: 'opacity 0.2s',
-    background: '#8b5cf6',
+    background: '#1e8bff',
     borderRadius: '2px',
   };
 
@@ -208,7 +208,7 @@ export const SimpleResize: React.FC<SimpleResizeProps> = ({
               bottom: -4,
               right: -4,
               cursor: 'se-resize',
-              background: 'linear-gradient(-45deg, transparent 30%, #8b5cf6 30%, #8b5cf6 70%, transparent 70%)',
+              background: 'linear-gradient(-45deg, transparent 30%, #1e8bff 30%, #1e8bff 70%, transparent 70%)',
               width: '12px',
               height: '12px',
             }}
@@ -229,7 +229,7 @@ export const SimpleResize: React.FC<SimpleResizeProps> = ({
           {/* Edge handles */}
           <div
             data-resize-handle
-            className="hover:bg-purple-500/20"
+            className="hover:bg-[#1e8bff]/20"
             style={{
               ...edgeHandleStyle,
               top: 0,
@@ -242,7 +242,7 @@ export const SimpleResize: React.FC<SimpleResizeProps> = ({
           />
           <div
             data-resize-handle
-            className="hover:bg-purple-500/20"
+            className="hover:bg-[#1e8bff]/20"
             style={{
               ...edgeHandleStyle,
               bottom: 0,
@@ -255,7 +255,7 @@ export const SimpleResize: React.FC<SimpleResizeProps> = ({
           />
           <div
             data-resize-handle
-            className="hover:bg-purple-500/20"
+            className="hover:bg-[#1e8bff]/20"
             style={{
               ...edgeHandleStyle,
               left: 0,
@@ -268,7 +268,7 @@ export const SimpleResize: React.FC<SimpleResizeProps> = ({
           />
           <div
             data-resize-handle
-            className="hover:bg-purple-500/20"
+            className="hover:bg-[#1e8bff]/20"
             style={{
               ...edgeHandleStyle,
               right: 0,

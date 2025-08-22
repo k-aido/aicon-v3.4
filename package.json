@@ -37,6 +37,7 @@
     "form-data": "^4.0.4",
     "got": "^14.4.7",
     "lucide-react": "^0.525.0",
+    "mcp-supabase": "^0.1.0",
     "next": "^15.4.3",
     "node-fetch": "^3.3.2",
     "openai": "^5.10.2",

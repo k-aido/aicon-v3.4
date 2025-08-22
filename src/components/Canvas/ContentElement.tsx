@@ -58,7 +58,7 @@ const getStatusBorderColor = (element: ContentElementType): string => {
       case 'youtube':
         return 'border-red-500'; // YouTube red
       case 'instagram':
-        return 'border-purple-500'; // Instagram purple
+        return 'border-[#1e8bff]'; // Instagram blue
       case 'tiktok':
         return 'border-black'; // TikTok black
       default:
@@ -71,7 +71,7 @@ const getStatusBorderColor = (element: ContentElementType): string => {
     case 'youtube':
       return 'border-red-300'; // YouTube red (lighter)
     case 'instagram':
-      return 'border-purple-300'; // Instagram purple (lighter)
+      return 'border-[#1e8bff]/60'; // Instagram blue (lighter)
     case 'tiktok':
       return 'border-gray-400'; // TikTok black (lighter as gray)
     default:
@@ -243,8 +243,8 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
         onResize={handleResize}
         showHandle={selected || isHovered}
         className={`bg-gray-800 rounded-lg shadow-lg border-2 ${getStatusBorderColor(element)} ${
-          selected ? 'ring-2 ring-blue-500 shadow-xl' : ''
-        } ${connecting === element.id ? 'ring-2 ring-purple-500' : ''}`}
+          selected ? 'ring-2 ring-[#1e8bff] shadow-xl' : ''
+        } ${connecting === element.id ? 'ring-2 ring-[#1e8bff]' : ''}`}
       >
         <ConnectionPoint
           position="right"

@@ -6,6 +6,7 @@ import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { ConnectionLine } from './ConnectionLine';
 import { ContentElement } from './ContentElement';
 import { ChatElement } from './ChatElement';
+import { TextComponent } from './TextComponent';
 import { useCanvasStore } from '@/store/canvasStore';
 
 // Generate truly unique numeric IDs for canvas elements
@@ -167,26 +168,74 @@ const CanvasComponent: React.FC<CanvasProps> = ({
       }
       
       // Create new element for other types
-      const newElement: CanvasElement = tool.type === 'chat' ? {
-        id: generateUniqueId(),
-        type: 'chat' as const,
-        x: x - 400,
-        y: y - 450,
-        width: 800,
-        height: 900,
-        messages: []
-      } : {
-        id: generateUniqueId(),
-        type: 'content' as const,
-        x: x - 150,
-        y: y - 100,
-        width: 300,
-        height: 350,
-        platform: (tool.platform || 'unknown') as Platform,
-        title: `New ${tool.label} Content`,
-        url: 'https://example.com',
-        thumbnail: 'https://via.placeholder.com/300x200'
-      };
+      let newElement: CanvasElement;
+      
+      if (tool.type === 'chat') {
+        const chatId = generateUniqueId();
+        const defaultConversation = {
+          id: 'default-' + chatId,
+          title: 'Welcome Chat',
+          messages: [{
+            id: 'welcome-' + Date.now(),
+            role: 'assistant',
+            content: "👋 Hello! I'm your AI assistant. I can help you analyze content, answer questions, and provide insights. \n\n**Here's how to get started:**\n- Connect content elements to me by dragging from their connection points\n- Ask me questions about the connected content\n- I'll provide analysis and insights based on what you share\n\nWhat would you like to explore today?",
+            timestamp: new Date()
+          }],
+          createdAt: new Date(),
+          lastMessageAt: new Date()
+        };
+        
+        newElement = {
+          id: chatId,
+          type: 'chat' as const,
+          x: x - 400,
+          y: y - 450,
+          width: 800,
+          height: 900,
+          messages: defaultConversation.messages,
+          conversations: [defaultConversation],
+          model: 'gpt-4',
+          connectedContentIds: [],
+          status: 'idle',
+          zIndex: 2,
+          isVisible: true,
+          isLocked: false,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+      } else if (tool.type === 'text') {
+        newElement = {
+          id: generateUniqueId(),
+          type: 'text' as const,
+          x: x - 200,
+          y: y - 150,
+          width: 400,
+          height: 300,
+          position: { x: x - 200, y: y - 150 },
+          dimensions: { width: 400, height: 300 },
+          title: 'Text Info',
+          content: '',
+          lastModified: new Date(),
+          zIndex: 1,
+          isVisible: true,
+          isLocked: false,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+      } else {
+        newElement = {
+          id: generateUniqueId(),
+          type: 'content' as const,
+          x: x - 150,
+          y: y - 100,
+          width: 300,
+          height: 350,
+          platform: (tool.platform || 'unknown') as Platform,
+          title: `New ${tool.label} Content`,
+          url: 'https://example.com',
+          thumbnail: 'https://via.placeholder.com/300x200'
+        };
+      }
       
       if (tool.type === 'chat') {
         console.log('💬 [Canvas] Creating AI Chat element from drag/drop:', { tool, newElement });
@@ -575,9 +624,9 @@ const CanvasComponent: React.FC<CanvasProps> = ({
         <svg className="absolute inset-0 pointer-events-none" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
           <defs>
             <linearGradient id="connectionGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.3" />
-              <stop offset="50%" stopColor="#8b5cf6" stopOpacity="1" />
-              <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0.3" />
+              <stop offset="0%" stopColor="#1e8bff" stopOpacity="0.3" />
+              <stop offset="50%" stopColor="#1e8bff" stopOpacity="1" />
+              <stop offset="100%" stopColor="#1e8bff" stopOpacity="0.3" />
             </linearGradient>
           </defs>
           
@@ -596,7 +645,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
             <g>
               <path
                 d={connectionPreview}
-                stroke="#8b5cf6"
+                stroke="#1e8bff"
                 strokeWidth="2"
                 fill="none"
                 strokeDasharray="5 3"
@@ -607,7 +656,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
                 cx={mousePos.x}
                 cy={mousePos.y}
                 r="8"
-                fill="#8b5cf6"
+                fill="#1e8bff"
                 fillOpacity="0.5"
                 className="pointer-events-none connection-dot"
               />
@@ -645,6 +694,20 @@ const CanvasComponent: React.FC<CanvasProps> = ({
                 connecting={connecting}
                 connections={connections}
                 allElements={elements}
+                onSelect={(el, event) => handleElementSelect(el, event)}
+                onUpdate={handleElementUpdate}
+                onDelete={handleElementDelete}
+                onConnectionStart={handleConnectionStart}
+              />
+            );
+          } else if (element.type === 'text') {
+            return (
+              <TextComponent
+                key={`text-${element.id}`}
+                element={element}
+                selected={selectedElementIds.includes(element.id)}
+                connecting={connecting}
+                connections={connections}
                 onSelect={(el, event) => handleElementSelect(el, event)}
                 onUpdate={handleElementUpdate}
                 onDelete={handleElementDelete}

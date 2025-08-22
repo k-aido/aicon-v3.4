@@ -3,7 +3,7 @@
 import { Platform, Position } from './index';
 
 // Extended element types to include folders
-export type CanvasElementType = 'content' | 'chat' | 'folder';
+export type CanvasElementType = 'content' | 'chat' | 'folder' | 'text';
 
 // Base canvas element interface
 export interface BaseCanvasElement {
@@ -80,6 +80,14 @@ export interface FolderData extends BaseCanvasElement {
   sortOrder?: 'manual' | 'alphabetical' | 'date' | 'type';
 }
 
+// Text data interface
+export interface TextData extends BaseCanvasElement {
+  type: 'text';
+  title: string;
+  content: string;
+  lastModified: Date;
+}
+
 // Enhanced chat data interface
 export interface ChatData extends BaseCanvasElement {
   type: 'chat';
@@ -139,7 +147,7 @@ export interface Connection {
 
 // Canvas state interface
 export interface CanvasState {
-  elements: Record<string, ContentPiece | ChatData | FolderData>;
+  elements: Record<string, ContentPiece | ChatData | FolderData | TextData>;
   connections: Connection[];
   viewport: {
     x: number;
@@ -151,7 +159,7 @@ export interface CanvasState {
     connectionIds: string[];
   };
   clipboard?: {
-    elements: Array<ContentPiece | ChatData | FolderData>;
+    elements: Array<ContentPiece | ChatData | FolderData | TextData>;
     connections: Connection[];
   };
 }
@@ -183,7 +191,7 @@ export interface CanvasWorkspaceConfig {
 }
 
 // Union type for all canvas elements
-export type CanvasElement = ContentPiece | ChatData | FolderData;
+export type CanvasElement = ContentPiece | ChatData | FolderData | TextData;
 
 // Element bounds for collision detection
 export interface ElementBounds {

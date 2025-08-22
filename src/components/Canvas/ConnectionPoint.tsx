@@ -23,9 +23,9 @@ export const ConnectionPoint: React.FC<ConnectionPointProps> = React.memo(({
 
   return (
     <div 
-      className={`absolute ${positionClasses[position]} w-4 h-4 bg-purple-500 rounded-full cursor-pointer hover:bg-purple-600 hover:scale-110 transition-all shadow-lg flex items-center justify-center z-20 opacity-100`}
+      className={`absolute ${positionClasses[position]} w-4 h-4 bg-[#1e8bff] rounded-full cursor-pointer hover:bg-[#1a7ae5] hover:scale-110 transition-all shadow-lg flex items-center justify-center z-20 opacity-100`}
       onClick={onClick}
-      style={{ boxShadow: '0 2px 6px rgba(139, 92, 246, 0.4)' }}
+      style={{ boxShadow: '0 2px 6px rgba(30, 139, 255, 0.4)' }}
     >
       <div className="w-1.5 h-1.5 bg-white rounded-full" />
     </div>

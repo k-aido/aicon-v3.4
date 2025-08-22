@@ -2,7 +2,7 @@ import { create } from 'zustand';
 
 interface Element {
   id: string | number;  // Accept both string and number IDs for compatibility
-  type: 'content' | 'chat' | 'folder';
+  type: 'content' | 'chat' | 'folder' | 'text';
   x: number;
   y: number;
   width: number;
@@ -21,6 +21,9 @@ interface Element {
   color?: string;
   childIds?: (string | number)[];  // Also accept mixed ID types
   isExpanded?: boolean;
+  // Text-specific fields
+  content?: string;
+  lastModified?: Date | string;
 }
 
 interface Connection {
@@ -226,7 +229,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       .map(conn => conn.from);
     
     const connectedElements = state.elements.filter(el => 
-      connectedIds.includes(el.id) && el.type === 'content'
+      connectedIds.includes(el.id) && (el.type === 'content' || el.type === 'text')
     );
     
     console.log('🔗 [canvasStore] getConnectedContent filter operation:', { 

@@ -70,7 +70,7 @@ export interface CanvasElementDB {
   id: string;
   workspace_id: string;
   element_id: number;
-  type: 'content' | 'chat' | 'folder' | 'note';
+  type: 'content' | 'chat' | 'folder' | 'note' | 'text';
   position: { x: number; y: number };
   dimensions: { width: number; height: number };
   z_index: number;
@@ -821,6 +821,9 @@ class CanvasPersistenceService {
           thumbnail: element.thumbnail,
           messages: element.messages,
           conversations: element.conversations,
+          // Text-specific fields
+          content: element.content,
+          lastModified: element.lastModified,
           ...element.metadata
         },
         is_visible: true,
@@ -895,6 +898,9 @@ class CanvasPersistenceService {
         thumbnail: dbElement.properties.thumbnail,
         messages: dbElement.properties.messages,
         conversations: dbElement.properties.conversations,
+        // Text-specific fields
+        content: dbElement.properties.content,
+        lastModified: dbElement.properties.lastModified,
         metadata: dbElement.metadata,
         analysis: dbElement.analysis_data
       }));

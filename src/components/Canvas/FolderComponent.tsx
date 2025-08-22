@@ -193,8 +193,8 @@ export const FolderComponent: React.FC<FolderComponentProps> = React.memo(({
         onResize={handleResize}
         showHandle={selected || isHovered}
         className={`rounded-lg shadow-lg ${
-          selected ? 'ring-2 ring-blue-500 shadow-xl' : ''
-        } ${connecting === folder.id ? 'ring-2 ring-purple-500' : ''}`}
+          selected ? 'ring-2 ring-[#1e8bff] shadow-xl' : ''
+        } ${connecting === folder.id ? 'ring-2 ring-[#1e8bff]' : ''}`}
       >
         <div
           className="w-full h-full"

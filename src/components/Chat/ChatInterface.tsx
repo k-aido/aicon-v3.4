@@ -186,6 +186,20 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     
     return content;
   }, [connections, element.id, allElements]);
+  
+  // Get connected text elements separately
+  const connectedTextElements = useMemo(() => {
+    const connectedIds = connections
+      .filter(conn => conn.from === element.id || conn.to === element.id)
+      .map(conn => conn.from === element.id ? conn.to : conn.from);
+
+    return allElements
+      .filter(el => {
+        const isConnected = connectedIds.includes(el.id);
+        const isText = el.type === 'text';
+        return isConnected && isText;
+      });
+  }, [connections, element.id, allElements]);
 
   // Handle @ mention detection
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -411,8 +425,17 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       const contentAnalysis = await fetchContentAnalysis(contentIdsToInclude);
       console.log('[ChatInterface] Fetched content analysis for', contentAnalysis.length, 'pieces of content:', contentAnalysis);
       
+      // Prepare connected text elements first
+      const textDataForChat = connectedTextElements.map((textEl: any) => ({
+        type: 'text',
+        title: textEl.title || 'Untitled Text',
+        content: textEl.content || '',
+        lastModified: textEl.lastModified || textEl.updatedAt || new Date()
+      }));
+      
       // Prepare connected content for RAG
       const connectedContentForChat = contentAnalysis.map((content: any) => ({
+        type: 'content',
         title: content.title,
         platform: content.platform,
         url: content.url,
@@ -423,7 +446,14 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         engagementTactics: content.analysis?.engagementTactics || []
       }));
       
-      console.log('[ChatInterface] Sending to API with content:', connectedContentForChat);
+      // Combine text elements first, then content elements
+      const allConnectedData = [...textDataForChat, ...connectedContentForChat];
+      
+      console.log('[ChatInterface] Sending to API with content:', {
+        textElements: textDataForChat.length,
+        contentElements: connectedContentForChat.length,
+        total: allConnectedData.length
+      });
 
       // Call real AI API with thread and element IDs for database persistence
       const response = await fetch('/api/chat', {
@@ -435,7 +465,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
             content: m.content 
           })),
           model: selectedModel,
-          connectedContent: connectedContentForChat, // Pass analyzed content for RAG
+          connectedContent: allConnectedData, // Pass text and analyzed content for RAG
           threadId: currentActiveConversationId, // Pass thread ID for database persistence
           chatElementId: element.id.toString(), // Pass chat element ID
           chatInterfaceId: chatInterfaceId, // Pass the actual chat interface UUID
@@ -697,7 +727,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between" style={{ paddingLeft: '3.5rem' }}>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
-              <MessageSquare className={`w-5 h-5 ${currentModel.provider === 'openai' ? 'text-green-600' : 'text-purple-600'}`} />
+              <MessageSquare className={`w-5 h-5 ${currentModel.provider === 'openai' ? 'text-green-600' : 'text-[#1e8bff]'}`} />
               <span className="font-medium text-gray-900">{activeConversation?.title || 'AI Assistant'}</span>
               <span className={`text-xs px-2 py-1 rounded-full bg-gray-100 ${providerColor}`}>
                 {providerBrand}
@@ -765,7 +795,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   
                   <div className={`p-4 rounded-2xl ${
                     message.role === 'user' 
-                      ? 'bg-purple-600 text-white' 
+                      ? 'bg-[#1e8bff] text-white' 
                       : 'bg-white border border-gray-200 text-gray-900 shadow-sm'
                   }`}
                   style={{ userSelect: 'text', WebkitUserSelect: 'text' }}
@@ -792,12 +822,19 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         </div>
 
         {/* Connected Content Indicator */}
-        {connectedContent.length > 0 && (
+        {(connectedContent.length > 0 || connectedTextElements.length > 0) && (
           <div className="border-t border-gray-200 bg-blue-50 px-4 py-2">
             <div className="flex items-center gap-2 text-xs text-blue-600">
               <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
               <span>
-                {connectedContent.length} connected {connectedContent.length === 1 ? 'piece' : 'pieces'} of content automatically included in context
+                {connectedTextElements.length > 0 && (
+                  <>{connectedTextElements.length} text {connectedTextElements.length === 1 ? 'element' : 'elements'}</>
+                )}
+                {connectedTextElements.length > 0 && connectedContent.length > 0 && ' and '}
+                {connectedContent.length > 0 && (
+                  <>{connectedContent.length} content {connectedContent.length === 1 ? 'piece' : 'pieces'}</>
+                )}
+                {' automatically included in context'}
               </span>
             </div>
           </div>
@@ -821,7 +858,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 placeholder="Type a message... Use @ to reference content"
                 disabled={isLoading}
                 data-no-drag
-                className="flex-1 px-4 py-3 bg-gray-100 rounded-xl border border-gray-200 outline-none focus:border-purple-500 focus:bg-white transition-all resize-none overflow-y-auto"
+                className="flex-1 px-4 py-3 bg-gray-100 rounded-xl border border-gray-200 outline-none focus:border-[#1e8bff] focus:bg-white transition-all resize-none overflow-y-auto"
                 style={{ 
                   pointerEvents: 'auto', 
                   zIndex: 10,
@@ -848,7 +885,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 }}
                 onMouseDown={(e) => e.stopPropagation()}
                 disabled={!input.trim() || isLoading}
-                className="px-4 py-3 bg-purple-600 text-white rounded-xl hover:bg-purple-700 disabled:opacity-50 transition-colors self-end"
+                className="px-4 py-3 bg-[#1e8bff] text-white rounded-xl hover:bg-[#1a7ae5] disabled:opacity-50 transition-colors self-end"
                 data-no-drag
               >
                 <Send className="w-5 h-5" />
@@ -874,7 +911,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 }}
                 onClick={(e) => e.stopPropagation()}
                 onMouseDown={(e) => e.stopPropagation()}
-                className="px-3 py-1.5 bg-gray-100 rounded-lg text-sm border border-gray-200 outline-none focus:border-purple-500 cursor-pointer"
+                className="px-3 py-1.5 bg-gray-100 rounded-lg text-sm border border-gray-200 outline-none focus:border-[#1e8bff] cursor-pointer"
                 data-no-drag
                 style={{ pointerEvents: 'auto', zIndex: 10 }}
               >

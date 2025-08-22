@@ -228,36 +228,51 @@ export async function POST(request: NextRequest) {
     let systemMessage = 'You are an AI assistant helping with content creation and analysis.';
     
     if (connectedContent && connectedContent.length > 0) {
-      systemMessage += '\n\nIMPORTANT: The following analyzed content is automatically available to you from the connected content pieces on the canvas. You should reference and use these insights to inform your responses, create inspired content, and provide relevant suggestions. You DO NOT need the user to mention these pieces - they are always available to you in this conversation.\n\n';
+      // Separate text elements from content elements
+      const textElements = connectedContent.filter((item: any) => item.type === 'text');
+      const contentElements = connectedContent.filter((item: any) => item.type === 'content' || !item.type);
       
-      // Format connected content as JSON
-      const connectedContentJSON = connectedContent.map((content: any, index: number) => ({
-        contentId: index + 1,
-        title: content.title,
-        platform: content.platform,
-        url: content.url,
-        creatorUsername: content.creatorUsername || 'Unknown Creator',
-        analysis: {
-          hookAnalysis: content.analysis?.hookAnalysis || '',
-          bodyAnalysis: content.analysis?.bodyAnalysis || '',
-          ctaAnalysis: content.analysis?.ctaAnalysis || '',
-          keyTopics: content.keyTopics || [],
-          engagementTactics: content.engagementTactics || [],
-          sentiment: content.analysis?.sentiment || 'neutral',
-          complexity: content.analysis?.complexity || 'moderate'
-        },
-        metrics: {
-          views: content.metrics?.views || 0,
-          likes: content.metrics?.likes || 0,
-          comments: content.metrics?.comments || 0
-        }
-      }));
+      // Add text elements first if any exist
+      if (textElements.length > 0) {
+        systemMessage += '\n\nAdditional Context:\n';
+        textElements.forEach((text: any) => {
+          systemMessage += `\n${text.title}: ${text.content}\n`;
+        });
+      }
       
-      systemMessage += 'Connected Content Analysis (JSON format):\n```json\n';
-      systemMessage += JSON.stringify(connectedContentJSON, null, 2);
-      systemMessage += '\n```\n\n';
-      
-      systemMessage += 'When generating content, incorporate successful patterns and tactics from the analyzed content above. Be specific about which techniques you are adapting and why they work. When referencing content, mention it naturally by creator name and title (e.g., "@alexhormozi\'s video about business growth" or "the Instagram reel by @garyvee"). DO NOT mention contentId numbers or say "Content #1" - always use natural references with creator names and titles.';
+      // Add content analysis if any exists
+      if (contentElements.length > 0) {
+        systemMessage += '\n\nIMPORTANT: The following analyzed content is automatically available to you from the connected content pieces on the canvas. You should reference and use these insights to inform your responses, create inspired content, and provide relevant suggestions. You DO NOT need the user to mention these pieces - they are always available to you in this conversation.\n\n';
+        
+        // Format connected content as JSON
+        const connectedContentJSON = contentElements.map((content: any, index: number) => ({
+          contentId: index + 1,
+          title: content.title,
+          platform: content.platform,
+          url: content.url,
+          creatorUsername: content.creatorUsername || 'Unknown Creator',
+          analysis: {
+            hookAnalysis: content.analysis?.hookAnalysis || '',
+            bodyAnalysis: content.analysis?.bodyAnalysis || '',
+            ctaAnalysis: content.analysis?.ctaAnalysis || '',
+            keyTopics: content.keyTopics || [],
+            engagementTactics: content.engagementTactics || [],
+            sentiment: content.analysis?.sentiment || 'neutral',
+            complexity: content.analysis?.complexity || 'moderate'
+          },
+          metrics: {
+            views: content.metrics?.views || 0,
+            likes: content.metrics?.likes || 0,
+            comments: content.metrics?.comments || 0
+          }
+        }));
+        
+        systemMessage += 'Connected Content Analysis (JSON format):\n```json\n';
+        systemMessage += JSON.stringify(connectedContentJSON, null, 2);
+        systemMessage += '\n```\n\n';
+        
+        systemMessage += 'When generating content, incorporate successful patterns and tactics from the analyzed content above. Be specific about which techniques you are adapting and why they work. When referencing content, mention it naturally by creator name and title (e.g., "@alexhormozi\'s video about business growth" or "the Instagram reel by @garyvee"). DO NOT mention contentId numbers or say "Content #1" - always use natural references with creator names and titles.';
+      }
     }
 
     let response;

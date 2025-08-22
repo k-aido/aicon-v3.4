@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { UserSearch } from 'lucide-react';
-import { AIChatIcon, InstagramIcon, TikTokIcon, YouTubeIcon } from '@/components/icons/PngIcons';
+import { AIChatIcon, InstagramIcon, TikTokIcon, YouTubeIcon, TextIcon } from '@/components/icons/PngIcons';
 import { useCanvasStore } from '@/store/canvasStore';
 
 interface Tool {
@@ -8,13 +8,14 @@ interface Tool {
   icon: React.ComponentType<any>;
   label: string;
   color: string;
-  type: 'chat' | 'content' | 'creator-search';
+  type: 'chat' | 'content' | 'creator-search' | 'text';
   platform?: string;
 }
 
 const tools: Tool[] = [
   { id: 'ai-chat', icon: AIChatIcon, label: 'AI Chat', color: '#8B5CF6', type: 'chat' },
   { id: 'creator-search', icon: UserSearch, label: 'Search Creators', color: '#10B981', type: 'creator-search' },
+  { id: 'text', icon: TextIcon, label: 'Text', color: '#000000', type: 'text' },
   { id: 'instagram', icon: InstagramIcon, label: 'Instagram', color: '#E4405F', type: 'content', platform: 'instagram' },
   { id: 'tiktok', icon: TikTokIcon, label: 'TikTok', color: '#000000', type: 'content', platform: 'tiktok' },
   { id: 'youtube', icon: YouTubeIcon, label: 'YouTube', color: '#FF0000', type: 'content', platform: 'youtube' }
@@ -85,10 +86,10 @@ export const CanvasSidebar: React.FC<CanvasSidebarProps> = ({ onOpenSocialMediaM
     // Create element based on type
     const baseElement = {
       id: newId,
-      x: centerX - 150,
-      y: centerY - 150,
-      width: tool.type === 'chat' ? 600 : 300,
-      height: tool.type === 'chat' ? 700 : 300,
+      x: tool.type === 'chat' ? centerX - 400 : centerX - 150,
+      y: tool.type === 'chat' ? centerY - 450 : centerY - 150,
+      width: tool.type === 'chat' ? 800 : 300,
+      height: tool.type === 'chat' ? 900 : 300,
       title: tool.label,
     };
     
@@ -103,12 +104,23 @@ export const CanvasSidebar: React.FC<CanvasSidebarProps> = ({ onOpenSocialMediaM
         width: baseElement.width,  // Legacy compatibility
         height: baseElement.height, // Legacy compatibility
         title: baseElement.title,
-        messages: [],
+        messages: [{
+          id: 'welcome-' + Date.now(),
+          role: 'assistant',
+          content: "👋 Hello! I'm your AI assistant. I can help you analyze content, answer questions, and provide insights. \n\n**Here's how to get started:**\n- Connect content elements to me by dragging from their connection points\n- Ask me questions about the connected content\n- I'll provide analysis and insights based on what you share\n\nWhat would you like to explore today?",
+          timestamp: new Date()
+        }],
         conversations: [{
-          id: 'default',
-          title: 'New Conversation',
-          messages: [],
-          createdAt: new Date()
+          id: 'default-' + baseElement.id,
+          title: 'Welcome Chat',
+          messages: [{
+            id: 'welcome-' + Date.now(),
+            role: 'assistant',
+            content: "👋 Hello! I'm your AI assistant. I can help you analyze content, answer questions, and provide insights. \n\n**Here's how to get started:**\n- Connect content elements to me by dragging from their connection points\n- Ask me questions about the connected content\n- I'll provide analysis and insights based on what you share\n\nWhat would you like to explore today?",
+            timestamp: new Date()
+          }],
+          createdAt: new Date(),
+          lastMessageAt: new Date()
         }],
         // Additional required fields
         model: 'gpt-4',
@@ -121,6 +133,27 @@ export const CanvasSidebar: React.FC<CanvasSidebarProps> = ({ onOpenSocialMediaM
         updatedAt: new Date()
       };
       addElement(chatElement);
+    } else if (tool.type === 'text') {
+      // Create text element
+      const textElement = {
+        id: baseElement.id,
+        type: 'text' as const,
+        x: baseElement.x,
+        y: baseElement.y,
+        width: 400,
+        height: 300,
+        position: { x: baseElement.x, y: baseElement.y },
+        dimensions: { width: 400, height: 300 },
+        title: 'Text Info',
+        content: '',
+        lastModified: new Date(),
+        zIndex: 1,
+        isVisible: true,
+        isLocked: false,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+      addElement(textElement);
     } else {
       // For non-chat, non-social media content types, create directly
       addElement({

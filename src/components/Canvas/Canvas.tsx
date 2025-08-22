@@ -689,11 +689,11 @@ const CanvasComponent: React.FC<CanvasProps> = ({
             return (
               <TextComponent
                 key={`text-${element.id}`}
-                element={element}
+                element={element as any}
                 selected={selectedElementIds.includes(element.id)}
                 connecting={connecting}
                 connections={connections}
-                onSelect={(el, event) => handleElementSelect(el, event)}
+                onSelect={(el, event) => handleElementSelect(el as any, event)}
                 onUpdate={handleElementUpdate}
                 onDelete={handleElementDelete}
                 onConnectionStart={handleConnectionStart}

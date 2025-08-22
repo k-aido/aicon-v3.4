@@ -694,9 +694,9 @@ const CanvasComponent: React.FC<CanvasProps> = ({
                 connecting={connecting ? String(connecting) : null}
                 connections={connections}
                 onSelect={(el, event) => handleElementSelect(el as any, event)}
-                onUpdate={handleElementUpdate}
-                onDelete={handleElementDelete}
-                onConnectionStart={handleConnectionStart}
+                onUpdate={handleElementUpdate as any}
+                onDelete={(id) => handleElementDelete(Number(id))}
+                onConnectionStart={(id) => handleConnectionStart(Number(id))}
               />
             );
           }

@@ -17,15 +17,31 @@ export const ConnectionLine: React.FC<ConnectionLineProps> = React.memo(({
   onDelete
 }) => {
   const pathData = useMemo(() => {
-    const fromElement = elements.find(el => el.id === connection.from);
-    const toElement = elements.find(el => el.id === connection.to);
+    const fromElement = elements.find(el => String(el.id) === String(connection.from));
+    const toElement = elements.find(el => String(el.id) === String(connection.to));
     
     if (!fromElement || !toElement) return null;
     
-    const fromX = fromElement.x + fromElement.width + 24; // Adjusted for circle center
-    const fromY = fromElement.y + fromElement.height / 2;
-    const toX = toElement.x - 24; // Adjusted for circle center
-    const toY = toElement.y + toElement.height / 2;
+    // Calculate connection point positions based on element types
+    let fromX, fromY, toX, toY;
+    
+    // From element connection point
+    if (fromElement.type === 'chat') {
+      fromX = fromElement.x - 8; // Left side
+      fromY = fromElement.y + fromElement.height / 2;
+    } else {
+      fromX = fromElement.x + fromElement.width + 8; // Right side
+      fromY = fromElement.y + fromElement.height / 2;
+    }
+    
+    // To element connection point
+    if (toElement.type === 'chat') {
+      toX = toElement.x - 8; // Left side
+      toY = toElement.y + toElement.height / 2;
+    } else {
+      toX = toElement.x + toElement.width + 8; // Right side
+      toY = toElement.y + toElement.height / 2;
+    }
     
     // Calculate control points for bezier curve
     const distance = Math.abs(toX - fromX);

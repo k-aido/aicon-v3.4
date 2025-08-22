@@ -155,6 +155,18 @@ const CanvasComponent: React.FC<CanvasProps> = ({
     e.dataTransfer.dropEffect = 'copy';
   };
 
+  // Get viewport center position
+  const getViewportCenter = () => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return { x: 0, y: 0 };
+    
+    // Calculate the center of the visible viewport in canvas coordinates
+    const centerX = (rect.width / 2 - viewport.x) / viewport.zoom;
+    const centerY = (rect.height / 2 - viewport.y) / viewport.zoom;
+    
+    return { x: centerX, y: centerY };
+  };
+
   // Handle drop
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -164,12 +176,11 @@ const CanvasComponent: React.FC<CanvasProps> = ({
     
     try {
       const tool = JSON.parse(toolData);
-      const rect = canvasRef.current?.getBoundingClientRect();
-      if (!rect) return;
       
-      // Calculate drop position relative to viewport
-      const x = (e.clientX - rect.left - viewport.x) / viewport.zoom;
-      const y = (e.clientY - rect.top - viewport.y) / viewport.zoom;
+      // Use viewport center instead of drop position
+      const center = getViewportCenter();
+      const x = center.x;
+      const y = center.y;
       
       // Check if it's a social media platform that needs URL input
       const socialMediaPlatforms = ['instagram', 'tiktok', 'youtube'];
@@ -502,6 +513,8 @@ const CanvasComponent: React.FC<CanvasProps> = ({
 
   // Handle connection creation
   const handleConnectionStart = useCallback((elementId: string | number) => {
+    console.log('[Canvas] handleConnectionStart called:', { elementId, connecting, elementIdType: typeof elementId });
+    
     if (connecting) {
       // Complete connection
       if (String(connecting) !== String(elementId)) {
@@ -510,12 +523,15 @@ const CanvasComponent: React.FC<CanvasProps> = ({
           from: connecting,
           to: elementId
         };
+        console.log('[Canvas] Creating connection:', newConnection);
         setConnections(prev => [...prev, newConnection]);
       }
       setConnecting(null);
     } else {
       // Start connection
-      setConnecting(typeof elementId === 'number' ? elementId : Number(elementId));
+      const connectingId = typeof elementId === 'number' ? elementId : Number(elementId);
+      console.log('[Canvas] Starting connection from:', connectingId);
+      setConnecting(connectingId);
     }
   }, [connecting, setConnections, setConnecting]);
 
@@ -568,8 +584,18 @@ const CanvasComponent: React.FC<CanvasProps> = ({
     const fromElement = elements.find(el => String(el.id) === String(connecting));
     if (!fromElement) return null;
     
-    const fromX = fromElement.x + fromElement.width + 24;
-    const fromY = fromElement.y + fromElement.height / 2;
+    // Calculate connection point position based on element type
+    let fromX, fromY;
+    if (fromElement.type === 'chat') {
+      // Chat elements have connection point on the left
+      fromX = fromElement.x - 8;
+      fromY = fromElement.y + fromElement.height / 2;
+    } else {
+      // Content and text elements have connection point on the right
+      fromX = fromElement.x + fromElement.width + 8;
+      fromY = fromElement.y + fromElement.height / 2;
+    }
+    
     const toX = mousePos.x;
     const toY = mousePos.y;
     

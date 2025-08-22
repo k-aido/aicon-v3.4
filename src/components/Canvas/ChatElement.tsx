@@ -94,7 +94,7 @@ export const ChatElement: React.FC<ChatElementProps> = React.memo(({
       >
         <ConnectionPoint
           position="left"
-          isVisible={isHovered || hasConnections}
+          isVisible={true}
           onClick={handleConnectionClick}
         />
         

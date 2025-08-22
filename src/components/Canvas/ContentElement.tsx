@@ -271,7 +271,7 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
       >
         <ConnectionPoint
           position="right"
-          isVisible={isHovered || hasConnections}
+          isVisible={true}
           onClick={handleConnectionClick}
         />
         

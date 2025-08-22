@@ -2,7 +2,7 @@
 // Has working conversation sidebar and is the main chat component used on canvas
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Loader2, MessageSquare, Plus, Send, X, ChevronLeft, ChevronRight, Trash2, AtSign, Copy, Check } from 'lucide-react';
-import { ChatElement, Connection, ContentElement, Message } from '@/types';
+import { ChatElement, Connection, ContentElement, Message, CanvasElement } from '@/types';
 import { useChatStore } from '@/store/chatStore';
 import { createBrowserClient } from '@/lib/supabase/client';
 import { InsufficientCreditsModal } from '@/components/Modal/InsufficientCreditsModal';
@@ -12,7 +12,7 @@ import { MarkdownMessage } from './MarkdownMessage';
 interface ChatInterfaceProps {
   element: ChatElement;
   connections: Connection[];
-  allElements: (ChatElement | ContentElement)[];
+  allElements: CanvasElement[];
   onDelete?: (id: number) => void;
 }
 

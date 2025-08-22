@@ -7,13 +7,15 @@ import {
   ContentPiece,
   ChatData,
   TextData,
-  BaseCanvasElement
+  BaseCanvasElement,
+  Connection as ComplexConnection
 } from '@/types/canvas';
 import { 
   CanvasElement as SimpleCanvasElement,
   ContentElement,
   ChatElement,
-  TextElement
+  TextElement,
+  Connection as SimpleConnection
 } from '@/types';
 
 /**
@@ -258,4 +260,47 @@ export function createContentElement(params: {
     createdAt: new Date(),
     updatedAt: new Date()
   };
+}
+
+/**
+ * Convert complex connection to simple connection format
+ */
+export function complexToSimpleConnection(connection: ComplexConnection): SimpleConnection {
+  return {
+    id: parseInt(connection.id) || Date.now(),
+    from: parseInt(connection.source.elementId) || 0,
+    to: parseInt(connection.target.elementId) || 0
+  };
+}
+
+/**
+ * Convert simple connection to complex connection format
+ */
+export function simpleToComplexConnection(connection: SimpleConnection): ComplexConnection {
+  return {
+    id: connection.id.toString(),
+    source: {
+      elementId: connection.from.toString(),
+      anchor: 'right'
+    },
+    target: {
+      elementId: connection.to.toString(),
+      anchor: 'left'
+    },
+    type: 'data'
+  };
+}
+
+/**
+ * Convert array of complex connections to simple connections
+ */
+export function complexToSimpleConnections(connections: ComplexConnection[]): SimpleConnection[] {
+  return connections.map(complexToSimpleConnection);
+}
+
+/**
+ * Convert array of simple connections to complex connections
+ */
+export function simpleToComplexConnections(connections: SimpleConnection[]): ComplexConnection[] {
+  return connections.map(simpleToComplexConnection);
 }

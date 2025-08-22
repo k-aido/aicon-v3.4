@@ -6,12 +6,13 @@ import { Connection } from '@/types';
 import { ConnectionPoint } from './ConnectionPoint';
 import { useElementDrag } from '@/hooks/useElementDrag';
 import { SimpleResize } from './SimpleResize';
+import { complexToSimpleConnections } from '@/utils/typeAdapters';
 
 interface TextComponentProps {
   element: TextData | any; // Accept both type systems
   selected: boolean;
   connecting: string | number | null;
-  connections: Connection[];
+  connections: Connection[] | any[]; // Accept both connection types
   onSelect: (element: any, event?: React.MouseEvent) => void;
   onUpdate: (id: number | string, updates: any) => void;
   onDelete: (id: string | number) => void;
@@ -32,7 +33,12 @@ export const TextComponent: React.FC<TextComponentProps> = React.memo(({
   const [localContent, setLocalContent] = useState(element.content);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const hasConnections = connections.some(conn => 
+  // Convert connections to simple format if needed
+  const simpleConnections = connections[0] && 'source' in connections[0] 
+    ? complexToSimpleConnections(connections as any)
+    : connections as Connection[];
+
+  const hasConnections = simpleConnections.some(conn => 
     conn.from === Number(element.id) || conn.to === Number(element.id)
   );
 

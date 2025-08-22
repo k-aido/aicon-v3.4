@@ -263,7 +263,7 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
         showHandle={selected || isHovered}
         className={`bg-gray-800 rounded-lg shadow-lg border-2 ${getStatusBorderColor(element)} ${
           selected ? 'ring-2 ring-[#1e8bff] shadow-xl' : ''
-        } ${connecting === element.id ? 'ring-2 ring-[#1e8bff]' : ''}`}
+        } ${connecting !== null && String(connecting) === String(element.id) ? 'ring-2 ring-[#1e8bff]' : ''}`}
       >
         <ConnectionPoint
           position="right"

@@ -135,7 +135,7 @@ export const TextComponent: React.FC<TextComponentProps> = React.memo(({
         showHandle={selected || isHovered}
         className={`bg-white rounded-lg shadow-lg border-2 border-gray-300 ${
           selected ? 'ring-2 ring-[#1e8bff] shadow-xl' : ''
-        } ${connecting === element.id ? 'ring-2 ring-[#1e8bff]' : ''}`}
+        } ${connecting !== null && (String(connecting) === String(element.id) || connecting === Number(element.id)) ? 'ring-2 ring-[#1e8bff]' : ''}`}
       >
         <ConnectionPoint
           position="right"

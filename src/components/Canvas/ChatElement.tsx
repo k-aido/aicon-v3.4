@@ -35,7 +35,7 @@ export const ChatElement: React.FC<ChatElementProps> = React.memo(({
   const [isHovered, setIsHovered] = useState(false);
   
   const hasConnections = connections.some(conn => 
-    conn.from === element.id || conn.to === element.id
+    String(conn.from) === String(element.id) || String(conn.to) === String(element.id)
   );
 
   const handleDragUpdate = useCallback((id: string | number, position: Position) => {
@@ -89,7 +89,7 @@ export const ChatElement: React.FC<ChatElementProps> = React.memo(({
         showHandle={selected || isHovered}
         className={`rounded-lg shadow-lg outline-none focus:outline-none ${
           selected ? 'ring-2 ring-[#1e8bff] shadow-xl' : ''
-        } ${connecting === element.id ? 'ring-2 ring-[#1e8bff]' : ''}`}
+        } ${connecting !== null && String(connecting) === String(element.id) ? 'ring-2 ring-[#1e8bff]' : ''}`}
       >
         <ConnectionPoint
           position="left"

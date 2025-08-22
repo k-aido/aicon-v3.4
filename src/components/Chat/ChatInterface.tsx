@@ -167,12 +167,12 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   // Get connected content that can be mentioned - memoized to prevent re-computation
   const connectedContent = useMemo(() => {
     const connectedIds = connections
-      .filter(conn => conn.from === element.id || conn.to === element.id)
-      .map(conn => conn.from === element.id ? conn.to : conn.from);
+      .filter(conn => String(conn.from) === String(element.id) || String(conn.to) === String(element.id))
+      .map(conn => String(conn.from) === String(element.id) ? conn.to : conn.from);
 
     const content = allElements
       .filter(el => {
-        const isConnected = connectedIds.includes(el.id);
+        const isConnected = connectedIds.some(id => String(id) === String(el.id));
         const isContent = el.type === 'content';
         const metadata = (el as any).metadata;
         
@@ -192,12 +192,12 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   // Get connected text elements separately
   const connectedTextElements = useMemo(() => {
     const connectedIds = connections
-      .filter(conn => conn.from === element.id || conn.to === element.id)
-      .map(conn => conn.from === element.id ? conn.to : conn.from);
+      .filter(conn => String(conn.from) === String(element.id) || String(conn.to) === String(element.id))
+      .map(conn => String(conn.from) === String(element.id) ? conn.to : conn.from);
 
     return allElements
       .filter(el => {
-        const isConnected = connectedIds.includes(el.id);
+        const isConnected = connectedIds.some(id => String(id) === String(el.id));
         const isText = el.type === 'text';
         return isConnected && isText;
       });

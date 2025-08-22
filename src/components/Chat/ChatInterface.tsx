@@ -8,6 +8,7 @@ import { createBrowserClient } from '@/lib/supabase/client';
 import { InsufficientCreditsModal } from '@/components/Modal/InsufficientCreditsModal';
 import { MentionAutocomplete } from './MentionAutocomplete';
 import { MarkdownMessage } from './MarkdownMessage';
+import { useDarkMode } from '@/contexts/DarkModeContext';
 
 interface ChatInterfaceProps {
   element: ChatElement;
@@ -39,6 +40,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [selectedModel, setSelectedModel] = useState('gpt-5-mini');
+  const { isDarkMode } = useDarkMode();
   // Use a consistent string representation of element ID for localStorage keys
   const elementIdStr = String(element.id);
   const [chatInterfaceId, setChatInterfaceId] = useState<string | null>(null);

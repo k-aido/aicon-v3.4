@@ -82,3 +82,138 @@ export const TextIcon: React.FC<IconProps> = ({ className = '', size = 24 }) => 
     </g>
   </svg>
 );
+
+// Creator Search Icon - Using SVG file from public folder
+export const CreatorSearchIcon: React.FC<IconProps> = ({ className = '', size = 24, alt = 'Search Creators' }) => (
+  <img
+    src="/icons/creatorSearch-light.svg"
+    alt={alt}
+    width={size}
+    height={size}
+    className={className}
+    style={{ width: size, height: size, objectFit: 'contain' }}
+  />
+);
+
+// Light SVG Icons
+export const AIChatLightIcon: React.FC<IconProps> = ({ className = '', size = 24, alt = 'AI Chat' }) => (
+  <img
+    src="/icons/chat-light.svg"
+    alt={alt}
+    width={size}
+    height={size}
+    className={className}
+    style={{ width: size, height: size, objectFit: 'contain' }}
+  />
+);
+
+export const InstagramLightIcon: React.FC<IconProps> = ({ className = '', size = 24, alt = 'Instagram' }) => (
+  <img
+    src="/icons/instagram-light.svg"
+    alt={alt}
+    width={size}
+    height={size}
+    className={className}
+    style={{ width: size, height: size, objectFit: 'contain' }}
+  />
+);
+
+export const TikTokLightIcon: React.FC<IconProps> = ({ className = '', size = 24, alt = 'TikTok' }) => (
+  <img
+    src="/icons/tiktok-light.svg"
+    alt={alt}
+    width={size}
+    height={size}
+    className={className}
+    style={{ width: size, height: size, objectFit: 'contain' }}
+  />
+);
+
+export const YouTubeLightIcon: React.FC<IconProps> = ({ className = '', size = 24, alt = 'YouTube' }) => (
+  <img
+    src="/icons/youtube-light.svg"
+    alt={alt}
+    width={size}
+    height={size}
+    className={className}
+    style={{ width: size, height: size, objectFit: 'contain' }}
+  />
+);
+
+export const TextLightIcon: React.FC<IconProps> = ({ className = '', size = 24, alt = 'Text' }) => (
+  <img
+    src="/icons/text-light.svg"
+    alt={alt}
+    width={size}
+    height={size}
+    className={className}
+    style={{ width: size, height: size, objectFit: 'contain' }}
+  />
+);
+
+// Dark SVG Icons
+export const AIChatDarkIcon: React.FC<IconProps> = ({ className = '', size = 24, alt = 'AI Chat' }) => (
+  <img
+    src="/icons/chat-dark.svg"
+    alt={alt}
+    width={size}
+    height={size}
+    className={className}
+    style={{ width: size, height: size, objectFit: 'contain' }}
+  />
+);
+
+export const CreatorSearchDarkIcon: React.FC<IconProps> = ({ className = '', size = 24, alt = 'Search Creators' }) => (
+  <img
+    src="/icons/creatorSearch-dark.svg"
+    alt={alt}
+    width={size}
+    height={size}
+    className={className}
+    style={{ width: size, height: size, objectFit: 'contain' }}
+  />
+);
+
+export const InstagramDarkIcon: React.FC<IconProps> = ({ className = '', size = 24, alt = 'Instagram' }) => (
+  <img
+    src="/icons/instagram-dark.svg"
+    alt={alt}
+    width={size}
+    height={size}
+    className={className}
+    style={{ width: size, height: size, objectFit: 'contain' }}
+  />
+);
+
+export const TikTokDarkIcon: React.FC<IconProps> = ({ className = '', size = 24, alt = 'TikTok' }) => (
+  <img
+    src="/icons/tiktok-dark.svg"
+    alt={alt}
+    width={size}
+    height={size}
+    className={className}
+    style={{ width: size, height: size, objectFit: 'contain' }}
+  />
+);
+
+export const YouTubeDarkIcon: React.FC<IconProps> = ({ className = '', size = 24, alt = 'YouTube' }) => (
+  <img
+    src="/icons/youtube-dark.svg"
+    alt={alt}
+    width={size}
+    height={size}
+    className={className}
+    style={{ width: size, height: size, objectFit: 'contain' }}
+  />
+);
+
+export const TextDarkIcon: React.FC<IconProps> = ({ className = '', size = 24, alt = 'Text' }) => (
+  <img
+    src="/icons/text-dark.svg"
+    alt={alt}
+    width={size}
+    height={size}
+    className={className}
+    style={{ width: size, height: size, objectFit: 'contain' }}
+  />
+);

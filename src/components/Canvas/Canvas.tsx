@@ -15,6 +15,9 @@ import {
   simpleToComplexElement,
   complexToSimpleElement
 } from '@/utils/typeAdapters';
+import { useDarkMode, darkModeColors } from '@/contexts/DarkModeContext';
+import CreditCounter from '../CreditCounter/CreditCounter';
+import { DarkModeToggle } from '../DarkModeToggle';
 
 // Generate truly unique numeric IDs for canvas elements
 let idCounter = Math.floor(Math.random() * 1000000); // Start with random base to avoid conflicts
@@ -57,6 +60,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
 }) => {
   const canvasRef = useRef<HTMLDivElement>(null);
   const { viewport, setViewport } = useCanvasStore();
+  const { isDarkMode } = useDarkMode();
   const [mousePos, setMousePos] = useState<Position>({ x: 0, y: 0 });
   const [selectedElementIds, setSelectedElementIds] = useState<number[]>([]);
   const [lastClickedElementId, setLastClickedElementId] = useState<number | null>(null);
@@ -573,7 +577,8 @@ const CanvasComponent: React.FC<CanvasProps> = ({
   return (
     <div 
       ref={canvasRef}
-      className="flex-1 bg-gray-50 relative overflow-hidden"
+      className={`flex-1 relative overflow-hidden transition-colors duration-200`}
+      style={{ backgroundColor: isDarkMode ? darkModeColors.dark : darkModeColors.light }}
       data-canvas="true"
       tabIndex={0}
       onWheel={handleWheel}
@@ -592,17 +597,17 @@ const CanvasComponent: React.FC<CanvasProps> = ({
         style={{
           // Keep dots visible until very low zoom levels
           opacity: viewport.zoom < 0.25 ? 0 : viewport.zoom < 0.4 ? (viewport.zoom - 0.25) * 6.67 : 1,
-          // Use consistent dot appearance
+          // Use consistent dot appearance with dark mode support
           backgroundImage: viewport.zoom < 0.25 
             ? 'none'
-            : `radial-gradient(circle, #d4d4d8 1px, transparent 1px)`,
+            : `radial-gradient(circle, ${isDarkMode ? '#4a4a48' : '#d4d4d8'} 1px, transparent 1px)`,
           // Scale grid size with zoom, with larger spacing when zoomed out
           backgroundSize: viewport.zoom < 0.5 
             ? '40px 40px'  // Fixed larger grid when zoomed out
             : `${20 * viewport.zoom}px ${20 * viewport.zoom}px`, // Scale with zoom when zoomed in
           backgroundPosition: `${viewport.x}px ${viewport.y}px`,
-          backgroundColor: '#fafafa',
-          transition: 'opacity 0.15s ease-out'
+          backgroundColor: isDarkMode ? darkModeColors.dark : darkModeColors.light,
+          transition: 'opacity 0.15s ease-out, background-color 0.2s ease-out'
         }}
       />
       
@@ -715,23 +720,38 @@ const CanvasComponent: React.FC<CanvasProps> = ({
         })}
       </div>
       
-      
+      {/* Top-Right Controls - Credit Counter and Dark Mode Toggle */}
+      <div className={`fixed top-4 right-4 h-12 rounded-lg shadow-lg z-50 flex items-center px-4 gap-3 transition-colors duration-200`}
+        style={{
+          backgroundColor: isDarkMode ? '#30302e' : '#ffffff'
+        }}>
+        <CreditCounter />
+        <div className={`h-6 w-px ${isDarkMode ? 'bg-gray-600' : 'bg-gray-300'}`}></div>
+        <DarkModeToggle />
+      </div>
 
 
       {/* Bottom-Right Canvas Controls */}
       <div className="absolute bottom-4 right-4 flex gap-2">
         {/* Fit to Screen and Reset Zoom buttons */}
-        <div className="bg-white rounded-lg shadow-lg p-1 flex gap-1">
+        <div className={`rounded-lg shadow-lg p-1 flex gap-1 transition-colors duration-200`}
+          style={{
+            backgroundColor: isDarkMode ? '#30302e' : '#ffffff'
+          }}>
           <button 
             onClick={handleFitToScreen}
-            className="px-2 py-1 hover:bg-gray-100 rounded text-gray-700 text-xs font-medium outline-none focus:outline-none"
+            className={`px-2 py-1 rounded text-xs font-medium outline-none focus:outline-none transition-colors ${
+              isDarkMode ? 'hover:bg-gray-700 text-gray-300' : 'hover:bg-gray-100 text-gray-700'
+            }`}
             title="Fit to Screen"
           >
             Fit to Screen
           </button>
           <button 
             onClick={handleResetZoom}
-            className="px-2 py-1 hover:bg-gray-100 rounded text-gray-700 text-xs font-medium outline-none focus:outline-none"
+            className={`px-2 py-1 rounded text-xs font-medium outline-none focus:outline-none transition-colors ${
+              isDarkMode ? 'hover:bg-gray-700 text-gray-300' : 'hover:bg-gray-100 text-gray-700'
+            }`}
             title="Reset Zoom"
           >
             Reset Zoom
@@ -739,11 +759,18 @@ const CanvasComponent: React.FC<CanvasProps> = ({
         </div>
         
         {/* Zoom percentage and +/- controls */}
-        <div className="bg-white rounded-lg shadow-lg p-1 flex gap-1 items-center">
-          <span className="px-2 text-sm text-gray-700">{Math.round(viewport.zoom * 100)}%</span>
+        <div className={`rounded-lg shadow-lg p-1 flex gap-1 items-center transition-colors duration-200`}
+          style={{
+            backgroundColor: isDarkMode ? '#30302e' : '#ffffff'
+          }}>
+          <span className={`px-2 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+            {Math.round(viewport.zoom * 100)}%
+          </span>
           <button 
             onClick={() => setViewport({ ...viewport, zoom: Math.min(3, viewport.zoom * 1.2) })}
-            className="p-1 hover:bg-gray-100 rounded text-gray-700 outline-none focus:outline-none"
+            className={`p-1 rounded outline-none focus:outline-none transition-colors ${
+              isDarkMode ? 'hover:bg-gray-700 text-gray-300' : 'hover:bg-gray-100 text-gray-700'
+            }`}
             title="Zoom In"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -752,7 +779,9 @@ const CanvasComponent: React.FC<CanvasProps> = ({
           </button>
           <button 
             onClick={() => setViewport({ ...viewport, zoom: Math.max(0.25, viewport.zoom * 0.8) })}
-            className="p-1 hover:bg-gray-100 rounded text-gray-700 outline-none focus:outline-none"
+            className={`p-1 rounded outline-none focus:outline-none transition-colors ${
+              isDarkMode ? 'hover:bg-gray-700 text-gray-300' : 'hover:bg-gray-100 text-gray-700'
+            }`}
             title="Zoom Out"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

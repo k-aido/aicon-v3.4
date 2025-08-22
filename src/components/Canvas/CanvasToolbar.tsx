@@ -1,7 +1,18 @@
 import React, { useState } from 'react';
-import { UserSearch } from 'lucide-react';
-import { AIChatIcon, InstagramIcon, TikTokIcon, YouTubeIcon, ProfilesIcon } from '@/components/icons/PngIcons';
+import { 
+  AIChatLightIcon, 
+  InstagramLightIcon, 
+  TikTokLightIcon, 
+  YouTubeLightIcon, 
+  CreatorSearchIcon,
+  AIChatDarkIcon,
+  InstagramDarkIcon,
+  TikTokDarkIcon,
+  YouTubeDarkIcon,
+  CreatorSearchDarkIcon
+} from '@/components/icons/PngIcons';
 import { ContentPiece, ChatData, FolderData } from '@/types/canvas';
+import { useDarkMode } from '@/contexts/DarkModeContext';
 
 // Generate truly unique string IDs for canvas elements
 let toolIdCounter = 0;
@@ -20,13 +31,7 @@ interface Tool {
   platform?: string;
 }
 
-const tools: Tool[] = [
-  { id: 'ai-chat', icon: AIChatIcon, label: 'AI Chat', color: '#8B5CF6', type: 'chat' },
-  { id: 'creator-search', icon: UserSearch, label: 'Search Creators', color: '#10B981', type: 'creator-search' },
-  { id: 'instagram', icon: InstagramIcon, label: 'Instagram', color: '#E4405F', type: 'content', platform: 'instagram' },
-  { id: 'tiktok', icon: TikTokIcon, label: 'TikTok', color: '#000000', type: 'content', platform: 'tiktok' },
-  { id: 'youtube', icon: YouTubeIcon, label: 'YouTube', color: '#FF0000', type: 'content', platform: 'youtube' }
-];
+// Remove tools from here - will be defined inside component
 
 interface CanvasToolbarProps {
   onAddElement: (element: ContentPiece | ChatData | FolderData) => void;
@@ -39,6 +44,16 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({ onAddElement, view
   const [draggingTool, setDraggingTool] = useState<Tool | null>(null);
   const [activeTool, setActiveTool] = useState<string | null>(null);
   const [hoveredTool, setHoveredTool] = useState<string | null>(null);
+  const { isDarkMode } = useDarkMode();
+
+  // Define tools based on dark mode
+  const tools: Tool[] = [
+    { id: 'ai-chat', icon: isDarkMode ? AIChatDarkIcon : AIChatLightIcon, label: 'AI Chat', color: '#8B5CF6', type: 'chat' },
+    { id: 'creator-search', icon: isDarkMode ? CreatorSearchDarkIcon : CreatorSearchIcon, label: 'Search Creators', color: '#10B981', type: 'creator-search' },
+    { id: 'instagram', icon: isDarkMode ? InstagramDarkIcon : InstagramLightIcon, label: 'Instagram', color: '#E4405F', type: 'content', platform: 'instagram' },
+    { id: 'tiktok', icon: isDarkMode ? TikTokDarkIcon : TikTokLightIcon, label: 'TikTok', color: '#000000', type: 'content', platform: 'tiktok' },
+    { id: 'youtube', icon: isDarkMode ? YouTubeDarkIcon : YouTubeLightIcon, label: 'YouTube', color: '#FF0000', type: 'content', platform: 'youtube' }
+  ];
 
   const handleDragStart = (e: React.DragEvent, tool: Tool) => {
     setDraggingTool(tool);
@@ -47,7 +62,7 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({ onAddElement, view
     
     // Create ghost image
     const dragImage = document.createElement('div');
-    dragImage.className = 'bg-white rounded-lg shadow-lg p-3 flex items-center gap-2';
+    dragImage.className = `${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-lg p-3 flex items-center gap-2`;
     dragImage.innerHTML = `<span style="color: ${tool.color}">${tool.label}</span>`;
     dragImage.style.position = 'absolute';
     dragImage.style.top = '-1000px';
@@ -198,7 +213,10 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({ onAddElement, view
 
   return (
     <div
-      className="fixed left-4 top-1/2 -translate-y-1/2 bg-white rounded-lg shadow-lg z-30 p-1"
+      className={`fixed left-4 top-1/2 -translate-y-1/2 rounded-lg shadow-lg z-30 p-1 transition-colors duration-200`}
+      style={{
+        backgroundColor: isDarkMode ? '#30302e' : '#ffffff'
+      }}
       data-toolbar
       onDrop={handleDrop}
       onDragOver={(e) => e.preventDefault()}
@@ -215,8 +233,10 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({ onAddElement, view
                 onClick={() => handleToolClick(tool)}
                 onMouseEnter={() => setHoveredTool(tool.id)}
                 onMouseLeave={() => setHoveredTool(null)}
-                className={`relative p-2 rounded-md transition-all duration-150 cursor-pointer hover:bg-gray-100 active:scale-95 ${
-                  activeTool === tool.id ? 'bg-gray-100' : ''
+                className={`relative p-2 rounded-md transition-all duration-150 cursor-pointer active:scale-95 ${
+                  isDarkMode 
+                    ? `hover:bg-gray-700 ${activeTool === tool.id ? 'bg-gray-700' : ''}`
+                    : `hover:bg-gray-100 ${activeTool === tool.id ? 'bg-gray-100' : ''}`
                 } ${draggingTool?.id === tool.id ? 'opacity-50' : ''}`}
               >
                 <Icon className="w-5 h-5" size={20} style={{ color: tool.color }} />

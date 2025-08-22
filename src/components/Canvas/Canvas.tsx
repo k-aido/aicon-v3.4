@@ -175,8 +175,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
         const welcomeMessage = {
           id: Date.now(),
           role: 'assistant' as const,
-          content: "👋 Hello! I'm your AI assistant. I can help you analyze content, answer questions, and provide insights. \n\n**Here's how to get started:**\n- Connect content elements to me by dragging from their connection points\n- Ask me questions about the connected content\n- I'll provide analysis and insights based on what you share\n\nWhat would you like to explore today?",
-          timestamp: new Date()
+          content: "👋 Hello! I'm your AI assistant. I can help you analyze content, answer questions, and provide insights. \n\n**Here's how to get started:**\n- Connect content elements to me by dragging from their connection points\n- Ask me questions about the connected content\n- I'll provide analysis and insights based on what you share\n\nWhat would you like to explore today?"
         };
         
         const defaultConversation = {
@@ -194,16 +193,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
           y: y - 450,
           width: 800,
           height: 900,
-          messages: defaultConversation.messages,
-          conversations: [defaultConversation],
-          model: 'gpt-4',
-          connectedContentIds: [],
-          status: 'idle',
-          zIndex: 2,
-          isVisible: true,
-          isLocked: false,
-          createdAt: new Date(),
-          updatedAt: new Date()
+          messages: defaultConversation.messages
         };
       } else if (tool.type === 'text') {
         newElement = {

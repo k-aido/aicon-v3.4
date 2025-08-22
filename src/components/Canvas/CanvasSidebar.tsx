@@ -97,40 +97,15 @@ export const CanvasSidebar: React.FC<CanvasSidebarProps> = ({ onOpenSocialMediaM
       const chatElement = {
         id: baseElement.id,
         type: 'chat' as const,
-        position: { x: baseElement.x, y: baseElement.y },
-        dimensions: { width: baseElement.width, height: baseElement.height },
-        x: baseElement.x,        // Legacy compatibility
-        y: baseElement.y,        // Legacy compatibility
-        width: baseElement.width,  // Legacy compatibility
-        height: baseElement.height, // Legacy compatibility
-        title: baseElement.title,
+        x: baseElement.x,
+        y: baseElement.y,
+        width: baseElement.width,
+        height: baseElement.height,
         messages: [{
           id: Date.now(),
           role: 'assistant' as const,
-          content: "👋 Hello! I'm your AI assistant. I can help you analyze content, answer questions, and provide insights. \n\n**Here's how to get started:**\n- Connect content elements to me by dragging from their connection points\n- Ask me questions about the connected content\n- I'll provide analysis and insights based on what you share\n\nWhat would you like to explore today?",
-          timestamp: new Date()
-        }],
-        conversations: [{
-          id: 'default-' + baseElement.id,
-          title: 'Welcome Chat',
-          messages: [{
-            id: Date.now() + 1,
-            role: 'assistant' as const,
-            content: "👋 Hello! I'm your AI assistant. I can help you analyze content, answer questions, and provide insights. \n\n**Here's how to get started:**\n- Connect content elements to me by dragging from their connection points\n- Ask me questions about the connected content\n- I'll provide analysis and insights based on what you share\n\nWhat would you like to explore today?",
-            timestamp: new Date()
-          }],
-          createdAt: new Date(),
-          lastMessageAt: new Date()
-        }],
-        // Additional required fields
-        model: 'gpt-4',
-        connectedContentIds: [],
-        status: 'idle',
-        zIndex: 2,
-        isVisible: true,
-        isLocked: false,
-        createdAt: new Date(),
-        updatedAt: new Date()
+          content: "👋 Hello! I'm your AI assistant. I can help you analyze content, answer questions, and provide insights. \n\n**Here's how to get started:**\n- Connect content elements to me by dragging from their connection points\n- Ask me questions about the connected content\n- I'll provide analysis and insights based on what you share\n\nWhat would you like to explore today?"
+        }]
       };
       addElement(chatElement);
     } else if (tool.type === 'text') {

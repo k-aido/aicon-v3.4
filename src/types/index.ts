@@ -2,7 +2,7 @@
 export type Platform = 'youtube' | 'instagram' | 'tiktok' | 'unknown';
 
 // Element types
-export type ElementType = 'content' | 'chat';
+export type ElementType = 'content' | 'chat' | 'text';
 
 // Base element interface
 export interface BaseElement {
@@ -29,8 +29,16 @@ export interface ChatElement extends BaseElement {
   messages: Message[];
 }
 
+// Text element interface
+export interface TextElement extends BaseElement {
+  type: 'text';
+  title: string;
+  content: string;
+  lastModified: Date;
+}
+
 // Union type for all elements
-export type CanvasElement = ContentElement | ChatElement;
+export type CanvasElement = ContentElement | ChatElement | TextElement;
 
 // Message interface
 export interface Message {

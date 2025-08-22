@@ -203,16 +203,9 @@ const CanvasComponent: React.FC<CanvasProps> = ({
           y: y - 150,
           width: 400,
           height: 300,
-          position: { x: x - 200, y: y - 150 },
-          dimensions: { width: 400, height: 300 },
           title: 'Text Info',
           content: '',
-          lastModified: new Date(),
-          zIndex: 1,
-          isVisible: true,
-          isLocked: false,
-          createdAt: new Date(),
-          updatedAt: new Date()
+          lastModified: new Date()
         };
       } else {
         newElement = {

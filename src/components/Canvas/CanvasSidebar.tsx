@@ -117,16 +117,9 @@ export const CanvasSidebar: React.FC<CanvasSidebarProps> = ({ onOpenSocialMediaM
         y: baseElement.y,
         width: 400,
         height: 300,
-        position: { x: baseElement.x, y: baseElement.y },
-        dimensions: { width: 400, height: 300 },
         title: 'Text Info',
         content: '',
-        lastModified: new Date(),
-        zIndex: 1,
-        isVisible: true,
-        isLocked: false,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        lastModified: new Date()
       };
       addElement(textElement);
     } else {

@@ -203,6 +203,40 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       });
   }, [connections, element.id, allElements]);
 
+  // Track previously connected elements to detect new connections
+  const prevConnectedContentRef = useRef<Set<string | number>>(new Set());
+  const prevConnectedTextRef = useRef<Set<string | number>>(new Set());
+
+  // Track newly connected content for notifications only (no auto-population)
+  useEffect(() => {
+    const currentConnectedContentIds = new Set(connectedContent.map(c => c.id));
+    const currentConnectedTextIds = new Set(connectedTextElements.map(t => t.id));
+    
+    // Find newly connected content
+    const newContentConnections = [...currentConnectedContentIds].filter(
+      id => !prevConnectedContentRef.current.has(id)
+    );
+    
+    // Find newly connected text
+    const newTextConnections = [...currentConnectedTextIds].filter(
+      id => !prevConnectedTextRef.current.has(id)
+    );
+    
+    // Log when new connections are made (for debugging)
+    if (newContentConnections.length > 0 || newTextConnections.length > 0) {
+      console.log('[ChatInterface] New connections detected:', {
+        newContent: newContentConnections.length,
+        newText: newTextConnections.length,
+        totalConnectedContent: currentConnectedContentIds.size,
+        totalConnectedText: currentConnectedTextIds.size
+      });
+    }
+    
+    // Update refs for next comparison
+    prevConnectedContentRef.current = currentConnectedContentIds;
+    prevConnectedTextRef.current = currentConnectedTextIds;
+  }, [connectedContent, connectedTextElements]);
+
   // Handle @ mention detection
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
@@ -287,22 +321,33 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   };
 
   // Parse mentions from input text
-  const parseMentionsFromText = (text: string): { cleanText: string; mentionIds: string[] } => {
-    // Updated pattern for new format: @ig1[id] where id can be UUID or numeric
-    const mentionPattern = /@([a-z]{2}\d+)\[([a-zA-Z0-9-]+)\]/g;
+  const parseMentionsFromText = (text: string): { cleanText: string; mentionIds: string[]; textMentionIds: string[] } => {
+    // Pattern for content mentions: @ig1[id] where id can be UUID or numeric
+    const contentMentionPattern = /@([a-z]{2}\d+)\[([a-zA-Z0-9-]+)\]/g;
+    // Pattern for text mentions: @text1[id]
+    const textMentionPattern = /@text(\d+)\[([a-zA-Z0-9-]+)\]/g;
+    
     const mentionIds: string[] = [];
+    const textMentionIds: string[] = [];
     let cleanText = text;
     
+    // Extract content mentions
     let match;
-    while ((match = mentionPattern.exec(text)) !== null) {
+    while ((match = contentMentionPattern.exec(text)) !== null) {
       mentionIds.push(match[2]); // Keep as string to handle both UUIDs and numeric IDs
     }
     
-    // Replace mention syntax with just the short label for display
-    cleanText = text.replace(mentionPattern, '@$1');
+    // Extract text mentions
+    while ((match = textMentionPattern.exec(text)) !== null) {
+      textMentionIds.push(match[2]);
+    }
     
-    console.log('[ChatInterface] Parsed mentions:', { cleanText, mentionIds });
-    return { cleanText, mentionIds };
+    // Replace mention syntax with just the short label for display
+    cleanText = text.replace(contentMentionPattern, '@$1');
+    cleanText = cleanText.replace(textMentionPattern, '@text$1');
+    
+    console.log('[ChatInterface] Parsed mentions:', { cleanText, mentionIds, textMentionIds });
+    return { cleanText, mentionIds, textMentionIds };
   };
 
   // Fetch content analysis for mentioned content
@@ -363,10 +408,10 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       currentActiveConversationId = newConversationId;
     }
     
-    // Parse mentions from input
-    const { cleanText, mentionIds } = parseMentionsFromText(input.trim());
+    // No need to parse mentions - just use the input as is
+    const messageText = input.trim();
     
-    // Automatically include ALL connected content (not just mentioned ones)
+    // Automatically include ALL connected content
     // Get all connected content IDs that have analysis
     const allConnectedContentIds = connectedContent
       .filter(content => {
@@ -378,23 +423,27 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         return metadata?.scrapeId || content.id.toString();
       });
     
-    // Combine mentioned IDs with all connected content IDs (remove duplicates)
-    const contentIdsToInclude = [...new Set([...mentionIds, ...allConnectedContentIds])];
+    // Get all connected text element data
+    const allConnectedTextData = connectedTextElements
+      .filter(textEl => (textEl as any).content)
+      .map(textEl => ({
+        id: textEl.id.toString(),
+        content: (textEl as any).content,
+        title: (textEl as any).title || 'Text Note'
+      }));
     
-    console.log('[ChatInterface] Sending message with content:', { 
-      originalInput: input,
-      cleanText, 
-      mentionIds,
-      allConnectedContentIds,
-      totalContentIds: contentIdsToInclude,
+    console.log('[ChatInterface] Sending message with all connected context:', { 
+      messageText,
+      connectedContentCount: allConnectedContentIds.length,
+      connectedTextCount: allConnectedTextData.length,
       activeConversationId: currentActiveConversationId
     });
     
-    // Create user message with clean text
+    // Create user message
     const userMessage = {
       id: Date.now(),
       role: 'user' as const,
-      content: cleanText,
+      content: messageText,
       timestamp: new Date()
     };
     
@@ -422,9 +471,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
     
     try {
-      // Fetch analysis for all connected content (not just mentioned)
-      console.log('[ChatInterface] Fetching analysis for all connected content IDs:', contentIdsToInclude);
-      const contentAnalysis = await fetchContentAnalysis(contentIdsToInclude);
+      // Fetch analysis for all connected content
+      console.log('[ChatInterface] Fetching analysis for all connected content IDs:', allConnectedContentIds);
+      const contentAnalysis = await fetchContentAnalysis(allConnectedContentIds);
       console.log('[ChatInterface] Fetched content analysis for', contentAnalysis.length, 'pieces of content:', contentAnalysis);
       
       // Prepare connected text elements first
@@ -825,9 +874,17 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
         {/* Connected Content Indicator */}
         {(connectedContent.length > 0 || connectedTextElements.length > 0) && (
-          <div className="border-t border-gray-200 bg-blue-50 px-4 py-2">
-            <div className="flex items-center gap-2 text-xs text-blue-600">
-              <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+          <div className={`border-t px-4 py-2 ${
+            isDarkMode 
+              ? 'border-gray-700 bg-blue-900/20' 
+              : 'border-gray-200 bg-blue-50'
+          }`}>
+            <div className={`flex items-center gap-2 text-xs ${
+              isDarkMode ? 'text-blue-400' : 'text-blue-600'
+            }`}>
+              <div className={`w-2 h-2 rounded-full animate-pulse ${
+                isDarkMode ? 'bg-blue-400' : 'bg-blue-500'
+              }`}></div>
               <span>
                 {connectedTextElements.length > 0 && (
                   <>{connectedTextElements.length} text {connectedTextElements.length === 1 ? 'element' : 'elements'}</>
@@ -857,7 +914,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 onClick={(e) => e.stopPropagation()}
                 onMouseDown={(e) => e.stopPropagation()}
                 onFocus={(e) => e.stopPropagation()}
-                placeholder="Type a message... Use @ to reference content"
+                placeholder="Type a message..."
                 disabled={isLoading}
                 data-no-drag
                 className="flex-1 px-4 py-3 bg-gray-100 rounded-xl border border-gray-200 outline-none focus:border-[#1e8bff] focus:bg-white transition-all resize-none overflow-y-auto"
@@ -896,8 +953,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
             
             <div className="flex items-center justify-between">
               <div className="text-xs text-gray-400 flex items-center gap-1">
-                <AtSign className="w-3 h-3" />
-                <span>Type @ to reference content</span>
+                <span>All connected content is automatically included</span>
               </div>
               
               <div className="flex items-center gap-2">

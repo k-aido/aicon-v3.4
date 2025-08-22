@@ -2,9 +2,9 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { Position } from '@/types';
 
 interface UseElementDragProps {
-  elementId: number;
+  elementId: string | number;
   initialPosition: Position;
-  onUpdate: (id: number, position: Position) => void;
+  onUpdate: (id: string | number, position: Position) => void;
   onSelect: (event?: React.MouseEvent) => void;
 }
 
@@ -104,27 +104,33 @@ export const useElementDrag = ({
 
   // Mouse down handler
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    console.log('[useElementDrag] handleMouseDown called for element:', elementId, 'type:', typeof elementId);
+    
     // Check if the target is an interactive element that should not trigger drag
     const target = e.target as HTMLElement;
     
     // Direct interactive elements
     if (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT' || target.tagName === 'BUTTON' || target.tagName === 'SELECT') {
+      console.log('[useElementDrag] Ignoring drag - interactive element');
       return;
     }
     
     // Check for data-no-drag but only on the direct element, not parents
     if (target.hasAttribute('data-no-drag')) {
+      console.log('[useElementDrag] Ignoring drag - data-no-drag attribute');
       return;
     }
     
     // Check if clicking inside a button or other interactive element
     if (target.closest('button, input, textarea, select, [role="button"]')) {
+      console.log('[useElementDrag] Ignoring drag - inside interactive element');
       return;
     }
     
     e.stopPropagation();
     e.preventDefault();
     
+    console.log('[useElementDrag] Starting drag for element:', elementId);
     onSelect(e);
     setIsDragging(true);
     

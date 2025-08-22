@@ -10,12 +10,12 @@ import { getProxiedImageUrl, getPlatformPlaceholder } from '@/utils/imageProxy';
 interface ContentElementProps {
   element: ContentElementType;
   selected: boolean;
-  connecting: number | null;
+  connecting: string | number | null;
   connections: Connection[];
   onSelect: (element: ContentElementType, event?: React.MouseEvent) => void;
-  onUpdate: (id: number, updates: Partial<ContentElementType>) => void;
-  onDelete: (id: number) => void;
-  onConnectionStart: (elementId: number) => void;
+  onUpdate: (id: string | number, updates: Partial<ContentElementType>) => void;
+  onDelete: (id: string | number) => void;
+  onConnectionStart: (elementId: string | number) => void;
   onOpenAnalysisPanel?: (element: ContentElementType) => void;
   onReanalyze?: (element: ContentElementType) => void;
 }
@@ -104,14 +104,31 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   
   const hasConnections = connections.some(conn => 
-    conn.from === element.id || conn.to === element.id
+    String(conn.from) === String(element.id) || String(conn.to) === String(element.id)
   );
+
+  console.log('[ContentElement] Rendering element:', {
+    id: element.id,
+    idType: typeof element.id,
+    x: element.x,
+    y: element.y,
+    title: element.title,
+    metadata: (element as any).metadata,
+    onUpdate: typeof onUpdate,
+    onSelect: typeof onSelect
+  });
 
   const { isDragging, localPosition, handleMouseDown, setElementRef } = useElementDrag({
     elementId: element.id,
     initialPosition: { x: element.x, y: element.y },
     onUpdate,
     onSelect: (event) => onSelect(element, event)
+  });
+
+  console.log('[ContentElement] Drag hook initialized:', {
+    isDragging,
+    localPosition,
+    elementId: element.id
   });
 
   const handleConnectionClick = (e: React.MouseEvent) => {
@@ -226,9 +243,11 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
         willChange: isDragging ? 'transform' : 'auto'
       }}
       onMouseDown={(e) => {
+        console.log('[ContentElement] onMouseDown triggered for element:', element.id);
         // Only start drag if not clicking on resize handles or edit controls
         if (!(e.target as HTMLElement).closest('[data-resize-handle]') && 
             !(e.target as HTMLElement).closest('[data-no-drag]')) {
+          console.log('[ContentElement] Calling handleMouseDown for element:', element.id);
           handleMouseDown(e);
         }
       }}

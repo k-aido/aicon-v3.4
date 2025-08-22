@@ -71,8 +71,8 @@ interface CanvasState {
 // Helper function to check for duplicate connections
 const isDuplicateConnection = (connections: Connection[], from: string | number, to: string | number): boolean => {
   return connections.some(conn => 
-    (conn.from === from && conn.to === to) || 
-    (conn.from === to && conn.to === from)
+    (String(conn.from) === String(from) && String(conn.to) === String(to)) || 
+    (String(conn.from) === String(to) && String(conn.to) === String(from))
   );
 };
 
@@ -88,7 +88,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   addElement: (element) => {
     set((state) => {
       // Check if element with this ID already exists
-      const existingElement = state.elements.find(el => el.id === element.id);
+      const existingElement = state.elements.find(el => String(el.id) === String(element.id));
       if (existingElement) {
         console.warn(`[CanvasStore] Element with ID ${element.id} already exists, skipping add`);
         return state;
@@ -114,8 +114,22 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   updateElement: (id, updates) => {
     set((state) => {
       const beforeElements = state.elements.map(e => ({ id: e.id, type: e.type, title: e.title || 'N/A' }));
+      
+      // Debug: Check if element exists
+      const elementExists = state.elements.some(el => el.id === id);
+      const elementExistsString = state.elements.some(el => String(el.id) === String(id));
+      
+      console.log('🔧 [canvasStore] updateElement - element lookup:', {
+        searchingForId: id,
+        idType: typeof id,
+        elementExists,
+        elementExistsString,
+        allIds: state.elements.map(el => ({ id: el.id, type: typeof el.id }))
+      });
+      
       const updatedElements = state.elements.map(el => 
-        el.id === id ? { ...el, ...updates } : el
+        // Use loose comparison to handle string/number ID mismatch
+        String(el.id) === String(id) ? { ...el, ...updates } : el
       );
       const afterElements = updatedElements.map(e => ({ id: e.id, type: e.type, title: e.title || 'N/A' }));
       
@@ -136,7 +150,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   deleteElement: (id) => {
     set((state) => {
       const beforeElements = state.elements.map(e => ({ id: e.id, type: e.type, title: e.title || 'N/A' }));
-      const filteredElements = state.elements.filter(el => el.id !== id);
+      const filteredElements = state.elements.filter(el => String(el.id) !== String(id));
       const afterElements = filteredElements.map(e => ({ id: e.id, type: e.type, title: e.title || 'N/A' }));
       
       console.log('🗑️ [canvasStore] deleteElement filter operation:', { 
@@ -149,9 +163,9 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       return {
         elements: filteredElements,
         connections: state.connections.filter(conn => 
-          conn.from !== id && conn.to !== id
+          String(conn.from) !== String(id) && String(conn.to) !== String(id)
         ),
-        selectedElement: state.selectedElement?.id === id ? null : state.selectedElement
+        selectedElement: state.selectedElement && String(state.selectedElement.id) === String(id) ? null : state.selectedElement
       };
     });
   },
@@ -163,7 +177,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   addConnection: (connection) => {
     set((state) => {
       // Check if connection with this ID already exists
-      const existingConnection = state.connections.find(conn => conn.id === connection.id);
+      const existingConnection = state.connections.find(conn => String(conn.id) === String(connection.id));
       if (existingConnection) {
         console.warn(`[CanvasStore] Connection with ID ${connection.id} already exists, skipping add`);
         return state;
@@ -184,7 +198,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   
   deleteConnection: (id) => {
     set((state) => ({
-      connections: state.connections.filter(conn => conn.id !== id)
+      connections: state.connections.filter(conn => String(conn.id) !== String(id))
     }));
   },
   
@@ -225,11 +239,11 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   getConnectedContent: (chatId) => {
     const state = get();
     const connectedIds = state.connections
-      .filter(conn => conn.to === chatId)
+      .filter(conn => String(conn.to) === String(chatId))
       .map(conn => conn.from);
     
     const connectedElements = state.elements.filter(el => 
-      connectedIds.includes(el.id) && (el.type === 'content' || el.type === 'text')
+      connectedIds.some(id => String(id) === String(el.id)) && (el.type === 'content' || el.type === 'text')
     );
     
     console.log('🔗 [canvasStore] getConnectedContent filter operation:', { 

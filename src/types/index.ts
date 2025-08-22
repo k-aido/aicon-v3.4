@@ -6,7 +6,7 @@ export type ElementType = 'content' | 'chat' | 'text';
 
 // Base element interface
 export interface BaseElement {
-  id: number;
+  id: string | number;
   type: ElementType;
   x: number;
   y: number;
@@ -50,8 +50,8 @@ export interface Message {
 // Connection interface
 export interface Connection {
   id: number;
-  from: number;
-  to: number;
+  from: string | number;
+  to: string | number;
 }
 
 // Viewport interface

@@ -72,8 +72,9 @@ export const ChatElement: React.FC<ChatElementProps> = React.memo(({
         willChange: isDragging ? 'transform' : 'auto'
       }}
       onMouseDown={(e) => {
-        // Only start drag if not clicking on resize handles
-        if (!(e.target as HTMLElement).closest('[data-resize-handle]')) {
+        // Only start drag if not clicking on resize handles or connection points
+        if (!(e.target as HTMLElement).closest('[data-resize-handle]') &&
+            !(e.target as HTMLElement).closest('[data-connection-point]')) {
           handleMouseDown(e);
         }
       }}
@@ -93,7 +94,7 @@ export const ChatElement: React.FC<ChatElementProps> = React.memo(({
       >
         <ConnectionPoint
           position="left"
-          isVisible={isHovered || hasConnections}
+          isVisible={true}
           onClick={handleConnectionClick}
         />
         

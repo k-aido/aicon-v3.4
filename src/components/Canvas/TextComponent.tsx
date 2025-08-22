@@ -139,7 +139,7 @@ export const TextComponent: React.FC<TextComponentProps> = React.memo(({
       >
         <ConnectionPoint
           position="right"
-          isVisible={isHovered || hasConnections}
+          isVisible={true}
           onClick={handleConnectionClick}
         />
         

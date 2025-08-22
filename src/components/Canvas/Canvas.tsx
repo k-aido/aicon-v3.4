@@ -65,12 +65,23 @@ const CanvasComponent: React.FC<CanvasProps> = ({
   const [selectedElementIds, setSelectedElementIds] = useState<number[]>([]);
   const [lastClickedElementId, setLastClickedElementId] = useState<number | null>(null);
   
-  // Focus canvas on mount
+  // Focus canvas on mount and handle escape key
   useEffect(() => {
     if (canvasRef.current) {
       canvasRef.current.focus();
     }
-  }, []);
+    
+    // Handle escape key to cancel connection
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && connecting) {
+        console.log('[Canvas] Cancelling connection');
+        setConnecting(null);
+      }
+    };
+    
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [connecting, setConnecting]);
 
   // Canvas drag handling
   const { isDragging, handleMouseDown } = useCanvasDrag({
@@ -143,16 +154,31 @@ const CanvasComponent: React.FC<CanvasProps> = ({
 
   // Track mouse position for connection preview
   const handleMouseMove = (e: React.MouseEvent) => {
-    setMousePos({
-      x: (e.clientX - viewport.x) / viewport.zoom,
-      y: (e.clientY - viewport.y) / viewport.zoom
-    });
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (rect) {
+      setMousePos({
+        x: (e.clientX - rect.left - viewport.x) / viewport.zoom,
+        y: (e.clientY - rect.top - viewport.y) / viewport.zoom
+      });
+    }
   };
 
   // Handle drag over
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'copy';
+  };
+
+  // Get viewport center position
+  const getViewportCenter = () => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return { x: 0, y: 0 };
+    
+    // Calculate the center of the visible viewport in canvas coordinates
+    const centerX = (rect.width / 2 - viewport.x) / viewport.zoom;
+    const centerY = (rect.height / 2 - viewport.y) / viewport.zoom;
+    
+    return { x: centerX, y: centerY };
   };
 
   // Handle drop
@@ -164,12 +190,11 @@ const CanvasComponent: React.FC<CanvasProps> = ({
     
     try {
       const tool = JSON.parse(toolData);
-      const rect = canvasRef.current?.getBoundingClientRect();
-      if (!rect) return;
       
-      // Calculate drop position relative to viewport
-      const x = (e.clientX - rect.left - viewport.x) / viewport.zoom;
-      const y = (e.clientY - rect.top - viewport.y) / viewport.zoom;
+      // Use viewport center instead of drop position
+      const center = getViewportCenter();
+      const x = center.x;
+      const y = center.y;
       
       // Check if it's a social media platform that needs URL input
       const socialMediaPlatforms = ['instagram', 'tiktok', 'youtube'];
@@ -502,6 +527,8 @@ const CanvasComponent: React.FC<CanvasProps> = ({
 
   // Handle connection creation
   const handleConnectionStart = useCallback((elementId: string | number) => {
+    console.log('[Canvas] handleConnectionStart called:', { elementId, connecting, elementIdType: typeof elementId });
+    
     if (connecting) {
       // Complete connection
       if (String(connecting) !== String(elementId)) {
@@ -510,12 +537,15 @@ const CanvasComponent: React.FC<CanvasProps> = ({
           from: connecting,
           to: elementId
         };
+        console.log('[Canvas] Creating connection:', newConnection);
         setConnections(prev => [...prev, newConnection]);
       }
       setConnecting(null);
     } else {
       // Start connection
-      setConnecting(typeof elementId === 'number' ? elementId : Number(elementId));
+      const connectingId = typeof elementId === 'number' ? elementId : Number(elementId);
+      console.log('[Canvas] Starting connection from:', connectingId);
+      setConnecting(connectingId);
     }
   }, [connecting, setConnections, setConnecting]);
 
@@ -568,8 +598,18 @@ const CanvasComponent: React.FC<CanvasProps> = ({
     const fromElement = elements.find(el => String(el.id) === String(connecting));
     if (!fromElement) return null;
     
-    const fromX = fromElement.x + fromElement.width + 24;
-    const fromY = fromElement.y + fromElement.height / 2;
+    // Calculate connection point position based on element type
+    let fromX, fromY;
+    if (fromElement.type === 'chat') {
+      // Chat elements have connection point on the left
+      fromX = fromElement.x - 8;
+      fromY = fromElement.y + fromElement.height / 2;
+    } else {
+      // Content and text elements have connection point on the right
+      fromX = fromElement.x + fromElement.width + 8;
+      fromY = fromElement.y + fromElement.height / 2;
+    }
+    
     const toX = mousePos.x;
     const toY = mousePos.y;
     
@@ -582,7 +622,9 @@ const CanvasComponent: React.FC<CanvasProps> = ({
   return (
     <div 
       ref={canvasRef}
-      className={`flex-1 relative overflow-hidden transition-colors duration-200`}
+      className={`flex-1 relative overflow-hidden transition-colors duration-200 ${
+        connecting ? 'cursor-crosshair' : ''
+      }`}
       style={{ backgroundColor: isDarkMode ? darkModeColors.dark : darkModeColors.light }}
       data-canvas="true"
       tabIndex={0}
@@ -593,6 +635,13 @@ const CanvasComponent: React.FC<CanvasProps> = ({
       onFocus={(e) => {
         // Ensure canvas can receive keyboard events
         e.currentTarget.focus();
+      }}
+      onContextMenu={(e) => {
+        if (connecting) {
+          e.preventDefault();
+          console.log('[Canvas] Right-click cancelling connection');
+          setConnecting(null);
+        }
       }}
     >
       {/* Canvas Background - Draggable Area */}
@@ -647,22 +696,42 @@ const CanvasComponent: React.FC<CanvasProps> = ({
           {/* Connection Preview */}
           {connectionPreview && (
             <g>
+              {/* Thicker background line for visibility */}
+              <path
+                d={connectionPreview}
+                stroke="#1e8bff"
+                strokeWidth="4"
+                fill="none"
+                strokeOpacity="0.2"
+                className="pointer-events-none"
+              />
+              {/* Main connection line */}
               <path
                 d={connectionPreview}
                 stroke="#1e8bff"
                 strokeWidth="2"
                 fill="none"
-                strokeDasharray="5 3"
-                strokeOpacity="0.5"
-                className="pointer-events-none"
+                strokeDasharray="8 4"
+                strokeOpacity="0.8"
+                className="pointer-events-none animate-pulse"
+              />
+              {/* Cursor indicator */}
+              <circle
+                cx={mousePos.x}
+                cy={mousePos.y}
+                r="12"
+                fill="#1e8bff"
+                fillOpacity="0.3"
+                stroke="#1e8bff"
+                strokeWidth="2"
+                className="pointer-events-none animate-pulse"
               />
               <circle
                 cx={mousePos.x}
                 cy={mousePos.y}
-                r="8"
+                r="4"
                 fill="#1e8bff"
-                fillOpacity="0.5"
-                className="pointer-events-none connection-dot"
+                className="pointer-events-none"
               />
             </g>
           )}

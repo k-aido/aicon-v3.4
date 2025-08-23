@@ -384,11 +384,11 @@ export async function POST(request: NextRequest) {
           contentLength: completion.content?.length,
           firstContent: completion.content[0],
           type: completion.content[0]?.type,
-          text: completion.content[0]?.text?.substring(0, 100)
+          text: (completion.content[0] as any)?.text?.substring(0, 100)
         });
 
         response = completion.content[0].type === 'text' 
-          ? completion.content[0].text 
+          ? (completion.content[0] as any).text 
           : 'No response generated';
           
         // Extract token usage (Anthropic provides this differently)

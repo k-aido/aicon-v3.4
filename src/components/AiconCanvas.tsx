@@ -680,7 +680,6 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
         isOpen={analysisPanel.isOpen}
         content={analysisPanel.content}
         onClose={handleCloseAnalysisPanel}
-        onConnectToChat={handleConnectToChat}
       />
 
       {/* Social Media Modal */}

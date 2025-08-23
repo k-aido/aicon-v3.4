@@ -225,10 +225,10 @@ const CanvasComponent: React.FC<CanvasProps> = ({
         newElement = {
           id: chatId,
           type: 'chat' as const,
-          x: x - 400,
-          y: y - 450,
-          width: 800,
-          height: 900,
+          x: x - 425,
+          y: y - 310,
+          width: 850,
+          height: 620,
           messages: defaultConversation.messages
         };
       } else if (tool.type === 'text') {
@@ -825,7 +825,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
 
 
       {/* Bottom-Right Canvas Controls */}
-      <div className="absolute bottom-4 right-4 flex gap-2">
+      <div className="fixed bottom-4 right-4 flex gap-2 z-50">
         {/* Fit to Screen and Reset Zoom buttons */}
         <div className={`rounded-lg shadow-lg p-1 flex gap-1 transition-colors duration-200`}
           style={{

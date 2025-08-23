@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Youtube, Instagram, Video, ExternalLink, X, Edit, Save, Loader2, AlertCircle } from 'lucide-react';
+import { Youtube, Instagram, Video, ExternalLink, X, Edit, Save, Loader2, AlertCircle, Maximize2 } from 'lucide-react';
 import { ContentElement as ContentElementType, Connection, Platform } from '@/types';
 import { ConnectionPoint } from './ConnectionPoint';
 import { useElementDrag } from '@/hooks/useElementDrag';
@@ -102,6 +102,7 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [showDoubleClickHint, setShowDoubleClickHint] = useState(false);
   
   const hasConnections = connections.some(conn => 
     String(conn.from) === String(element.id) || String(conn.to) === String(element.id)
@@ -238,10 +239,10 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    // Single click to open analysis panel
-    if (onOpenAnalysisPanel) {
-      onOpenAnalysisPanel(element);
-    }
+    // Single click now only selects the element
+    // Show hint about double-clicking
+    setShowDoubleClickHint(true);
+    setTimeout(() => setShowDoubleClickHint(false), 3000);
   };
 
   return (
@@ -402,7 +403,9 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
           )}
           
           {/* Thumbnail */}
-          <div className="bg-gray-900 rounded-lg overflow-hidden mb-3 flex-1 min-h-[100px] relative">
+          <div className={`bg-gray-900 rounded-lg overflow-hidden mb-3 flex-1 min-h-[100px] relative transition-all duration-200 ${
+            isHovered && !isEditing ? 'ring-2 ring-blue-500/50 cursor-pointer' : ''
+          }`}>
             {(element as any).metadata?.scrapingError ? (
               <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center">
                 <AlertCircle className="w-8 h-8 text-red-500 mb-2" />
@@ -454,6 +457,22 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
                   img.src = getPlatformPlaceholder(element.platform);
                 }}
               />
+            )}
+            
+            {/* Double-click hint */}
+            {showDoubleClickHint && (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="bg-black/80 text-white px-3 py-2 rounded-lg text-sm font-medium animate-pulse">
+                  Double-click to open analysis
+                </div>
+              </div>
+            )}
+            
+            {/* Hover indicator */}
+            {isHovered && !isEditing && !showDoubleClickHint && (
+              <div className="absolute bottom-2 right-2 bg-black/60 text-white p-1.5 rounded-md pointer-events-none">
+                <Maximize2 size={14} />
+              </div>
             )}
           </div>
           

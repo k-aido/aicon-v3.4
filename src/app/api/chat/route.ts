@@ -214,9 +214,12 @@ export async function POST(request: NextRequest) {
 
     // Map model IDs to actual API models
     const modelMapping: Record<string, { provider: string; model: string }> = {
+      // OpenAI models
       'gpt-5-standard': { provider: 'openai', model: 'gpt-5-2025-08-07' },
       'gpt-5-mini': { provider: 'openai', model: 'gpt-5-mini-2025-08-07' },
       'gpt-5-nano': { provider: 'openai', model: 'gpt-5-nano-2025-08-07' },
+      
+      // Anthropic models
       'claude-opus-4': { provider: 'anthropic', model: 'claude-opus-4-20250514' },
       'claude-sonnet-4': { provider: 'anthropic', model: 'claude-sonnet-4-20250514' }
     };
@@ -307,6 +310,13 @@ export async function POST(request: NextRequest) {
 
         const completion = await openai.chat.completions.create(completionParams);
 
+        console.log('[API] OpenAI completion response:', {
+          hasChoices: !!completion.choices,
+          choicesLength: completion.choices?.length,
+          firstChoice: completion.choices[0],
+          content: completion.choices[0]?.message?.content?.substring(0, 100)
+        });
+
         response = completion.choices[0]?.message?.content || 'No response generated';
         
         // Extract token usage
@@ -367,6 +377,14 @@ export async function POST(request: NextRequest) {
           system: systemMessage,
           messages: anthropicMessages,
           max_tokens: 1000,
+        });
+
+        console.log('[API] Anthropic completion response:', {
+          hasContent: !!completion.content,
+          contentLength: completion.content?.length,
+          firstContent: completion.content[0],
+          type: completion.content[0]?.type,
+          text: completion.content[0]?.text?.substring(0, 100)
         });
 
         response = completion.content[0].type === 'text' 
@@ -444,6 +462,20 @@ export async function POST(request: NextRequest) {
         response = `⚠️ Anthropic API key not configured. Add ANTHROPIC_API_KEY to your .env.local file to enable ${model} responses. Your message: "${userMessage}"`;
       } else {
         response = `⚠️ API configuration missing for ${model}. Please check your environment variables. Your message: "${userMessage}"`;
+      }
+      
+      // Development mock response if needed
+      if (process.env.NODE_ENV === 'development' && response.includes('API configuration missing')) {
+        console.log('[API] Using mock response for development');
+        response = `I understand you're asking about: "${userMessage}". 
+
+Based on the connected content, here are some insights:
+- This appears to be related to content strategy and engagement optimization
+- Consider focusing on strong hooks in the first 3 seconds
+- Engagement tactics like visual storytelling and strategic hashtags are important
+- Platform-specific features should be leveraged for maximum reach
+
+[Note: This is a mock response. Please configure your API keys for real AI responses.]`;
       }
     }
 

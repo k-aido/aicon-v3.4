@@ -82,8 +82,8 @@ export const ChatElement: React.FC<ChatElementProps> = React.memo(({
       <SimpleResize
         width={element.width}
         height={element.height}
-        minWidth={600}
-        minHeight={500}
+        minWidth={850}
+        minHeight={620}
         maxWidth={1600}
         maxHeight={1200}
         onResize={handleResize}

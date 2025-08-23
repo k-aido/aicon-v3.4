@@ -9,7 +9,7 @@ import { SimpleResize } from './SimpleResize';
 interface ChatElementProps {
   element: ChatElementType;
   selected: boolean;
-  connecting: number | null;
+  connecting: string | number | null;
   connections: Connection[];
   allElements: CanvasElement[];
   onSelect: (element: ChatElementType, event?: React.MouseEvent) => void;

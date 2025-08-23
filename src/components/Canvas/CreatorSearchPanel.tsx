@@ -72,10 +72,10 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
       case 'top_views':
         return results.sort((a, b) => (b.views || 0) - (a.views || 0));
       case 'most_recent':
-        // Sort by timestamp if available, otherwise maintain original order
+        // Sort by posted_date if available, otherwise maintain original order
         return results.sort((a, b) => {
-          if (a.timestamp && b.timestamp) {
-            return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+          if (a.posted_date && b.posted_date) {
+            return new Date(b.posted_date).getTime() - new Date(a.posted_date).getTime();
           }
           return 0;
         });

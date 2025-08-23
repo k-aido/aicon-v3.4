@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { X, Search, Loader2, Plus, Heart, MessageCircle, Eye, AlertCircle, Clock, CheckCircle, XCircle } from 'lucide-react';
 import type { CreatorSearchRequest, CreatorSearchResponse, CreatorContent } from '@/types/creator-search';
 import { addCreatorContentToCanvas } from '../../../lib/canvas/creatorContentHelpers';
@@ -55,6 +55,34 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
   });
   const [displayedResults, setDisplayedResults] = useState(10);
   const [addingContentIds, setAddingContentIds] = useState<Set<string>>(new Set());
+
+  // Sort results based on selected filter
+  const sortedResults = useMemo(() => {
+    if (!searchState.results || searchState.results.length === 0) {
+      return [];
+    }
+
+    const results = [...searchState.results];
+    
+    switch (selectedFilter) {
+      case 'top_likes':
+        return results.sort((a, b) => (b.likes || 0) - (a.likes || 0));
+      case 'top_comments':
+        return results.sort((a, b) => (b.comments || 0) - (a.comments || 0));
+      case 'top_views':
+        return results.sort((a, b) => (b.views || 0) - (a.views || 0));
+      case 'most_recent':
+        // Sort by timestamp if available, otherwise maintain original order
+        return results.sort((a, b) => {
+          if (a.timestamp && b.timestamp) {
+            return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+          }
+          return 0;
+        });
+      default:
+        return results;
+    }
+  }, [searchState.results, selectedFilter]);
 
   // Clean input on platform change
   useEffect(() => {
@@ -346,22 +374,24 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
               </div>
             </div>
 
-            {/* Filter Dropdown */}
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-300 mb-2">Sort By</label>
-              <select
-                value={selectedFilter}
-                onChange={(e) => setSelectedFilter(e.target.value as any)}
-                disabled={selectedPlatform !== 'instagram'}
-                className="w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
-              >
-                {FILTERS.map((filter) => (
-                  <option key={filter.value} value={filter.value}>
-                    {filter.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {/* Filter Dropdown - Only show when we have results */}
+            {searchState.status === 'completed' && searchState.results.length > 0 && (
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-300 mb-2">Sort By</label>
+                <select
+                  value={selectedFilter}
+                  onChange={(e) => setSelectedFilter(e.target.value as any)}
+                  disabled={selectedPlatform !== 'instagram'}
+                  className="w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
+                >
+                  {FILTERS.map((filter) => (
+                    <option key={filter.value} value={filter.value}>
+                      {filter.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {/* Removed Content Type Selector - All content is Reels by default */}
 
@@ -435,7 +465,7 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
                 
                 {/* Content Grid */}
                 <div className="grid grid-cols-2 gap-3 mb-4">
-                  {searchState.results.slice(0, displayedResults).map((content, index) => {
+                  {sortedResults.slice(0, displayedResults).map((content, index) => {
                     const imgSrc = getProxiedImageUrl(content.thumbnail_url) || 'https://via.placeholder.com/300x300?text=No+Image';
                     console.log(`[CreatorSearchPanel] Rendering content ${index}:`, {
                       id: content.id,
@@ -521,12 +551,12 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
                 </div>
 
                 {/* Load More Button */}
-                {displayedResults < searchState.results.length && (
+                {displayedResults < sortedResults.length && (
                   <button
                     onClick={() => setDisplayedResults(prev => prev + 10)}
                     className="w-full bg-gray-800 hover:bg-gray-700 text-white font-medium py-3 px-4 rounded-lg transition-colors"
                   >
-                    Load More ({searchState.results.length - displayedResults} remaining)
+                    Load More ({sortedResults.length - displayedResults} remaining)
                   </button>
                 )}
               </div>

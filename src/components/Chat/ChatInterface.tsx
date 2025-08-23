@@ -8,7 +8,9 @@ import { createBrowserClient } from '@/lib/supabase/client';
 import { InsufficientCreditsModal } from '@/components/Modal/InsufficientCreditsModal';
 import { MentionAutocomplete } from './MentionAutocomplete';
 import { MarkdownMessage } from './MarkdownMessage';
+import { ModelSelector } from './ModelSelector';
 import { useDarkMode } from '@/contexts/DarkModeContext';
+import { LLM_MODELS, getDefaultModel } from '@/constants/llmModels';
 
 interface ChatInterfaceProps {
   element: ChatElement;
@@ -16,15 +18,6 @@ interface ChatInterfaceProps {
   allElements: CanvasElement[];
   onDelete?: (id: string | number) => void;
 }
-
-// Available LLM models
-const LLM_MODELS = [
-  { id: 'gpt-5-standard', name: 'GPT-5 Standard', provider: 'openai', color: 'text-green-400' },
-  { id: 'gpt-5-mini', name: 'GPT-5 Mini', provider: 'openai', color: 'text-green-300' },
-  { id: 'gpt-5-nano', name: 'GPT-5 Nano', provider: 'openai', color: 'text-green-200' },
-  { id: 'claude-opus-4', name: 'Claude Opus 4', provider: 'anthropic', color: 'text-purple-400' },
-  { id: 'claude-sonnet-4', name: 'Claude Sonnet 4', provider: 'anthropic', color: 'text-purple-300' }
-];
 
 
 /**
@@ -39,7 +32,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [selectedModel, setSelectedModel] = useState('gpt-5-mini');
+  const [selectedModel, setSelectedModel] = useState(getDefaultModel().id);
   const { isDarkMode } = useDarkMode();
   // Use a consistent string representation of element ID for localStorage keys
   const elementIdStr = String(element.id);
@@ -53,6 +46,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [cursorPosition, setCursorPosition] = useState(0);
   const [copiedMessageId, setCopiedMessageId] = useState<number | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   
   // Get current model info
   const currentModel = LLM_MODELS.find(m => m.id === selectedModel) || LLM_MODELS[4];
@@ -89,6 +84,11 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   useEffect(() => {
     setActiveConversation(Number(element.id), activeConversationId);
   }, [activeConversationId, element.id, setActiveConversation]);
+
+  // Scroll to bottom when messages change or loading state changes
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, isLoading]);
 
   // Load conversations from database on mount
   useEffect(() => {
@@ -236,6 +236,13 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   }, [connectedContent, connectedTextElements]);
 
   // Handle @ mention detection
+  // Scroll to bottom of messages
+  const scrollToBottom = () => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
     const cursorPos = e.target.selectionStart || 0;
@@ -244,8 +251,11 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     
     // Auto-resize textarea
     if (inputRef.current) {
+      // Reset height to auto to get the correct scrollHeight
       inputRef.current.style.height = 'auto';
-      inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 200) + 'px';
+      // Set new height based on content, respecting min and max
+      const newHeight = Math.max(52, Math.min(inputRef.current.scrollHeight, 200));
+      inputRef.current.style.height = newHeight + 'px';
     }
 
     // Check for @ symbol
@@ -373,8 +383,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     return [];
   };
 
-  const sendMessage = async () => {
-    if (!input.trim() || isLoading) return;
+  const sendMessage = async (messageOverride?: string, displayText?: string) => {
+    const messageToSend = messageOverride || input;
+    if (!messageToSend.trim() || isLoading) return;
     
     // If no active conversation, create one first
     let currentActiveConversationId = activeConversationId;
@@ -406,8 +417,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       currentActiveConversationId = newConversationId;
     }
     
-    // No need to parse mentions - just use the input as is
-    const messageText = input.trim();
+    // No need to parse mentions - just use the message as is
+    const messageText = messageToSend.trim();
     
     // Automatically include ALL connected content
     // Get all connected content IDs that have analysis
@@ -437,11 +448,11 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       activeConversationId: currentActiveConversationId
     });
     
-    // Create user message
+    // Create user message with display text if provided
     const userMessage = {
       id: Date.now(),
       role: 'user' as const,
-      content: messageText,
+      content: displayText || messageText,
       timestamp: new Date()
     };
     
@@ -459,14 +470,18 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     setStoreConversations(Number(element.id), updatedConversations);
     
     // Clear input and mentioned content
+    // Always clear for button commands since we set display text separately
     setInput('');
     setMentionedContent([]);
     setIsLoading(true);
     
-    // Reset textarea height
+    // Reset textarea height to minimum
     if (inputRef.current) {
-      inputRef.current.style.height = 'auto';
+      inputRef.current.style.height = '52px';
     }
+    
+    // Scroll to bottom immediately when user sends message
+    setTimeout(scrollToBottom, 50);
     
     try {
       // Fetch analysis for all connected content
@@ -509,9 +524,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: updatedMessages.map(m => ({ 
+          messages: updatedMessages.map((m, index) => ({ 
             role: m.role, 
-            content: m.content 
+            content: (index === updatedMessages.length - 1 && displayText) ? messageText : m.content 
           })),
           model: selectedModel,
           connectedContent: allConnectedData, // Pass text and analyzed content for RAG
@@ -610,6 +625,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       });
       
       setStoreConversations(Number(element.id), finalConversations);
+      
+      // Scroll to bottom after AI response
+      setTimeout(scrollToBottom, 100);
     } catch (error) {
       console.error('Error calling AI API:', error);
       let errorContent = error instanceof Error ? error.message : 'Unknown error';
@@ -800,7 +818,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         </div>
 
         {/* Messages Area - DRAGGABLE but text selectable */}
-        <div className="flex-1 overflow-y-auto p-6 bg-gray-50" style={{ userSelect: 'text' }}>
+        <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-6 bg-gray-50" style={{ userSelect: 'text' }}>
           {messages.length === 0 && (
             <div className="text-center text-gray-500 mt-12">
               <MessageSquare className="w-12 h-12 mx-auto mb-4 text-gray-300" />
@@ -882,6 +900,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 <span>AI is thinking...</span>
               </div>
             )}
+            
+            {/* Sentinel element for scrolling */}
+            <div ref={messagesEndRef} />
           </div>
         </div>
 
@@ -930,7 +951,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 placeholder="Type a message..."
                 disabled={isLoading}
                 data-no-drag
-                className="flex-1 px-4 py-3 bg-gray-100 rounded-xl border border-gray-200 outline-none focus:border-[#1e8bff] focus:bg-white transition-all resize-none overflow-y-auto"
+                className="flex-1 px-4 py-3 bg-gray-100 rounded-xl border border-gray-200 outline-none focus:border-[#1e8bff] focus:bg-white transition-all resize-none overflow-hidden"
                 style={{ 
                   pointerEvents: 'auto', 
                   zIndex: 10,
@@ -957,41 +978,68 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 }}
                 onMouseDown={(e) => e.stopPropagation()}
                 disabled={!input.trim() || isLoading}
-                className="px-4 py-3 bg-[#1e8bff] text-white rounded-xl hover:bg-[#1a7ae5] disabled:opacity-50 transition-colors self-end"
+                className="w-[52px] h-[52px] bg-[#1e8bff] text-white rounded-xl hover:bg-[#1a7ae5] disabled:opacity-50 transition-colors flex items-center justify-center flex-shrink-0"
                 data-no-drag
               >
                 <Send className="w-5 h-5" />
               </button>
             </div>
             
-            <div className="flex items-center justify-between">
-              <div className="text-xs text-gray-400 flex items-center gap-1">
-                <span>All connected content is automatically included</span>
-              </div>
+            <div className="flex items-center gap-2">
+              <ModelSelector
+                selectedModel={selectedModel}
+                onModelChange={setSelectedModel}
+              />
               
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-gray-500">Model:</span>
-              <select
-                value={selectedModel}
-                onChange={(e) => {
+              <button
+                onClick={(e) => {
                   e.stopPropagation();
-                  const newModel = e.target.value;
-                  const modelInfo = LLM_MODELS.find(m => m.id === newModel);
-                  console.log(`[ChatInterface] Selected model: ${newModel} (${modelInfo?.provider})`);
-                  setSelectedModel(newModel);
+                  setInput('Summarize');
+                  sendMessage('Please provide a comprehensive summary of all connected content in a structured format. Organize the summary by: 1) Main themes and topics covered, 2) Key messages from each piece of content, 3) Overall narrative or story being told, 4) Target audience and tone. Make it digestible and easy to understand.', 'Summarize');
                 }}
-                onClick={(e) => e.stopPropagation()}
                 onMouseDown={(e) => e.stopPropagation()}
-                className="px-3 py-1.5 bg-gray-100 rounded-lg text-sm border border-gray-200 outline-none focus:border-[#1e8bff] cursor-pointer"
+                disabled={connectedContent.length === 0 || isLoading}
+                className="w-[136px] h-[25px] flex items-center justify-center px-2 py-0 bg-gray-100 text-gray-700 rounded-lg text-xs border border-gray-200 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 data-no-drag
-                style={{ pointerEvents: 'auto', zIndex: 10 }}
               >
-                {LLM_MODELS.map(model => (
-                  <option key={model.id} value={model.id}>
-                    {model.name} ({model.provider})
-                  </option>
-                ))}
-              </select>
+                Summarize
+              </button>
+              
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setInput('Get Insights');
+                  sendMessage('Analyze all connected content and provide a bullet-point breakdown of what made each piece successful. Focus on: • Hook effectiveness and attention-grabbing techniques • Engagement tactics used • Content structure and pacing • Visual and audio elements that worked well • Call-to-action strategies • Viral or shareable elements • Platform-specific optimizations • Key performance drivers based on metrics (views, likes, comments)', 'Get Insights');
+                }}
+                onMouseDown={(e) => e.stopPropagation()}
+                disabled={connectedContent.length === 0 || isLoading}
+                className="w-[136px] h-[25px] flex items-center justify-center px-2 py-0 bg-gray-100 text-gray-700 rounded-lg text-xs border border-gray-200 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                data-no-drag
+              >
+                Get Insights
+              </button>
+              
+              <div className="relative group">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    // Research feature coming soon
+                  }}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  disabled={true}
+                  className="w-[136px] h-[25px] flex items-center justify-center px-2 py-0 bg-gray-100 text-gray-400 rounded-lg text-xs border border-gray-200 opacity-50 cursor-not-allowed transition-colors"
+                  data-no-drag
+                >
+                  Research
+                </button>
+                <span className="fixed px-2 py-1 text-xs bg-gray-800 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none" 
+                  style={{ 
+                    zIndex: 99999,
+                    marginTop: '30px',
+                    marginLeft: '-20px'
+                  }}>
+                  Coming Soon
+                </span>
               </div>
             </div>
           </div>

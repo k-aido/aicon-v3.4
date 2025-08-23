@@ -54,10 +54,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [copiedMessageId, setCopiedMessageId] = useState<number | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   
-  // Get current model info for provider branding
+  // Get current model info
   const currentModel = LLM_MODELS.find(m => m.id === selectedModel) || LLM_MODELS[4];
-  const providerBrand = currentModel.provider === 'openai' ? 'OpenAI GPT-5' : 'Anthropic Claude 4';
-  const providerColor = currentModel.provider === 'openai' ? 'text-green-400' : 'text-purple-400';
   
   // Persistent chat store
   const { 
@@ -586,6 +584,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         role: 'assistant' as const,
         content: data.content || 'No response received',
         timestamp: new Date(),
+        model: selectedModel,
         usage: usage // Store token usage
       };
       
@@ -780,9 +779,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
             <div className="flex items-center gap-2">
               <MessageSquare className={`w-5 h-5 ${currentModel.provider === 'openai' ? 'text-green-600' : 'text-[#1e8bff]'}`} />
               <span className="font-medium text-gray-900">{activeConversation?.title || 'AI Assistant'}</span>
-              <span className={`text-xs px-2 py-1 rounded-full bg-gray-100 ${providerColor}`}>
-                {providerBrand}
-              </span>
             </div>
           </div>
           
@@ -824,6 +820,23 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     ? '' 
                     : ''
                 }`}>
+                  {/* AICON Header floating above assistant messages */}
+                  {message.role === 'assistant' && (
+                    <div className="flex items-center gap-2 mb-2 px-1">
+                      <span className="font-semibold text-gray-700 text-sm">AICON</span>
+                      {message.model && (
+                        <>
+                          <span className="text-gray-400">•</span>
+                          <span className={`text-sm ${
+                            LLM_MODELS.find(m => m.id === message.model)?.color || 'text-gray-600'
+                          }`}>
+                            {LLM_MODELS.find(m => m.id === message.model)?.name || message.model}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  )}
+                  
                   {/* Copy button for assistant messages */}
                   {message.role === 'assistant' && (
                     <button
@@ -833,7 +846,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                         setCopiedMessageId(message.id);
                         setTimeout(() => setCopiedMessageId(null), 2000);
                       }}
-                      className="absolute -right-10 top-4 p-2 opacity-0 group-hover:opacity-100 transition-opacity bg-gray-100 hover:bg-gray-200 rounded-lg"
+                      className="absolute -right-10 top-8 p-2 opacity-0 group-hover:opacity-100 transition-opacity bg-gray-100 hover:bg-gray-200 rounded-lg"
                       title="Copy message"
                     >
                       {copiedMessageId === message.id ? (

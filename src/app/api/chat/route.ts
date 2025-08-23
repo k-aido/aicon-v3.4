@@ -214,11 +214,11 @@ export async function POST(request: NextRequest) {
 
     // Map model IDs to actual API models
     const modelMapping: Record<string, { provider: string; model: string }> = {
-      'gpt-5-standard': { provider: 'openai', model: 'gpt-4.1' },
-      'gpt-5-mini': { provider: 'openai', model: 'gpt-4.1-mini' },
-      'gpt-5-nano': { provider: 'openai', model: 'gpt-4.1-nano' },
-      'claude-opus-4': { provider: 'anthropic', model: 'claude-3-opus-20240229' },
-      'claude-sonnet-4': { provider: 'anthropic', model: 'claude-3-5-sonnet-20241022' }
+      'gpt-5-standard': { provider: 'openai', model: 'gpt-5-2025-08-07' },
+      'gpt-5-mini': { provider: 'openai', model: 'gpt-5-mini-2025-08-07' },
+      'gpt-5-nano': { provider: 'openai', model: 'gpt-5-nano-2025-08-07' },
+      'claude-opus-4': { provider: 'anthropic', model: 'claude-opus-4-20250514' },
+      'claude-sonnet-4': { provider: 'anthropic', model: 'claude-sonnet-4-20250514' }
     };
 
     const selectedModel = modelMapping[model] || { provider: 'mock', model: model };
@@ -286,15 +286,26 @@ export async function POST(request: NextRequest) {
     if (selectedModel.provider === 'openai' && openai) {
       console.log('[API] Using OpenAI API');
       try {
-        const completion = await openai.chat.completions.create({
+        // GPT-5 models use max_completion_tokens instead of max_tokens
+        const completionParams: any = {
           model: selectedModel.model,
           messages: [
             { role: 'system', content: systemMessage },
             ...messages
           ],
-          temperature: 0.7,
-          max_tokens: 1000,
-        });
+        };
+
+        // GPT-5 models have specific requirements
+        if (selectedModel.model.startsWith('gpt-5')) {
+          completionParams.max_completion_tokens = 1000;
+          // GPT-5 only supports default temperature value (1)
+          // Don't set temperature to use the default
+        } else {
+          completionParams.max_tokens = 1000;
+          completionParams.temperature = 0.7;
+        }
+
+        const completion = await openai.chat.completions.create(completionParams);
 
         response = completion.choices[0]?.message?.content || 'No response generated';
         
@@ -390,7 +401,9 @@ export async function POST(request: NextRequest) {
         let errorMessage = 'Sorry, I encountered an error: ';
         
         // Parse specific error types
-        if (error.status === 429 || error.message?.includes('429')) {
+        if (error.status === 529 || error.message?.includes('529') || error.message?.includes('overloaded_error')) {
+          errorMessage = 'Claude is temporarily overloaded due to high demand. Please try again in a few moments.';
+        } else if (error.status === 429 || error.message?.includes('429')) {
           errorMessage = 'Anthropic API rate limit exceeded. Please wait and try again.';
         } else if (error.status === 401 || error.message?.includes('401')) {
           errorMessage = 'Invalid Anthropic API key. Please check your API configuration.';

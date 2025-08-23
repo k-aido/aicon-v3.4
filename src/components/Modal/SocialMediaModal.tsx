@@ -203,12 +203,25 @@ export const SocialMediaModal: React.FC<SocialMediaModalProps> = ({ isOpen, onCl
         return;
       }
 
+      // Get viewport center position in canvas coordinates
+      const viewport = useCanvasStore.getState().viewport;
+      const canvasElement = document.querySelector('.canvas-background');
+      let centerX = 400; // Default fallback
+      let centerY = 300; // Default fallback
+      
+      if (canvasElement) {
+        const rect = canvasElement.getBoundingClientRect();
+        // Calculate center of visible viewport in canvas coordinates
+        centerX = (rect.width / 2 - viewport.x) / viewport.zoom;
+        centerY = (rect.height / 2 - viewport.y) / viewport.zoom;
+      }
+
       // Create social media element with scraping state
       const newElement = {
         id: elementId,
         type: 'content' as const,
-        x: Math.random() * 400 + 100,
-        y: Math.random() * 300 + 100,
+        x: centerX - 160, // Center the element (width/2)
+        y: centerY - 140, // Center the element (height/2)
         width: 320,
         height: 280,
         title: `Loading ${detectedPlatform} content...`,

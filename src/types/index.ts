@@ -45,6 +45,14 @@ export interface Message {
   id: number;
   role: 'user' | 'assistant';
   content: string;
+  model?: string;
+  timestamp?: Date;
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+    credits_used?: number;
+  };
 }
 
 // Connection interface

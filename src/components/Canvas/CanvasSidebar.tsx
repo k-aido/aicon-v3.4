@@ -87,13 +87,15 @@ export const CanvasSidebar: React.FC<CanvasSidebarProps> = ({ onOpenSocialMediaM
       return;
     }
     
-    // Get canvas center position
+    // Get viewport center position in canvas coordinates
+    const viewport = useCanvasStore.getState().viewport;
     const canvasElement = document.querySelector('.canvas-background');
     if (!canvasElement) return;
     
     const rect = canvasElement.getBoundingClientRect();
-    const centerX = rect.width / 2;
-    const centerY = rect.height / 2;
+    // Calculate center of visible viewport in canvas coordinates
+    const centerX = (rect.width / 2 - viewport.x) / viewport.zoom;
+    const centerY = (rect.height / 2 - viewport.y) / viewport.zoom;
     
     // Find next available ID - convert to numbers for Math.max, filter out non-numeric
     const numericIds = elements.map(el => typeof el.id === 'number' ? el.id : parseInt(String(el.id)) || 0);

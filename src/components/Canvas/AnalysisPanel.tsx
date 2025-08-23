@@ -7,12 +7,14 @@ interface AnalysisPanelProps {
   isOpen: boolean;
   content: ContentElement | null;
   onClose: () => void;
+  onConnectToChat?: (content: ContentElement) => void;
 }
 
 export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   isOpen,
   content,
-  onClose
+  onClose,
+  onConnectToChat
 }) => {
   if (!content) return null;
 
@@ -291,7 +293,19 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         </div>
 
         {/* Actions */}
-        <div className="p-4 bg-gray-800 border-t border-gray-700">
+        <div className="p-4 bg-gray-800 border-t border-gray-700 space-y-2">
+          {onConnectToChat && (
+            <button
+              onClick={() => {
+                onConnectToChat(content);
+                onClose();
+              }}
+              className="w-full bg-green-600 hover:bg-green-700 text-white rounded-lg py-2 px-4 flex items-center justify-center gap-2 transition-colors"
+            >
+              <MessageCircle className="w-4 h-4" />
+              Connect to Chat
+            </button>
+          )}
           <button
             onClick={() => window.open(content.url, '_blank')}
             className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-lg py-2 px-4 flex items-center justify-center gap-2 transition-colors"

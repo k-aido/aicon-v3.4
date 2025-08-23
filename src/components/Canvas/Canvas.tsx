@@ -37,8 +37,8 @@ interface CanvasProps {
   setSelectedElement: React.Dispatch<React.SetStateAction<CanvasElement | null>>;
   connections: Connection[];
   setConnections: React.Dispatch<React.SetStateAction<Connection[]>>;
-  connecting: number | null;
-  setConnecting: React.Dispatch<React.SetStateAction<number | null>>;
+  connecting: string | number | null;
+  setConnecting: React.Dispatch<React.SetStateAction<string | number | null>>;
   onOpenAnalysisPanel?: (content: ContentElementType) => void;
   onOpenSocialMediaModal?: (platform?: string) => void;
 }
@@ -527,7 +527,13 @@ const CanvasComponent: React.FC<CanvasProps> = ({
 
   // Handle connection creation
   const handleConnectionStart = useCallback((elementId: string | number) => {
-    console.log('[Canvas] handleConnectionStart called:', { elementId, connecting, elementIdType: typeof elementId });
+    console.log('[Canvas] handleConnectionStart called:', { 
+      elementId, 
+      elementIdType: typeof elementId,
+      connecting, 
+      connectingType: typeof connecting,
+      elements: elements.map(e => ({ id: e.id, type: e.type, idType: typeof e.id }))
+    });
     
     if (connecting) {
       // Complete connection
@@ -537,17 +543,20 @@ const CanvasComponent: React.FC<CanvasProps> = ({
           from: connecting,
           to: elementId
         };
-        console.log('[Canvas] Creating connection:', newConnection);
+        console.log('[Canvas] Creating connection:', {
+          newConnection,
+          fromElement: elements.find(e => String(e.id) === String(connecting)),
+          toElement: elements.find(e => String(e.id) === String(elementId))
+        });
         setConnections(prev => [...prev, newConnection]);
       }
       setConnecting(null);
     } else {
-      // Start connection
-      const connectingId = typeof elementId === 'number' ? elementId : Number(elementId);
-      console.log('[Canvas] Starting connection from:', connectingId);
-      setConnecting(connectingId);
+      // Start connection - preserve the original ID type
+      console.log('[Canvas] Starting connection from:', elementId);
+      setConnecting(elementId);
     }
-  }, [connecting, setConnections, setConnecting]);
+  }, [connecting, setConnections, setConnecting, elements]);
 
   // Handle connection deletion
   const handleConnectionDelete = useCallback((connectionId: number) => {
@@ -646,7 +655,9 @@ const CanvasComponent: React.FC<CanvasProps> = ({
     >
       {/* Canvas Background - Draggable Area */}
       <div 
-        className={`absolute inset-0 canvas-background ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+        className={`absolute inset-0 canvas-background ${
+          connecting !== null ? 'cursor-crosshair' : isDragging ? 'cursor-grabbing' : 'cursor-grab'
+        }`}
         onMouseDown={handleCanvasClick}
         style={{
           // Keep dots visible until very low zoom levels
@@ -794,6 +805,14 @@ const CanvasComponent: React.FC<CanvasProps> = ({
         })}
       </div>
       
+      {/* Connection Mode Indicator */}
+      {connecting !== null && (
+        <div className="fixed top-20 left-1/2 transform -translate-x-1/2 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg z-50 flex items-center gap-2">
+          <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+          <span className="text-sm font-medium">Click another element to connect or press ESC to cancel</span>
+        </div>
+      )}
+
       {/* Top-Right Controls - Credit Counter and Dark Mode Toggle */}
       <div className={`fixed top-4 right-4 h-12 rounded-lg shadow-lg z-50 flex items-center px-4 gap-3 transition-colors duration-200`}
         style={{

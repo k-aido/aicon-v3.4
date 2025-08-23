@@ -561,6 +561,58 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
     setCreatorSearchPanel({ isOpen: false });
   };
 
+  const handleConnectToChat = (content: ContentElement) => {
+    // Find all chat elements
+    const chatElements = elements.filter(el => el.type === 'chat');
+    
+    if (chatElements.length === 0) {
+      // If no chat exists, create one
+      const newChat: Element = {
+        id: Date.now(),
+        type: 'chat',
+        x: content.x + content.width + 100,
+        y: content.y,
+        width: 400,
+        height: 500
+      };
+      addElement(newChat);
+      
+      // Create connection after a short delay to ensure element is added
+      setTimeout(() => {
+        addConnection({
+          id: Date.now(),
+          from: content.id,
+          to: newChat.id
+        });
+      }, 100);
+    } else {
+      // Connect to the nearest chat element
+      const nearestChat = chatElements.reduce((nearest, chat) => {
+        const currentDistance = Math.sqrt(
+          Math.pow(chat.x - content.x, 2) + Math.pow(chat.y - content.y, 2)
+        );
+        const nearestDistance = Math.sqrt(
+          Math.pow(nearest.x - content.x, 2) + Math.pow(nearest.y - content.y, 2)
+        );
+        return currentDistance < nearestDistance ? chat : nearest;
+      });
+      
+      // Check if connection already exists
+      const connectionExists = connections.some(
+        conn => (conn.from === content.id && conn.to === nearestChat.id) ||
+                (conn.to === content.id && conn.from === nearestChat.id)
+      );
+      
+      if (!connectionExists) {
+        addConnection({
+          id: Date.now(),
+          from: content.id,
+          to: nearestChat.id
+        });
+      }
+    }
+  };
+
   const handleAddCreatorContentToCanvas = async (element: any) => {
     // This function is passed as a callback to CreatorSearchPanel
     // The CreatorSearchPanel will call addCreatorContentToCanvas which will use this callback
@@ -616,8 +668,8 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
           setSelectedElement={setSelectedElement as React.Dispatch<React.SetStateAction<ImportedCanvasElement | null>>}
           connections={connections as ImportedConnection[]}
           setConnections={handleSetConnections}
-          connecting={connecting as number | null}
-          setConnecting={setConnecting as React.Dispatch<React.SetStateAction<number | null>>}
+          connecting={connecting}
+          setConnecting={setConnecting}
           onOpenAnalysisPanel={handleOpenAnalysisPanel}
           onOpenSocialMediaModal={handleOpenSocialMediaModal}
         />
@@ -628,6 +680,7 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
         isOpen={analysisPanel.isOpen}
         content={analysisPanel.content}
         onClose={handleCloseAnalysisPanel}
+        onConnectToChat={handleConnectToChat}
       />
 
       {/* Social Media Modal */}

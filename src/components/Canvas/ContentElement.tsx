@@ -133,7 +133,12 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
 
   const handleConnectionClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    console.log('[ContentElement] Connection point clicked for element:', element.id);
+    console.log('[ContentElement] Connection point clicked for element:', {
+      elementId: element.id,
+      elementType: element.type,
+      connecting: connecting,
+      event: e
+    });
     onConnectionStart(element.id);
   };
 
@@ -231,6 +236,14 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
     }
   };
 
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    // Single click to open analysis panel
+    if (onOpenAnalysisPanel) {
+      onOpenAnalysisPanel(element);
+    }
+  };
+
   return (
     <div
       ref={setElementRef}
@@ -255,6 +268,7 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
           handleMouseDown(e);
         }
       }}
+      onClick={handleClick}
       onDoubleClick={handleDoubleClick}
       onContextMenu={handleContextMenu}
     >

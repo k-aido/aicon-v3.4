@@ -14,7 +14,7 @@ const AiconCanvasApp: React.FC = () => {
   const [elements, setElements] = useState<CanvasElement[]>([]);
   const [selectedElement, setSelectedElement] = useState<CanvasElement | null>(null);
   const [connections, setConnections] = useState<Connection[]>([]);
-  const [connecting, setConnecting] = useState<number | null>(null);
+  const [connecting, setConnecting] = useState<string | number | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState<Platform | null>(null);
 

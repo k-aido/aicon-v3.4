@@ -71,6 +71,12 @@ const CanvasComponent: React.FC<CanvasProps> = ({
       canvasRef.current.focus();
     }
     
+    // Reset viewport if it's too far off screen
+    if (Math.abs(viewport.x) > 5000 || Math.abs(viewport.y) > 5000) {
+      console.log('[Canvas] Resetting viewport - was too far off screen');
+      setViewport({ x: 0, y: 0, zoom: 1 });
+    }
+    
     // Handle escape key to cancel connection
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && connecting) {
@@ -597,8 +603,8 @@ const CanvasComponent: React.FC<CanvasProps> = ({
 
   // Reset zoom to 100%
   const handleResetZoom = useCallback(() => {
-    setViewport({ ...viewport, zoom: 1 });
-  }, [viewport, setViewport]);
+    setViewport({ x: 0, y: 0, zoom: 1 });
+  }, [setViewport]);
 
   // Connection preview path
   const connectionPreview = useMemo(() => {
@@ -641,6 +647,15 @@ const CanvasComponent: React.FC<CanvasProps> = ({
       onMouseMove={handleMouseMove}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
+      onMouseDown={(e) => {
+        const target = e.target as HTMLElement;
+        // Check if we clicked on the canvas background or the main canvas itself
+        if (target === e.currentTarget || target.classList.contains('canvas-background')) {
+          console.log('[Canvas] Starting drag from main container');
+          e.preventDefault();
+          handleMouseDown(e, viewport);
+        }
+      }}
       onFocus={(e) => {
         // Ensure canvas can receive keyboard events
         e.currentTarget.focus();
@@ -660,17 +675,17 @@ const CanvasComponent: React.FC<CanvasProps> = ({
         }`}
         onMouseDown={handleCanvasClick}
         style={{
+          zIndex: 0,
           // Keep dots visible until very low zoom levels
           opacity: viewport.zoom < 0.25 ? 0 : viewport.zoom < 0.4 ? (viewport.zoom - 0.25) * 6.67 : 1,
           // Use consistent dot appearance with dark mode support
           backgroundImage: viewport.zoom < 0.25 
             ? 'none'
             : `radial-gradient(circle, ${isDarkMode ? '#4a4a48' : '#d4d4d8'} 1px, transparent 1px)`,
-          // Scale grid size with zoom, with larger spacing when zoomed out
-          backgroundSize: viewport.zoom < 0.5 
-            ? '40px 40px'  // Fixed larger grid when zoomed out
-            : `${20 * viewport.zoom}px ${20 * viewport.zoom}px`, // Scale with zoom when zoomed in
-          backgroundPosition: `${viewport.x}px ${viewport.y}px`,
+          // Scale grid size with zoom
+          backgroundSize: `${20 * viewport.zoom}px ${20 * viewport.zoom}px`,
+          // Use modulo to keep the pattern repeating properly
+          backgroundPosition: `${viewport.x % (20 * viewport.zoom)}px ${viewport.y % (20 * viewport.zoom)}px`,
           backgroundColor: isDarkMode ? darkModeColors.dark : darkModeColors.light,
           transition: 'opacity 0.15s ease-out, background-color 0.2s ease-out'
         }}
@@ -680,7 +695,8 @@ const CanvasComponent: React.FC<CanvasProps> = ({
       <div 
         style={{
           transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`,
-          transformOrigin: '0 0'
+          transformOrigin: '0 0',
+          zIndex: 1
         }}
         className="absolute inset-0 pointer-events-none"
       >
@@ -845,9 +861,9 @@ const CanvasComponent: React.FC<CanvasProps> = ({
             className={`px-2 py-1 rounded text-xs font-medium outline-none focus:outline-none transition-colors ${
               isDarkMode ? 'hover:bg-gray-700 text-gray-300' : 'hover:bg-gray-100 text-gray-700'
             }`}
-            title="Reset Zoom"
+            title="Reset View"
           >
-            Reset Zoom
+            Reset View
           </button>
         </div>
         

@@ -20,6 +20,32 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   const processedData = metadata.processedData || {};
   const analysis = metadata.analysis || {};
   const metrics = processedData.metrics || {};
+  
+  // Debug log to see available data
+  console.log('[AnalysisPanel] Available data:', {
+    hasTranscriptInAnalysis: !!analysis.transcript,
+    hasTranscriptInProcessedData: !!processedData.transcript,
+    hasCaptionInProcessedData: !!processedData.caption,
+    hasSubtitlesInProcessedData: !!processedData.subtitles,
+    processedDataKeys: Object.keys(processedData),
+    analysisKeys: Object.keys(analysis),
+    // Log actual content to see what's in each field
+    captionPreview: processedData.caption?.substring(0, 100),
+    transcriptPreview: processedData.transcript?.substring(0, 100),
+    subtitlesPreview: processedData.subtitles?.substring(0, 100),
+    // Check the actual transcript data
+    transcriptLength: processedData.transcript?.length,
+    transcriptType: typeof processedData.transcript,
+    // Check metadata status
+    isAnalyzed: metadata.isAnalyzed,
+    isScraping: metadata.isScraping,
+    scrapeId: metadata.scrapeId,
+    // Check if we have the full content object
+    contentPlatform: content.platform,
+    hasMetadata: !!metadata,
+    // Log the full processedData object
+    fullProcessedData: processedData
+  });
 
   // Format number with K/M suffix
   const formatNumber = (num: number | undefined): string => {
@@ -38,6 +64,18 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
       return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
     }
     return `${seconds}s`;
+  };
+
+  // Clean up text by removing markdown-like formatting
+  const cleanText = (text: string): string => {
+    if (!text) return '';
+    // Remove markdown bold markers and other formatting
+    return text
+      .replace(/\*\*/g, '')
+      .replace(/\*\*:/g, '')
+      .replace(/^[*\-•:]\s*/g, '')  // Added colon to the regex
+      .replace(/^:\s*/g, '')  // Remove leading colons
+      .trim();
   };
 
   return (
@@ -93,43 +131,54 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
           {(metrics.views || metrics.likes || metrics.comments) && (
             <div className="mb-6">
               <h4 className="text-gray-400 text-sm font-semibold uppercase tracking-wide mb-2">Engagement Metrics</h4>
-              <div className="grid grid-cols-2 gap-3">
-                {metrics.views !== undefined && (
-                  <div className="bg-gray-800 rounded-lg p-3">
-                    <div className="flex items-center gap-2">
-                      <Eye className="w-4 h-4 text-gray-400" />
-                      <p className="text-gray-400 text-xs">Views</p>
+              <div className="bg-gray-800 rounded-lg p-3">
+                <div className="flex items-center justify-between gap-2">
+                  {metrics.views !== undefined && (
+                    <div className="flex-1 text-center">
+                      <div className="flex items-center justify-center gap-1.5 mb-1">
+                        <Eye className="w-3.5 h-3.5 text-gray-400" />
+                        <span className="text-gray-400 text-xs">Views</span>
+                      </div>
+                      <p className="text-white text-lg font-medium">{formatNumber(metrics.views)}</p>
                     </div>
-                    <p className="text-white text-lg font-medium">{formatNumber(metrics.views)}</p>
-                  </div>
-                )}
-                {metrics.likes !== undefined && (
-                  <div className="bg-gray-800 rounded-lg p-3">
-                    <div className="flex items-center gap-2">
-                      <Heart className="w-4 h-4 text-gray-400" />
-                      <p className="text-gray-400 text-xs">Likes</p>
+                  )}
+                  {metrics.views !== undefined && metrics.likes !== undefined && (
+                    <div className="w-px h-8 bg-gray-700"></div>
+                  )}
+                  {metrics.likes !== undefined && (
+                    <div className="flex-1 text-center">
+                      <div className="flex items-center justify-center gap-1.5 mb-1">
+                        <Heart className="w-3.5 h-3.5 text-gray-400" />
+                        <span className="text-gray-400 text-xs">Likes</span>
+                      </div>
+                      <p className="text-white text-lg font-medium">{formatNumber(metrics.likes)}</p>
                     </div>
-                    <p className="text-white text-lg font-medium">{formatNumber(metrics.likes)}</p>
-                  </div>
-                )}
-                {metrics.comments !== undefined && (
-                  <div className="bg-gray-800 rounded-lg p-3">
-                    <div className="flex items-center gap-2">
-                      <MessageCircle className="w-4 h-4 text-gray-400" />
-                      <p className="text-gray-400 text-xs">Comments</p>
+                  )}
+                  {metrics.likes !== undefined && metrics.comments !== undefined && (
+                    <div className="w-px h-8 bg-gray-700"></div>
+                  )}
+                  {metrics.comments !== undefined && (
+                    <div className="flex-1 text-center">
+                      <div className="flex items-center justify-center gap-1.5 mb-1">
+                        <MessageCircle className="w-3.5 h-3.5 text-gray-400" />
+                        <span className="text-gray-400 text-xs">Comments</span>
+                      </div>
+                      <p className="text-white text-lg font-medium">{formatNumber(metrics.comments)}</p>
                     </div>
-                    <p className="text-white text-lg font-medium">{formatNumber(metrics.comments)}</p>
-                  </div>
-                )}
-                {metrics.shares !== undefined && (
-                  <div className="bg-gray-800 rounded-lg p-3">
-                    <div className="flex items-center gap-2">
-                      <Share2 className="w-4 h-4 text-gray-400" />
-                      <p className="text-gray-400 text-xs">Shares</p>
+                  )}
+                  {metrics.comments !== undefined && metrics.shares !== undefined && (
+                    <div className="w-px h-8 bg-gray-700"></div>
+                  )}
+                  {metrics.shares !== undefined && (
+                    <div className="flex-1 text-center">
+                      <div className="flex items-center justify-center gap-1.5 mb-1">
+                        <Share2 className="w-3.5 h-3.5 text-gray-400" />
+                        <span className="text-gray-400 text-xs">Shares</span>
+                      </div>
+                      <p className="text-white text-lg font-medium">{formatNumber(metrics.shares)}</p>
                     </div>
-                    <p className="text-white text-lg font-medium">{formatNumber(metrics.shares)}</p>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -163,75 +212,161 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 
           {/* AI Analysis */}
           {analysis && (
-            <>
+            <div className="space-y-4">
               {/* Hook Analysis */}
-              {analysis.hook && (
-                <div className="mb-6">
-                  <h4 className="text-gray-400 text-sm font-semibold uppercase tracking-wide mb-2">Hook Analysis</h4>
-                  <div className="bg-gray-800 rounded-lg p-4">
-                    <p className="text-gray-300 text-sm">{analysis.hook}</p>
-                    {analysis.hookScore && (
-                      <div className="mt-2">
-                        <div className="flex justify-between text-xs mb-1">
-                          <span className="text-gray-400">Effectiveness</span>
-                          <span className="text-gray-400">{analysis.hookScore}/10</span>
-                        </div>
-                        <div className="w-full bg-gray-700 rounded-full h-2">
-                          <div 
-                            className="bg-blue-500 h-2 rounded-full" 
-                            style={{ width: `${analysis.hookScore * 10}%` }}
-                          />
-                        </div>
+              {(analysis.hook || analysis.hook_analysis) && (
+                <div className="bg-gray-800 rounded-lg p-4 border-l-4 border-green-500">
+                  <h4 className="text-green-400 font-semibold text-sm mb-2 flex items-center gap-2">
+                    <span className="text-lg">🎯</span> HOOK
+                  </h4>
+                  <p className="text-gray-100 text-sm leading-relaxed">{cleanText(analysis.hook || analysis.hook_analysis)}</p>
+                  {analysis.hookScore && (
+                    <div className="mt-3 bg-gray-900 rounded-lg p-2">
+                      <div className="flex justify-between text-xs mb-1">
+                        <span className="text-gray-500">Effectiveness Score</span>
+                        <span className="text-green-400 font-semibold">{analysis.hookScore}/10</span>
                       </div>
-                    )}
+                      <div className="w-full bg-gray-700 rounded-full h-1.5 overflow-hidden">
+                        <div 
+                          className="bg-gradient-to-r from-green-500 to-green-400 h-full rounded-full transition-all duration-300" 
+                          style={{ width: `${analysis.hookScore * 10}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Body Analysis */}
+              {(analysis.body || analysis.keyPoints || analysis.contentStructure?.body || analysis.body_analysis) && (
+                <div className="bg-gray-800 rounded-lg p-4 border-l-4 border-yellow-500">
+                  <h4 className="text-yellow-400 font-semibold text-sm mb-2 flex items-center gap-2">
+                    <span className="text-lg">📋</span> BODY
+                  </h4>
+                  <div className="space-y-2">
+                    {(() => {
+                      // Check if we have body_analysis (string) or other formats
+                      const bodyContent = analysis.body || analysis.keyPoints || analysis.contentStructure?.body || analysis.body_analysis;
+                      
+                      // If body_analysis is a string, display it as a single paragraph
+                      if (typeof bodyContent === 'string') {
+                        return (
+                          <p className="text-gray-100 text-sm leading-relaxed">{cleanText(bodyContent)}</p>
+                        );
+                      }
+                      
+                      // If it's an array, display as bullet points
+                      const pointsArray = Array.isArray(bodyContent) ? bodyContent : [];
+                      return pointsArray.map((point: string, index: number) => (
+                        <div key={index} className="flex items-start gap-2">
+                          <span className="text-yellow-400 text-sm mt-0.5">•</span>
+                          <p className="text-gray-100 text-sm leading-relaxed flex-1">{cleanText(point)}</p>
+                        </div>
+                      ));
+                    })()}
                   </div>
+                  {/* Temporarily hardcoded to 8/10 */}
+                  {(
+                    <div className="mt-3 bg-gray-900 rounded-lg p-2">
+                      <div className="flex justify-between text-xs mb-1">
+                        <span className="text-gray-500">Effectiveness Score</span>
+                        <span className="text-yellow-400 font-semibold">{analysis.bodyScore || analysis.body_score || 8}/10</span>
+                      </div>
+                      <div className="w-full bg-gray-700 rounded-full h-1.5 overflow-hidden">
+                        <div 
+                          className="bg-gradient-to-r from-yellow-500 to-yellow-400 h-full rounded-full transition-all duration-300" 
+                          style={{ width: `${(analysis.bodyScore || analysis.body_score || 8) * 10}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* CTA Analysis */}
+              {(analysis.cta || analysis.callToAction || analysis.contentStructure?.cta || analysis.cta_analysis) && (
+                <div className="bg-gray-800 rounded-lg p-4 border-l-4 border-red-500">
+                  <h4 className="text-red-400 font-semibold text-sm mb-2 flex items-center gap-2">
+                    <span className="text-lg">📢</span> CALL TO ACTION
+                  </h4>
+                  <p className="text-gray-100 text-sm leading-relaxed">
+                    {cleanText(analysis.cta || analysis.callToAction || analysis.contentStructure?.cta || analysis.cta_analysis)}
+                  </p>
+                  {/* Temporarily hardcoded to 8/10 */}
+                  {(
+                    <div className="mt-3 bg-gray-900 rounded-lg p-2">
+                      <div className="flex justify-between text-xs mb-1">
+                        <span className="text-gray-500">Effectiveness Score</span>
+                        <span className="text-red-400 font-semibold">{analysis.ctaScore || analysis.cta_score || 8}/10</span>
+                      </div>
+                      <div className="w-full bg-gray-700 rounded-full h-1.5 overflow-hidden">
+                        <div 
+                          className="bg-gradient-to-r from-red-500 to-red-400 h-full rounded-full transition-all duration-300" 
+                          style={{ width: `${(analysis.ctaScore || analysis.cta_score || 8) * 10}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
               {/* Content Strategy */}
-              {analysis.contentStrategy && (
-                <div className="mb-6">
-                  <h4 className="text-gray-400 text-sm font-semibold uppercase tracking-wide mb-2">Content Strategy</h4>
-                  <div className="bg-gray-800 rounded-lg p-4">
-                    <p className="text-gray-300 text-sm">{analysis.contentStrategy}</p>
-                  </div>
+              {(analysis.contentStrategy && !analysis.body_analysis) && (
+                <div className="bg-gray-800 rounded-lg p-4 border-l-4 border-blue-500">
+                  <h4 className="text-blue-400 font-semibold text-sm mb-2 flex items-center gap-2">
+                    <span className="text-lg">📊</span> CONTENT STRATEGY
+                  </h4>
+                  <p className="text-gray-100 text-sm leading-relaxed">{cleanText(analysis.contentStrategy)}</p>
                 </div>
               )}
 
-              {/* Key Insights */}
-              {analysis.keyInsights && analysis.keyInsights.length > 0 && (
-                <div className="mb-6">
-                  <h4 className="text-gray-400 text-sm font-semibold uppercase tracking-wide mb-2">Key Insights</h4>
-                  <div className="bg-gray-800 rounded-lg p-4">
-                    <ul className="text-gray-300 text-sm space-y-2">
-                      {analysis.keyInsights.map((insight: string, index: number) => (
-                        <li key={index} className="flex items-start">
-                          <span className="text-blue-400 mr-2">•</span>
-                          <span>{insight}</span>
-                        </li>
-                      ))}
-                    </ul>
+              {/* Video Transcript - Separate section */}
+              {(processedData.transcript || content.platform === 'youtube') && (
+                <div className="bg-gray-800 rounded-lg p-4 border-l-4 border-purple-500">
+                  <h4 className="text-purple-400 font-semibold text-sm mb-2 flex items-center gap-2">
+                    <span className="text-lg">📝</span> VIDEO TRANSCRIPT
+                  </h4>
+                  <div className="bg-gray-900 rounded-lg p-4 max-h-96 overflow-y-auto">
+                    <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-wrap">
+                      {(() => {
+                        // The transcript is stored in processedData.transcript
+                        const transcript = processedData.transcript;
+                        
+                        // Log for debugging
+                        console.log('[AnalysisPanel] Transcript check:', {
+                          hasTranscript: !!transcript,
+                          transcriptLength: transcript?.length,
+                          transcriptPreview: transcript?.substring(0, 50)
+                        });
+                        
+                        if (transcript) {
+                          // We have the actual video transcript
+                          return cleanText(transcript);
+                        }
+                        
+                        // Check if this is a video that should have a transcript
+                        if (content.platform === 'youtube') {
+                          // Check if it's still being processed
+                          if (metadata.isScraping || metadata.isAnalyzing) {
+                            return 'Transcript is being processed...';
+                          }
+                          
+                          // Check if this content was scraped before transcript feature was added
+                          if (!processedData.transcriptionSource && metadata.isAnalyzed) {
+                            return 'This content was analyzed before transcript extraction was available. Re-analyze to fetch the transcript.';
+                          }
+                          
+                          return 'Video transcript not available. This video may not have captions enabled.';
+                        }
+                        
+                        // For other platforms
+                        return 'Transcript not available for this content type.';
+                      })()}
+                    </p>
                   </div>
                 </div>
               )}
-
-              {/* Improvement Suggestions */}
-              {analysis.improvements && analysis.improvements.length > 0 && (
-                <div className="mb-6">
-                  <h4 className="text-gray-400 text-sm font-semibold uppercase tracking-wide mb-2">Improvement Suggestions</h4>
-                  <div className="bg-gray-800 rounded-lg p-4">
-                    <ul className="text-gray-300 text-sm space-y-2">
-                      {analysis.improvements.map((improvement: string, index: number) => (
-                        <li key={index} className="flex items-start">
-                          <span className="text-yellow-400 mr-2">→</span>
-                          <span>{improvement}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-              )}
-            </>
+            </div>
           )}
 
           {/* Top Comments */}
@@ -254,40 +389,6 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             </div>
           )}
 
-          {/* Additional Info */}
-          <div className="mb-6">
-            <h4 className="text-gray-400 text-sm font-semibold uppercase tracking-wide mb-2">Details</h4>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-gray-800 rounded-lg p-3">
-                <p className="text-gray-400 text-xs">Platform</p>
-                <p className="text-white text-sm font-medium capitalize">{content.platform}</p>
-              </div>
-              {processedData.duration && (
-                <div className="bg-gray-800 rounded-lg p-3">
-                  <p className="text-gray-400 text-xs">Duration</p>
-                  <p className="text-white text-sm font-medium">{formatDuration(processedData.duration)}</p>
-                </div>
-              )}
-              <div className="bg-gray-800 rounded-lg p-3">
-                <p className="text-gray-400 text-xs">Status</p>
-                <p className={`text-sm font-medium ${
-                  metadata.isAnalyzed ? 'text-green-400' : 
-                  metadata.isAnalyzing ? 'text-yellow-400' : 
-                  metadata.isScraping ? 'text-blue-400' : 'text-red-400'
-                }`}>
-                  {metadata.isAnalyzed ? 'Analyzed' : 
-                   metadata.isAnalyzing ? 'Analyzing' : 
-                   metadata.isScraping ? 'Scraping' : 'Not Analyzed'}
-                </p>
-              </div>
-              {metadata.scrapeId && (
-                <div className="bg-gray-800 rounded-lg p-3">
-                  <p className="text-gray-400 text-xs">Scrape ID</p>
-                  <p className="text-white text-xs font-mono truncate">{metadata.scrapeId}</p>
-                </div>
-              )}
-            </div>
-          </div>
         </div>
 
         {/* Actions */}

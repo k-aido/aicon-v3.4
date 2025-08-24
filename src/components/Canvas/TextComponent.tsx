@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { X } from 'lucide-react';
-import { TextIcon } from '@/components/icons/PngIcons';
+import { TextDarkIcon } from '@/components/icons/PngIcons';
 import { TextData } from '@/types/canvas';
 import { Connection } from '@/types';
 import { ConnectionPoint } from './ConnectionPoint';
@@ -134,8 +134,8 @@ export const TextComponent: React.FC<TextComponentProps> = React.memo(({
         onResize={handleResize}
         showHandle={selected || isHovered}
         className={`bg-white rounded-lg shadow-lg border-2 border-gray-300 ${
-          selected ? 'ring-2 ring-[#1e8bff] shadow-xl' : ''
-        } ${connecting !== null && (String(connecting) === String(element.id) || connecting === Number(element.id)) ? 'ring-2 ring-[#1e8bff]' : ''}`}
+          selected ? 'ring-2 ring-[#E1622B] shadow-xl' : ''
+        } ${connecting !== null && (String(connecting) === String(element.id) || connecting === Number(element.id)) ? 'ring-2 ring-[#E1622B]' : ''}`}
       >
         <ConnectionPoint
           position="right"
@@ -146,9 +146,10 @@ export const TextComponent: React.FC<TextComponentProps> = React.memo(({
         <div className="h-full flex flex-col">
           {/* Header - Primary drag handle */}
           <div 
-            className={`bg-black text-white px-4 py-3 rounded-t-lg flex items-center gap-2 relative ${
+            className={`text-white px-4 py-3 rounded-t-lg flex items-center gap-2 relative ${
               isDragging ? 'cursor-grabbing' : 'cursor-grab'
             } select-none`}
+            style={{ backgroundColor: '#202a37' }}
             onMouseDown={(e) => {
               // Allow drag from header but not from input or button
               const target = e.target as HTMLElement;
@@ -160,13 +161,7 @@ export const TextComponent: React.FC<TextComponentProps> = React.memo(({
             }}
             title="Drag to move"
           >
-            <div className="flex items-center gap-2">
-              <div className="flex flex-col gap-0.5 opacity-40">
-                <div className="w-3 h-0.5 bg-gray-400 rounded-full"></div>
-                <div className="w-3 h-0.5 bg-gray-400 rounded-full"></div>
-              </div>
-              <TextIcon size={20} />
-            </div>
+            <TextDarkIcon size={20} />
             <span className="flex-1 font-medium select-none">Text Info</span>
             
             {/* Delete button */}

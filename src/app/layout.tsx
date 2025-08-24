@@ -1,8 +1,15 @@
 import type { Metadata } from 'next'
+import { Noto_Sans } from 'next/font/google'
 import './globals.css'
 import { AuthProvider } from '@/components/providers/auth-provider'
 import { ToastProvider } from '@/components/Modal/ToastContainer'
 import { DarkModeProvider } from '@/contexts/DarkModeContext'
+
+const notoSans = Noto_Sans({ 
+  weight: '400',
+  subsets: ['latin'],
+  display: 'swap',
+})
 
 export const metadata: Metadata = {
   title: 'Aicon Canvas',
@@ -16,7 +23,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>
+      <body className={notoSans.className}>
         <DarkModeProvider>
           <ToastProvider>
             <AuthProvider>

@@ -107,8 +107,8 @@ export const CanvasSidebar: React.FC<CanvasSidebarProps> = ({ onOpenSocialMediaM
       id: newId,
       x: tool.type === 'chat' ? centerX - 400 : centerX - 150,
       y: tool.type === 'chat' ? centerY - 450 : centerY - 150,
-      width: tool.type === 'chat' ? 800 : 300,
-      height: tool.type === 'chat' ? 900 : 300,
+      width: tool.type === 'chat' ? 850 : 300,
+      height: tool.type === 'chat' ? 850 : 300,
       title: tool.label,
     };
     

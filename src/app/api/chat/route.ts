@@ -185,6 +185,11 @@ export async function POST(request: NextRequest) {
     const { messages, model, connectedContent, threadId, chatElementId, chatInterfaceId, projectId } = await request.json();
 
     console.log(`[API] Chat request - Model: ${model}, Messages: ${messages.length}, Thread: ${threadId}, Element: ${chatElementId}, Interface: ${chatInterfaceId}`);
+    console.log('[API] Connected content received:', {
+      totalContent: connectedContent?.length || 0,
+      contentTypes: connectedContent?.map((c: any) => c.type) || [],
+      platforms: connectedContent?.filter((c: any) => c.type === 'content').map((c: any) => c.platform) || []
+    });
 
     // Get user authentication
     const userId = await getUserIdFromCookies();
@@ -230,10 +235,20 @@ export async function POST(request: NextRequest) {
     // Build system message with RAG content
     let systemMessage = 'You are an AI assistant helping with content creation and analysis.';
     
+    console.log('[API] Building system message with connected content:', {
+      hasConnectedContent: !!connectedContent,
+      contentLength: connectedContent?.length || 0
+    });
+    
     if (connectedContent && connectedContent.length > 0) {
       // Separate text elements from content elements
       const textElements = connectedContent.filter((item: any) => item.type === 'text');
       const contentElements = connectedContent.filter((item: any) => item.type === 'content' || !item.type);
+      
+      console.log('[API] Content breakdown:', {
+        textElements: textElements.length,
+        contentElements: contentElements.length
+      });
       
       // Add text elements first if any exist
       if (textElements.length > 0) {
@@ -245,7 +260,7 @@ export async function POST(request: NextRequest) {
       
       // Add content analysis if any exists
       if (contentElements.length > 0) {
-        systemMessage += '\n\nIMPORTANT: The following analyzed content is automatically available to you from the connected content pieces on the canvas. You should reference and use these insights to inform your responses, create inspired content, and provide relevant suggestions. You DO NOT need the user to mention these pieces - they are always available to you in this conversation.\n\n';
+        systemMessage += '\n\nIMPORTANT: You have access to the following connected content. Use this information to provide insights, summaries, and analysis as requested. The user has connected this content to the chat, so you should reference it in your responses.\n\n';
         
         // Format connected content as JSON
         const connectedContentJSON = contentElements.map((content: any, index: number) => ({
@@ -253,7 +268,13 @@ export async function POST(request: NextRequest) {
           title: content.title,
           platform: content.platform,
           url: content.url,
-          creatorUsername: content.creatorUsername || 'Unknown Creator',
+          thumbnailUrl: content.thumbnailUrl || content.thumbnail || '',
+          creator: {
+            name: content.creatorName || content.authorName || '',
+            handle: content.creatorUsername || content.creatorHandle || '@unknown'
+          },
+          postedDate: content.uploadDate || content.publishedAt || content.postedDate || '',
+          transcript: content.transcript || content.subtitles || '',
           analysis: {
             hookAnalysis: content.analysis?.hookAnalysis || '',
             bodyAnalysis: content.analysis?.bodyAnalysis || '',
@@ -274,9 +295,12 @@ export async function POST(request: NextRequest) {
         systemMessage += JSON.stringify(connectedContentJSON, null, 2);
         systemMessage += '\n```\n\n';
         
-        systemMessage += 'When generating content, incorporate successful patterns and tactics from the analyzed content above. Be specific about which techniques you are adapting and why they work. When referencing content, mention it naturally by creator name and title (e.g., "@alexhormozi\'s video about business growth" or "the Instagram reel by @garyvee"). DO NOT mention contentId numbers or say "Content #1" - always use natural references with creator names and titles.';
+        systemMessage += '\n\nWhen the user asks you to summarize or analyze content, use the connected content data above. When they click "Summarize" or "Get Insights", they are specifically asking about the connected content listed above. Do NOT ask for content to be provided - you already have it in the JSON above.';
       }
     }
+    
+    console.log('[API] Final system message length:', systemMessage.length);
+    console.log('[API] System message preview:', systemMessage.substring(0, 500) + '...');
 
     let response;
     let promptTokens = 0;
@@ -300,11 +324,11 @@ export async function POST(request: NextRequest) {
 
         // GPT-5 models have specific requirements
         if (selectedModel.model.startsWith('gpt-5')) {
-          completionParams.max_completion_tokens = 1000;
+          completionParams.max_completion_tokens = 4096; // Maximum for GPT-5
           // GPT-5 only supports default temperature value (1)
           // Don't set temperature to use the default
         } else {
-          completionParams.max_tokens = 1000;
+          completionParams.max_tokens = 4096; // Maximum commonly supported
           completionParams.temperature = 0.7;
         }
 
@@ -376,20 +400,27 @@ export async function POST(request: NextRequest) {
           model: selectedModel.model,
           system: systemMessage,
           messages: anthropicMessages,
-          max_tokens: 1000,
+          max_tokens: 4096, // Maximum for Claude models
         });
 
         console.log('[API] Anthropic completion response:', {
           hasContent: !!completion.content,
           contentLength: completion.content?.length,
-          firstContent: completion.content[0],
-          type: completion.content[0]?.type,
-          text: (completion.content[0] as any)?.text?.substring(0, 100)
+          firstContent: completion.content?.[0],
+          type: completion.content?.[0]?.type,
+          text: (completion.content?.[0] as any)?.text?.substring(0, 100),
+          fullResponse: JSON.stringify(completion, null, 2)
         });
 
-        response = completion.content[0].type === 'text' 
-          ? (completion.content[0] as any).text 
-          : 'No response generated';
+        // Safely extract response from Anthropic format
+        if (completion.content && completion.content.length > 0) {
+          const firstContent = completion.content[0];
+          response = firstContent.type === 'text' 
+            ? (firstContent as any).text 
+            : 'No response generated';
+        } else {
+          response = 'No response generated';
+        }
           
         // Extract token usage (Anthropic provides this differently)
         if (completion.usage) {

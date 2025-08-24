@@ -164,9 +164,17 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
   // Get connected content that can be mentioned - memoized to prevent re-computation
   const connectedContent = useMemo(() => {
+    console.log('[ChatInterface] Computing connected content:', {
+      elementId: element.id,
+      totalConnections: connections.length,
+      totalElements: allElements.length
+    });
+
     const connectedIds = connections
       .filter(conn => String(conn.from) === String(element.id) || String(conn.to) === String(element.id))
       .map(conn => String(conn.from) === String(element.id) ? conn.to : conn.from);
+
+    console.log('[ChatInterface] Connected IDs:', connectedIds);
 
     const content = allElements
       .filter(el => {
@@ -179,11 +187,25 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         const hasUsableData = metadata?.processedData || 
                              metadata?.analysis || 
                              metadata?.isAnalyzed ||
-                             metadata?.scrapeId; // Has been scraped
+                             metadata?.scrapeId || // Has been scraped
+                             metadata?.isScraping || // Currently scraping
+                             true; // TEMPORARILY: Accept all content for debugging
+        
+        if (isConnected && isContent) {
+          console.log(`[ChatInterface] Content element ${el.id}:`, {
+            hasMetadata: !!metadata,
+            hasProcessedData: !!metadata?.processedData,
+            hasAnalysis: !!metadata?.analysis,
+            isAnalyzed: metadata?.isAnalyzed,
+            scrapeId: metadata?.scrapeId,
+            hasUsableData
+          });
+        }
         
         return isConnected && isContent && hasUsableData;
       }) as ContentElement[];
     
+    console.log('[ChatInterface] Found connected content:', content.length, 'pieces');
     return content;
   }, [connections, element.id, allElements]);
   
@@ -238,8 +260,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   // Handle @ mention detection
   // Scroll to bottom of messages
   const scrollToBottom = () => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    if (messagesEndRef.current && messagesContainerRef.current) {
+      // Only scroll within the messages container, not the entire viewport
+      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
     }
   };
 
@@ -317,12 +340,19 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       setMentionedContent(prev => [...prev, content]);
       setShowMentionAutocomplete(false);
       
-      // Focus back on input
+      // Focus back on input without affecting viewport
       setTimeout(() => {
         if (inputRef.current) {
-          inputRef.current.focus();
+          // Save current scroll position
+          const scrollX = window.scrollX;
+          const scrollY = window.scrollY;
+          
+          inputRef.current.focus({ preventScroll: true });
           const newCursorPos = beforeAt.length + `@${shortLabel}[${scrapeId}]`.length;
           inputRef.current.setSelectionRange(newCursorPos, newCursorPos);
+          
+          // Restore scroll position
+          window.scrollTo(scrollX, scrollY);
         }
       }, 0);
     }
@@ -360,10 +390,12 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
   // Fetch content analysis for mentioned content
   const fetchContentAnalysis = async (contentIds: string[]) => {
+    console.log('[ChatInterface] fetchContentAnalysis called with IDs:', contentIds);
     if (contentIds.length === 0) return [];
 
     try {
       const projectId = window.location.pathname.split('/canvas/')[1];
+      console.log('[ChatInterface] Fetching from /api/content/library with:', { contentIds, projectId });
       const response = await fetch('/api/content/library', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -375,7 +407,10 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
       if (response.ok) {
         const data = await response.json();
+        console.log('[ChatInterface] Content library API response:', data);
         return data.content || [];
+      } else {
+        console.error('[ChatInterface] Content library API error:', response.status, await response.text());
       }
     } catch (error) {
       console.error('[ChatInterface] Error fetching content analysis:', error);
@@ -384,6 +419,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   };
 
   const sendMessage = async (messageOverride?: string, displayText?: string) => {
+    // Prevent any viewport changes during message sending
+    const currentScrollX = window.scrollX;
+    const currentScrollY = window.scrollY;
     const messageToSend = messageOverride || input;
     if (!messageToSend.trim() || isLoading) return;
     
@@ -425,11 +463,14 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     const allConnectedContentIds = connectedContent
       .filter(content => {
         const metadata = (content as any).metadata;
-        return metadata?.scrapeId || metadata?.analysis || metadata?.isAnalyzed;
+        // For debugging: include all connected content
+        return true; // metadata?.scrapeId || metadata?.analysis || metadata?.isAnalyzed;
       })
       .map(content => {
         const metadata = (content as any).metadata;
-        return metadata?.scrapeId || content.id.toString();
+        const id = metadata?.scrapeId || content.id.toString();
+        console.log(`[ChatInterface] Content ${content.id} mapped to ID:`, id, 'metadata:', metadata);
+        return id;
       });
     
     // Get all connected text element data
@@ -503,7 +544,16 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         title: content.title,
         platform: content.platform,
         url: content.url,
+        thumbnailUrl: content.thumbnailUrl || content.thumbnail || '',
         creatorUsername: content.creatorUsername || 'Unknown Creator',
+        creatorName: content.creatorName || '',
+        creatorHandle: content.creatorHandle || content.creatorUsername || '@unknown',
+        authorName: content.creatorName || '', // Alias for backward compatibility
+        uploadDate: content.uploadDate || content.publishedAt || content.postedDate || '',
+        publishedAt: content.publishedAt || content.uploadDate || content.postedDate || '',
+        postedDate: content.postedDate || content.uploadDate || content.publishedAt || '',
+        transcript: content.transcript || content.subtitles || '',
+        subtitles: content.transcript || content.subtitles || '', // Alias for backward compatibility
         analysis: content.analysis,
         metrics: content.metrics,
         keyTopics: content.analysis?.keyTopics || [],
@@ -655,6 +705,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       }
     } finally {
       setIsLoading(false);
+      // Restore scroll position to prevent viewport jumping
+      window.scrollTo(currentScrollX, currentScrollY);
     }
   };
 
@@ -716,7 +768,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   return (
     <div className="h-full flex overflow-hidden rounded-lg bg-white">
       {/* Collapsible Conversation Sidebar */}
-      <div className={`${isSidebarOpen ? 'w-60 border-r border-gray-700' : 'w-0'} transition-all duration-300 bg-gray-900 overflow-hidden`}>
+      <div className={`${isSidebarOpen ? 'w-60 border-r border-gray-700' : 'w-0'} transition-all duration-300 overflow-hidden`} style={{ backgroundColor: '#202a37' }}>
         <div className="w-60 h-full flex flex-col">
           {/* New Chat Button */}
           <div className="p-3 border-b border-gray-700">
@@ -726,7 +778,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 createNewConversation();
               }}
               onMouseDown={(e) => e.stopPropagation()}
-              className="w-full px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center justify-center gap-2 transition-colors"
+              className="w-full px-3 py-2 bg-[#E1622B] hover:bg-[#c93d14] text-white rounded-lg flex items-center justify-center gap-2 transition-colors"
               data-no-drag
             >
               <Plus className="w-4 h-4" />
@@ -746,7 +798,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   onMouseDown={(e) => e.stopPropagation()}
                   className={`p-3 rounded-lg cursor-pointer transition-colors ${
                     activeConversationId === conv.id 
-                      ? 'bg-blue-600/20 border border-blue-500' 
+                      ? 'bg-[#E1622B]/20 border border-[#E1622B]' 
                       : 'hover:bg-gray-800'
                   }`}
                   role="button"
@@ -795,7 +847,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between" style={{ paddingLeft: '3.5rem' }}>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
-              <MessageSquare className={`w-5 h-5 ${currentModel.provider === 'openai' ? 'text-green-600' : 'text-[#1e8bff]'}`} />
+              <MessageSquare className={`w-5 h-5 ${currentModel.provider === 'openai' ? 'text-green-600' : 'text-[#E1622B]'}`} />
               <span className="font-medium text-gray-900">{activeConversation?.title || 'AI Assistant'}</span>
             </div>
           </div>
@@ -877,7 +929,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   
                   <div className={`p-4 rounded-2xl ${
                     message.role === 'user' 
-                      ? 'bg-[#1e8bff] text-white' 
+                      ? 'bg-[#E1622B] text-white' 
                       : 'bg-white border border-gray-200 text-gray-900 shadow-sm'
                   }`}
                   style={{ userSelect: 'text', WebkitUserSelect: 'text' }}
@@ -951,7 +1003,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 placeholder="Type a message..."
                 disabled={isLoading}
                 data-no-drag
-                className="flex-1 px-4 py-3 bg-gray-100 rounded-xl border border-gray-200 outline-none focus:border-[#1e8bff] focus:bg-white transition-all resize-none overflow-hidden"
+                className="flex-1 px-4 py-3 bg-gray-100 rounded-xl border border-gray-200 outline-none focus:border-[#E1622B] focus:bg-white transition-all resize-none overflow-hidden"
                 style={{ 
                   pointerEvents: 'auto', 
                   zIndex: 10,
@@ -978,7 +1030,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 }}
                 onMouseDown={(e) => e.stopPropagation()}
                 disabled={!input.trim() || isLoading}
-                className="w-[52px] h-[52px] bg-[#1e8bff] text-white rounded-xl hover:bg-[#1a7ae5] disabled:opacity-50 transition-colors flex items-center justify-center flex-shrink-0"
+                className="w-[52px] h-[52px] bg-[#E1622B] text-white rounded-xl hover:bg-[#c93d14] disabled:opacity-50 transition-colors flex items-center justify-center flex-shrink-0"
                 data-no-drag
               >
                 <Send className="w-5 h-5" />
@@ -994,6 +1046,15 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
               <button
                 onClick={(e) => {
                   e.stopPropagation();
+                  console.log('[ChatInterface] Summarize button clicked. Connected content:', {
+                    count: connectedContent.length,
+                    content: connectedContent.map(c => ({
+                      id: c.id,
+                      title: c.title,
+                      hasScrapeId: !!(c as any).metadata?.scrapeId,
+                      hasAnalysis: !!(c as any).metadata?.analysis
+                    }))
+                  });
                   setInput('Summarize');
                   sendMessage('Please provide a comprehensive summary of all connected content in a structured format. Organize the summary by: 1) Main themes and topics covered, 2) Key messages from each piece of content, 3) Overall narrative or story being told, 4) Target audience and tone. Make it digestible and easy to understand.', 'Summarize');
                 }}

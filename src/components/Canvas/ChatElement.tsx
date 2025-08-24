@@ -89,8 +89,8 @@ export const ChatElement: React.FC<ChatElementProps> = React.memo(({
         onResize={handleResize}
         showHandle={selected || isHovered}
         className={`rounded-lg shadow-lg outline-none focus:outline-none ${
-          selected ? 'ring-2 ring-[#1e8bff] shadow-xl' : ''
-        } ${connecting !== null && String(connecting) === String(element.id) ? 'ring-2 ring-[#1e8bff]' : ''}`}
+          selected ? 'ring-2 ring-[#E1622B] shadow-xl' : ''
+        } ${connecting !== null && String(connecting) === String(element.id) ? 'ring-2 ring-[#E1622B]' : ''}`}
       >
         <ConnectionPoint
           position="left"

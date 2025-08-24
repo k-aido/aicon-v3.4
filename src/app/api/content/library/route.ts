@@ -104,11 +104,36 @@ export async function POST(request: NextRequest) {
     const formattedContent = contentData.map(item => {
       // Extract creator info from processed_data
       const processedData = item.content_scrapes.processed_data || {};
-      const creatorUsername = processedData.authorUsername || 
+      const creatorUsername = String(processedData.authorUsername || 
                             processedData.ownerUsername || 
                             processedData.channelTitle ||
                             processedData.author ||
-                            'Unknown Creator';
+                            'Unknown Creator');
+      
+      // Extract creator name
+      const creatorName = processedData.author?.name || 
+                         processedData.authorName || 
+                         processedData.ownerName ||
+                         processedData.channelTitle ||
+                         '';
+      
+      // Extract posted date
+      const postedDate = processedData.uploadDate || 
+                        processedData.publishedAt || 
+                        processedData.timestamp ||
+                        '';
+      
+      // Extract thumbnail URL
+      const thumbnailUrl = processedData.thumbnailUrl || 
+                          processedData.thumbnail ||
+                          '';
+      
+      // Extract transcript from either content_analysis or processed_data
+      const transcript = item.transcript || 
+                        processedData.transcript || 
+                        processedData.subtitles ||
+                        item.captions ||
+                        '';
       
       return {
         id: item.id,
@@ -117,11 +142,17 @@ export async function POST(request: NextRequest) {
         url: item.content_scrapes.url,
         title: item.title,
         description: item.description,
-        transcript: item.transcript,
+        transcript: transcript,
         captions: item.captions,
         metrics: item.metrics,
         processedData: item.content_scrapes.processed_data,
         creatorUsername: creatorUsername,
+        creatorName: creatorName,
+        creatorHandle: typeof creatorUsername === 'string' && creatorUsername.startsWith('@') ? creatorUsername : `@${creatorUsername}`,
+        thumbnailUrl: thumbnailUrl,
+        uploadDate: postedDate,
+        publishedAt: postedDate,
+        postedDate: postedDate,
         analysis: {
           hookAnalysis: item.hook_analysis,
           bodyAnalysis: item.body_analysis,

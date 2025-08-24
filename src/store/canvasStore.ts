@@ -215,7 +215,12 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   },
   
   setViewport: (viewport) => {
-    set({ viewport });
+    const validViewport = {
+      x: isNaN(viewport.x) || !isFinite(viewport.x) ? 0 : viewport.x,
+      y: isNaN(viewport.y) || !isFinite(viewport.y) ? 0 : viewport.y,
+      zoom: isNaN(viewport.zoom) || !isFinite(viewport.zoom) || viewport.zoom <= 0 ? 1 : viewport.zoom
+    };
+    set({ viewport: validViewport });
   },
   
   clearCanvas: () => {

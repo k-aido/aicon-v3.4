@@ -642,8 +642,8 @@ const CanvasComponent: React.FC<CanvasProps> = ({
       onDragOver={handleDragOver}
       onDrop={handleDrop}
       onFocus={(e) => {
-        // Ensure canvas can receive keyboard events
-        e.currentTarget.focus();
+        // Ensure canvas can receive keyboard events without scrolling
+        e.currentTarget.focus({ preventScroll: true });
       }}
       onContextMenu={(e) => {
         if (connecting) {
@@ -669,8 +669,8 @@ const CanvasComponent: React.FC<CanvasProps> = ({
           // Scale grid size with zoom, with larger spacing when zoomed out
           backgroundSize: viewport.zoom < 0.5 
             ? '40px 40px'  // Fixed larger grid when zoomed out
-            : `${20 * viewport.zoom}px ${20 * viewport.zoom}px`, // Scale with zoom when zoomed in
-          backgroundPosition: `${viewport.x}px ${viewport.y}px`,
+            : `${20 * Math.max(0.1, viewport.zoom)}px ${20 * Math.max(0.1, viewport.zoom)}px`, // Scale with zoom when zoomed in
+          backgroundPosition: `${isFinite(viewport.x) ? viewport.x : 0}px ${isFinite(viewport.y) ? viewport.y : 0}px`,
           backgroundColor: isDarkMode ? darkModeColors.dark : darkModeColors.light,
           transition: 'opacity 0.15s ease-out, background-color 0.2s ease-out'
         }}
@@ -679,7 +679,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
       {/* Canvas Elements */}
       <div 
         style={{
-          transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`,
+          transform: `translate(${isFinite(viewport.x) ? viewport.x : 0}px, ${isFinite(viewport.y) ? viewport.y : 0}px) scale(${Math.max(0.1, viewport.zoom)})`,
           transformOrigin: '0 0'
         }}
         className="absolute inset-0 pointer-events-none"
@@ -688,9 +688,9 @@ const CanvasComponent: React.FC<CanvasProps> = ({
         <svg className="absolute inset-0 pointer-events-none" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
           <defs>
             <linearGradient id="connectionGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#1e8bff" stopOpacity="0.3" />
-              <stop offset="50%" stopColor="#1e8bff" stopOpacity="1" />
-              <stop offset="100%" stopColor="#1e8bff" stopOpacity="0.3" />
+              <stop offset="0%" stopColor="#E1622B" stopOpacity="0.3" />
+              <stop offset="50%" stopColor="#E1622B" stopOpacity="1" />
+              <stop offset="100%" stopColor="#E1622B" stopOpacity="0.3" />
             </linearGradient>
           </defs>
           
@@ -710,7 +710,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
               {/* Thicker background line for visibility */}
               <path
                 d={connectionPreview}
-                stroke="#1e8bff"
+                stroke="#E1622B"
                 strokeWidth="4"
                 fill="none"
                 strokeOpacity="0.2"
@@ -719,7 +719,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
               {/* Main connection line */}
               <path
                 d={connectionPreview}
-                stroke="#1e8bff"
+                stroke="#E1622B"
                 strokeWidth="2"
                 fill="none"
                 strokeDasharray="8 4"
@@ -731,9 +731,9 @@ const CanvasComponent: React.FC<CanvasProps> = ({
                 cx={mousePos.x}
                 cy={mousePos.y}
                 r="12"
-                fill="#1e8bff"
+                fill="#E1622B"
                 fillOpacity="0.3"
-                stroke="#1e8bff"
+                stroke="#E1622B"
                 strokeWidth="2"
                 className="pointer-events-none animate-pulse"
               />
@@ -741,7 +741,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
                 cx={mousePos.x}
                 cy={mousePos.y}
                 r="4"
-                fill="#1e8bff"
+                fill="#E1622B"
                 className="pointer-events-none"
               />
             </g>

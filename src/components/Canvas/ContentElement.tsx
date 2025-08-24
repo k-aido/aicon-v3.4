@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Youtube, Instagram, Video, ExternalLink, X, Edit, Save, Loader2, AlertCircle, Maximize2 } from 'lucide-react';
+import { Youtube, Instagram, Video, ExternalLink, X, Loader2, AlertCircle, Maximize2 } from 'lucide-react';
 import { ContentElement as ContentElementType, Connection, Platform } from '@/types';
 import { ConnectionPoint } from './ConnectionPoint';
 import { useElementDrag } from '@/hooks/useElementDrag';
@@ -33,51 +33,7 @@ const PlatformIcon: React.FC<{ platform: string }> = ({ platform }) => {
   }
 };
 
-// Get status border color based on scraping/analysis state
-const getStatusBorderColor = (element: ContentElementType): string => {
-  const metadata = (element as any).metadata;
-  
-  // Check for scraping/analysis errors first
-  if (metadata?.scrapingError || metadata?.analysisError) {
-    return 'border-red-500'; // Error state
-  }
-  
-  // If scraping, show pulsing animation with platform color
-  if (metadata?.isScraping) {
-    return 'border-blue-500 animate-pulse'; // Scraping in progress
-  }
-  
-  // If analyzing, show yellow regardless of platform
-  if (metadata?.isAnalyzing) {
-    return 'border-yellow-500'; // Analyzing
-  }
-  
-  // If analyzed, show platform-specific colors
-  if (metadata?.isAnalyzed) {
-    switch (element.platform.toLowerCase()) {
-      case 'youtube':
-        return 'border-red-500'; // YouTube red
-      case 'instagram':
-        return 'border-[#1e8bff]'; // Instagram blue
-      case 'tiktok':
-        return 'border-black'; // TikTok black
-      default:
-        return 'border-green-500'; // Default analyzed color
-    }
-  }
-  
-  // Not analyzed yet - show platform-specific colors with reduced opacity
-  switch (element.platform.toLowerCase()) {
-    case 'youtube':
-      return 'border-red-300'; // YouTube red (lighter)
-    case 'instagram':
-      return 'border-[#1e8bff]/60'; // Instagram blue (lighter)
-    case 'tiktok':
-      return 'border-gray-400'; // TikTok black (lighter as gray)
-    default:
-      return 'border-gray-300'; // Default not analyzed color
-  }
-};
+// Status border color function removed - content cards now only show border when selected
 
 /**
  * Content element component for displaying social media content
@@ -95,9 +51,6 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
   onReanalyze
 }) => {
   const [isHovered, setIsHovered] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
-  const [editUrl, setEditUrl] = useState(element.url || '');
-  const [editPlatform, setEditPlatform] = useState(element.platform || 'youtube');
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -205,30 +158,6 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
     onUpdate(element.id, { width: newWidth, height: newHeight });
   };
 
-  const handleSaveEdit = () => {
-    const urlChanged = editUrl !== element.url;
-    
-    onUpdate(element.id, { 
-      url: editUrl, 
-      platform: editPlatform,
-      title: `${editPlatform.charAt(0).toUpperCase() + editPlatform.slice(1)} Content`,
-      thumbnail: `https://via.placeholder.com/300x200?text=${editPlatform}&bg=666&color=fff`,
-      metadata: {
-        ...(element as any).metadata,
-        // Reset analysis state if URL changed
-        isAnalyzed: urlChanged ? false : (element as any).metadata?.isAnalyzed,
-        analysisError: urlChanged ? null : (element as any).metadata?.analysisError
-      }
-    } as any);
-    setIsEditing(false);
-    
-    // Trigger analysis if URL was changed and is valid
-    if (urlChanged && editUrl && editUrl !== 'https://example.com') {
-      setTimeout(() => {
-        analyzeContent(editUrl);
-      }, 500); // Short delay to ensure element is updated
-    }
-  };
 
   const handleDoubleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -280,9 +209,9 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
         minHeight={150}
         onResize={handleResize}
         showHandle={selected || isHovered}
-        className={`bg-gray-800 rounded-lg shadow-lg border-2 ${getStatusBorderColor(element)} ${
-          selected ? 'ring-2 ring-[#1e8bff] shadow-xl' : ''
-        } ${connecting !== null && String(connecting) === String(element.id) ? 'ring-2 ring-[#1e8bff]' : ''}`}
+        className={`bg-gray-800 rounded-lg shadow-lg ${
+          selected ? 'ring-2 ring-[#E1622B] shadow-xl' : ''
+        } ${connecting !== null && String(connecting) === String(element.id) ? 'ring-2 ring-[#E1622B]' : ''}`}
       >
         <ConnectionPoint
           position="right"
@@ -301,7 +230,7 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
               {/* Analysis Status Indicators */}
               {isAnalyzing && (
                 <div title="Analyzing content...">
-                  <Loader2 className="w-4 h-4 text-yellow-500 animate-spin" />
+                  <Loader2 className="w-4 h-4 text-[#E1622B] animate-spin" />
                 </div>
               )}
               {analysisError && (
@@ -311,16 +240,6 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
               )}
             </div>
             <div className="flex gap-1" data-no-drag>
-              <button 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setIsEditing(!isEditing);
-                }}
-                className="p-1 hover:bg-gray-700 rounded transition-colors outline-none focus:outline-none"
-                title="Edit content"
-              >
-                <Edit className="w-4 h-4 text-gray-400" />
-              </button>
               <button 
                 onClick={(e) => {
                   e.stopPropagation();
@@ -366,45 +285,10 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
             </div>
           </div>
           
-          {/* Edit Form */}
-          {isEditing && (
-            <div className="bg-gray-700 rounded-lg p-3 mb-3" data-no-drag>
-              <div className="mb-2">
-                <label className="block text-gray-300 text-xs mb-1">Platform:</label>
-                <select
-                  value={editPlatform}
-                  onChange={(e) => setEditPlatform(e.target.value as Platform)}
-                  className="w-full bg-gray-600 text-white rounded px-2 py-1 text-sm"
-                >
-                  <option value="youtube">YouTube</option>
-                  <option value="instagram">Instagram</option>
-                  <option value="tiktok">TikTok</option>
-                  <option value="unknown">Website</option>
-                </select>
-              </div>
-              <div className="mb-2">
-                <label className="block text-gray-300 text-xs mb-1">URL:</label>
-                <input
-                  type="text"
-                  value={editUrl}
-                  onChange={(e) => setEditUrl(e.target.value)}
-                  placeholder="Enter content URL..."
-                  className="w-full bg-gray-600 text-white rounded px-2 py-1 text-sm"
-                />
-              </div>
-              <button
-                onClick={handleSaveEdit}
-                className="bg-blue-600 hover:bg-blue-700 text-white rounded px-3 py-1 text-sm flex items-center gap-1 outline-none focus:outline-none"
-              >
-                <Save className="w-3 h-3" />
-                Save
-              </button>
-            </div>
-          )}
           
           {/* Thumbnail */}
-          <div className={`bg-gray-900 rounded-lg overflow-hidden mb-3 flex-1 min-h-[100px] relative transition-all duration-200 ${
-            isHovered && !isEditing ? 'ring-2 ring-blue-500/50 cursor-pointer' : ''
+          <div className={`bg-gray-900 rounded-lg overflow-hidden mb-3 h-[180px] relative transition-all duration-200 ${
+            isHovered ? 'ring-2 ring-blue-500/50 cursor-pointer' : ''
           }`}>
             {(element as any).metadata?.scrapingError ? (
               <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center">
@@ -425,8 +309,8 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
               </div>
             ) : (element as any).metadata?.isAnalyzing ? (
               <div className="w-full h-full flex flex-col items-center justify-center">
-                <Loader2 className="w-8 h-8 text-yellow-500 animate-spin mb-2" />
-                <p className="text-yellow-400 text-xs">Analyzing content...</p>
+                <Loader2 className="w-8 h-8 text-[#E1622B] animate-spin mb-2" />
+                <p className="text-[#E1622B] text-xs">Analyzing content...</p>
               </div>
             ) : analysisError || (element as any).metadata?.analysisError ? (
               <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center">
@@ -448,6 +332,7 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
                 )} 
                 alt={(element as any).metadata?.processedData?.title || element.title}
                 className="w-full h-full object-cover"
+                style={{ objectFit: 'cover' }}
                 onError={(e) => {
                   const img = e.target as HTMLImageElement;
                   // Don't log error for placeholder images
@@ -469,7 +354,7 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
             )}
             
             {/* Hover indicator */}
-            {isHovered && !isEditing && !showDoubleClickHint && (
+            {isHovered && !showDoubleClickHint && (
               <div className="absolute bottom-2 right-2 bg-black/60 text-white p-1.5 rounded-md pointer-events-none">
                 <Maximize2 size={14} />
               </div>

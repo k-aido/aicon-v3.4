@@ -91,8 +91,12 @@ const CanvasComponent: React.FC<CanvasProps> = ({
 
   // Canvas drag handling
   const { isDragging, handleMouseDown } = useCanvasDrag({
-    onDragMove: (position) => setViewport({ ...viewport, ...position }),
+    onDragMove: (position) => {
+      console.log('[Canvas] Drag move:', position);
+      setViewport(prev => ({ ...prev, x: position.x, y: position.y }));
+    },
     onDragEnd: () => {
+      console.log('[Canvas] Drag end');
       // Clear selection when clicking on empty canvas
       setSelectedElement(null);
       setSelectedElementIds([]);
@@ -281,8 +285,14 @@ const CanvasComponent: React.FC<CanvasProps> = ({
   // Handle canvas background click
   const handleCanvasClick = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
+    console.log('[Canvas] handleCanvasClick:', { 
+      targetClass: target.className,
+      isCanvasBackground: target.classList.contains('canvas-background'),
+      viewport 
+    });
     if (target === canvasRef.current || target.classList.contains('canvas-background')) {
       e.preventDefault();
+      console.log('[Canvas] Starting drag from handleCanvasClick');
       handleMouseDown(e, viewport);
     }
   };
@@ -649,6 +659,12 @@ const CanvasComponent: React.FC<CanvasProps> = ({
       onDrop={handleDrop}
       onMouseDown={(e) => {
         const target = e.target as HTMLElement;
+        console.log('[Canvas] Main container mouseDown:', {
+          targetClass: target.className,
+          currentTargetClass: (e.currentTarget as HTMLElement).className,
+          isCurrentTarget: target === e.currentTarget,
+          viewport
+        });
         // Check if we clicked on the canvas background or the main canvas itself
         if (target === e.currentTarget || target.classList.contains('canvas-background')) {
           console.log('[Canvas] Starting drag from main container');
@@ -684,8 +700,8 @@ const CanvasComponent: React.FC<CanvasProps> = ({
             : `radial-gradient(circle, ${isDarkMode ? '#4a4a48' : '#d4d4d8'} 1px, transparent 1px)`,
           // Scale grid size with zoom
           backgroundSize: `${20 * viewport.zoom}px ${20 * viewport.zoom}px`,
-          // Use modulo to keep the pattern repeating properly
-          backgroundPosition: `${viewport.x % (20 * viewport.zoom)}px ${viewport.y % (20 * viewport.zoom)}px`,
+          // Keep pattern aligned with viewport
+          backgroundPosition: `${viewport.x}px ${viewport.y}px`,
           backgroundColor: isDarkMode ? darkModeColors.dark : darkModeColors.light,
           transition: 'opacity 0.15s ease-out, background-color 0.2s ease-out'
         }}

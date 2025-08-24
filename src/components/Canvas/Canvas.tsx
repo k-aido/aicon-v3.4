@@ -71,6 +71,12 @@ const CanvasComponent: React.FC<CanvasProps> = ({
       canvasRef.current.focus();
     }
     
+    // Reset viewport if it's too far off screen
+    if (Math.abs(viewport.x) > 5000 || Math.abs(viewport.y) > 5000) {
+      console.log('[Canvas] Resetting viewport - was too far off screen');
+      setViewport({ x: 0, y: 0, zoom: 1 });
+    }
+    
     // Handle escape key to cancel connection
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && connecting) {
@@ -85,8 +91,12 @@ const CanvasComponent: React.FC<CanvasProps> = ({
 
   // Canvas drag handling
   const { isDragging, handleMouseDown } = useCanvasDrag({
-    onDragMove: (position) => setViewport({ ...viewport, ...position }),
+    onDragMove: (position) => {
+      console.log('[Canvas] Drag move:', position);
+      setViewport(prev => ({ ...prev, x: position.x, y: position.y }));
+    },
     onDragEnd: () => {
+      console.log('[Canvas] Drag end');
       // Clear selection when clicking on empty canvas
       setSelectedElement(null);
       setSelectedElementIds([]);
@@ -275,8 +285,14 @@ const CanvasComponent: React.FC<CanvasProps> = ({
   // Handle canvas background click
   const handleCanvasClick = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
+    console.log('[Canvas] handleCanvasClick:', { 
+      targetClass: target.className,
+      isCanvasBackground: target.classList.contains('canvas-background'),
+      viewport 
+    });
     if (target === canvasRef.current || target.classList.contains('canvas-background')) {
       e.preventDefault();
+      console.log('[Canvas] Starting drag from handleCanvasClick');
       handleMouseDown(e, viewport);
     }
   };
@@ -597,8 +613,8 @@ const CanvasComponent: React.FC<CanvasProps> = ({
 
   // Reset zoom to 100%
   const handleResetZoom = useCallback(() => {
-    setViewport({ ...viewport, zoom: 1 });
-  }, [viewport, setViewport]);
+    setViewport({ x: 0, y: 0, zoom: 1 });
+  }, [setViewport]);
 
   // Connection preview path
   const connectionPreview = useMemo(() => {
@@ -641,6 +657,21 @@ const CanvasComponent: React.FC<CanvasProps> = ({
       onMouseMove={handleMouseMove}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
+      onMouseDown={(e) => {
+        const target = e.target as HTMLElement;
+        console.log('[Canvas] Main container mouseDown:', {
+          targetClass: target.className,
+          currentTargetClass: (e.currentTarget as HTMLElement).className,
+          isCurrentTarget: target === e.currentTarget,
+          viewport
+        });
+        // Check if we clicked on the canvas background or the main canvas itself
+        if (target === e.currentTarget || target.classList.contains('canvas-background')) {
+          console.log('[Canvas] Starting drag from main container');
+          e.preventDefault();
+          handleMouseDown(e, viewport);
+        }
+      }}
       onFocus={(e) => {
         // Ensure canvas can receive keyboard events without scrolling
         e.currentTarget.focus({ preventScroll: true });
@@ -845,9 +876,9 @@ const CanvasComponent: React.FC<CanvasProps> = ({
             className={`px-2 py-1 rounded text-xs font-medium outline-none focus:outline-none transition-colors ${
               isDarkMode ? 'hover:bg-gray-700 text-gray-300' : 'hover:bg-gray-100 text-gray-700'
             }`}
-            title="Reset Zoom"
+            title="Reset View"
           >
-            Reset Zoom
+            Reset View
           </button>
         </div>
         

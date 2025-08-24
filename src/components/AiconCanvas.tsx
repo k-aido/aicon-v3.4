@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Canvas } from './Canvas/Canvas';
 import { CanvasNavigation } from './Canvas/CanvasNavigation';
 import { CanvasSidebar } from './Canvas/CanvasSidebar';
-import { AnalysisPanel } from './Canvas/AnalysisPanel';
+import { SocialMediaAnalysisPanel } from './Sidebar/SocialMediaAnalysisPanel';
 import { SocialMediaModal } from './Modal/SocialMediaModal';
 import { CreatorSearchPanel } from './Canvas/CreatorSearchPanel';
 import { useCanvasStore } from '@/store/canvasStore';
@@ -676,9 +676,9 @@ const AiconCanvasApp: React.FC<AiconCanvasAppProps> = ({ canvasId }) => {
       </div>
 
       {/* Analysis Panel */}
-      <AnalysisPanel
+      <SocialMediaAnalysisPanel
         isOpen={analysisPanel.isOpen}
-        content={analysisPanel.content}
+        element={analysisPanel.content}
         onClose={handleCloseAnalysisPanel}
       />
 

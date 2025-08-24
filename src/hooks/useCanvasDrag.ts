@@ -4,25 +4,17 @@ import { Position } from '@/types';
 interface UseCanvasDragProps {
   onDragMove: (position: Position) => void;
   onDragEnd?: () => void;
+  isSpacePressed?: boolean;
 }
 
 /**
- * Custom hook for handling canvas dragging functionality
+ * Custom hook for handling canvas dragging functionality (Miro-style)
  */
-export const useCanvasDrag = ({ onDragMove, onDragEnd }: UseCanvasDragProps) => {
+export const useCanvasDrag = ({ onDragMove, onDragEnd, isSpacePressed = false }: UseCanvasDragProps) => {
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState<Position>({ x: 0, y: 0 });
 
   const handleMouseDown = useCallback((e: React.MouseEvent, currentPosition: Position) => {
-    console.log('[useCanvasDrag] handleMouseDown called:', {
-      clientX: e.clientX,
-      clientY: e.clientY,
-      currentPosition,
-      dragStartWillBe: {
-        x: e.clientX - currentPosition.x,
-        y: e.clientY - currentPosition.y
-      }
-    });
     e.preventDefault();
     setIsDragging(true);
     setDragStart({
@@ -34,17 +26,10 @@ export const useCanvasDrag = ({ onDragMove, onDragEnd }: UseCanvasDragProps) => 
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!isDragging) return;
     
-    const newPosition = {
+    onDragMove({
       x: e.clientX - dragStart.x,
       y: e.clientY - dragStart.y
-    };
-    console.log('[useCanvasDrag] Mouse move while dragging:', {
-      clientX: e.clientX,
-      clientY: e.clientY,
-      dragStart,
-      newPosition
     });
-    onDragMove(newPosition);
   }, [isDragging, dragStart, onDragMove]);
 
   const handleMouseUp = useCallback(() => {

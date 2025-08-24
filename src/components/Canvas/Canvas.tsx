@@ -65,7 +65,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
   const [selectedElementIds, setSelectedElementIds] = useState<number[]>([]);
   const [lastClickedElementId, setLastClickedElementId] = useState<number | null>(null);
   
-  // Focus canvas on mount and handle escape key
+  // Focus canvas on mount and handle keyboard events
   useEffect(() => {
     if (canvasRef.current) {
       canvasRef.current.focus();
@@ -77,7 +77,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
       setViewport({ x: 0, y: 0, zoom: 1 });
     }
     
-    // Handle escape key to cancel connection
+    // Handle keyboard events
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && connecting) {
         console.log('[Canvas] Cancelling connection');
@@ -85,18 +85,17 @@ const CanvasComponent: React.FC<CanvasProps> = ({
       }
     };
     
+    
     document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
   }, [connecting, setConnecting]);
 
   // Canvas drag handling
   const { isDragging, handleMouseDown } = useCanvasDrag({
-    onDragMove: (position) => {
-      console.log('[Canvas] Drag move:', position);
-      setViewport(prev => ({ ...prev, x: position.x, y: position.y }));
-    },
+    onDragMove: (position) => setViewport({ ...viewport, ...position }),
     onDragEnd: () => {
-      console.log('[Canvas] Drag end');
       // Clear selection when clicking on empty canvas
       setSelectedElement(null);
       setSelectedElementIds([]);
@@ -285,14 +284,8 @@ const CanvasComponent: React.FC<CanvasProps> = ({
   // Handle canvas background click
   const handleCanvasClick = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
-    console.log('[Canvas] handleCanvasClick:', { 
-      targetClass: target.className,
-      isCanvasBackground: target.classList.contains('canvas-background'),
-      viewport 
-    });
     if (target === canvasRef.current || target.classList.contains('canvas-background')) {
       e.preventDefault();
-      console.log('[Canvas] Starting drag from handleCanvasClick');
       handleMouseDown(e, viewport);
     }
   };
@@ -658,18 +651,9 @@ const CanvasComponent: React.FC<CanvasProps> = ({
       onDragOver={handleDragOver}
       onDrop={handleDrop}
       onMouseDown={(e) => {
-        const target = e.target as HTMLElement;
-        console.log('[Canvas] Main container mouseDown:', {
-          targetClass: target.className,
-          currentTargetClass: (e.currentTarget as HTMLElement).className,
-          isCurrentTarget: target === e.currentTarget,
-          viewport
-        });
-        // Check if we clicked on the canvas background or the main canvas itself
-        if (target === e.currentTarget || target.classList.contains('canvas-background')) {
-          console.log('[Canvas] Starting drag from main container');
+        // Prevent default for middle mouse button
+        if (e.button === 1) {
           e.preventDefault();
-          handleMouseDown(e, viewport);
         }
       }}
       onFocus={(e) => {
@@ -687,7 +671,8 @@ const CanvasComponent: React.FC<CanvasProps> = ({
       {/* Canvas Background - Draggable Area */}
       <div 
         className={`absolute inset-0 canvas-background ${
-          connecting !== null ? 'cursor-crosshair' : isDragging ? 'cursor-grabbing' : 'cursor-grab'
+          connecting !== null ? 'cursor-crosshair' : 
+          isDragging ? 'cursor-grabbing' : 'cursor-grab'
         }`}
         onMouseDown={handleCanvasClick}
         style={{

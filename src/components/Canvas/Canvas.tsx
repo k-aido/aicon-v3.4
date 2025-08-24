@@ -686,26 +686,35 @@ const CanvasComponent: React.FC<CanvasProps> = ({
     >
       {/* Canvas Background - Draggable Area */}
       <div 
-        className={`absolute inset-0 canvas-background ${
-          connecting !== null ? 'cursor-crosshair' : isDragging ? 'cursor-grabbing' : 'cursor-grab'
-        }`}
-        onMouseDown={handleCanvasClick}
-        style={{
-          zIndex: 0,
-          // Keep dots visible until very low zoom levels
-          opacity: viewport.zoom < 0.25 ? 0 : viewport.zoom < 0.4 ? (viewport.zoom - 0.25) * 6.67 : 1,
-          // Use consistent dot appearance with dark mode support
-          backgroundImage: viewport.zoom < 0.25 
-            ? 'none'
-            : `radial-gradient(circle, ${isDarkMode ? '#4a4a48' : '#d4d4d8'} 1px, transparent 1px)`,
-          // Scale grid size with zoom
-          backgroundSize: `${20 * viewport.zoom}px ${20 * viewport.zoom}px`,
-          // Keep pattern aligned with viewport
-          backgroundPosition: `${viewport.x}px ${viewport.y}px`,
-          backgroundColor: isDarkMode ? darkModeColors.dark : darkModeColors.light,
-          transition: 'opacity 0.15s ease-out, background-color 0.2s ease-out'
-        }}
-      />
+        className={`absolute inset-0 overflow-hidden`}
+        style={{ zIndex: 0 }}
+      >
+        <div 
+          className={`absolute canvas-background ${
+            connecting !== null ? 'cursor-crosshair' : isDragging ? 'cursor-grabbing' : 'cursor-grab'
+          }`}
+          onMouseDown={handleCanvasClick}
+          style={{
+            // Make it much larger than viewport to ensure pattern coverage
+            width: '200%',
+            height: '200%',
+            left: '-50%',
+            top: '-50%',
+            // Keep dots visible until very low zoom levels
+            opacity: viewport.zoom < 0.25 ? 0 : viewport.zoom < 0.4 ? (viewport.zoom - 0.25) * 6.67 : 1,
+            // Use consistent dot appearance with dark mode support
+            backgroundImage: viewport.zoom < 0.25 
+              ? 'none'
+              : `radial-gradient(circle, ${isDarkMode ? '#4a4a48' : '#d4d4d8'} 1px, transparent 1px)`,
+            // Scale grid size with zoom
+            backgroundSize: `${20 * viewport.zoom}px ${20 * viewport.zoom}px`,
+            // Move the entire div instead of background position
+            transform: `translate(${viewport.x}px, ${viewport.y}px)`,
+            backgroundColor: isDarkMode ? darkModeColors.dark : darkModeColors.light,
+            transition: 'opacity 0.15s ease-out, background-color 0.2s ease-out'
+          }}
+        />
+      </div>
       
       {/* Canvas Elements */}
       <div 

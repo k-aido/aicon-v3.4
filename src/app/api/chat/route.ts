@@ -387,7 +387,7 @@ export async function POST(request: NextRequest) {
           text: (completion.content[0] as any)?.text?.substring(0, 100)
         });
 
-        response = completion.content[0].type === 'text' 
+        response = completion.content && completion.content[0] && completion.content[0].type === 'text' 
           ? (completion.content[0] as any).text 
           : 'No response generated';
           

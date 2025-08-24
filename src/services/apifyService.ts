@@ -307,6 +307,7 @@ class ApifyService {
         url: data.url || `https://instagram.com/p/${data.shortCode}`,
         title: data.caption?.substring(0, 100) || data.text?.substring(0, 100),
         caption: data.caption || data.text,
+        transcript: data.transcript || data.subtitles || null, // Add transcript field for Instagram
         viewCount: parseInt(data.videoViewCount || data.video_view_count || data.views || 0),
         likeCount: parseInt(data.likesCount || data.likes_count || data.likes || 0),
         commentCount: parseInt(data.commentsCount || data.comments_count || data.comments?.length || 0),

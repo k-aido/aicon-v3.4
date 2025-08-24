@@ -49,14 +49,58 @@ class TranscriptionService {
     try {
       console.log('[TranscriptionService] Starting transcription for URL:', audioUrl);
       
-      // Download audio file
-      const audioResponse = await fetch(audioUrl);
+      // Add timeout and better error handling for download
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+      
+      // Download audio file with headers that might help with some CDNs
+      const audioResponse = await fetch(audioUrl, {
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+          'Accept': 'video/*,audio/*,*/*',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Accept-Encoding': 'gzip, deflate, br',
+          'Connection': 'keep-alive',
+          'Referer': audioUrl.includes('tiktok') ? 'https://www.tiktok.com/' : 
+                     audioUrl.includes('instagram') ? 'https://www.instagram.com/' : 
+                     'https://www.youtube.com/'
+        }
+      });
+      
+      clearTimeout(timeout);
+      
       if (!audioResponse.ok) {
-        throw new Error(`Failed to download audio: ${audioResponse.status}`);
+        console.error('[TranscriptionService] Failed to download audio:', {
+          status: audioResponse.status,
+          statusText: audioResponse.statusText,
+          url: audioUrl.substring(0, 100) + '...'
+        });
+        throw new Error(`Failed to download audio: ${audioResponse.status} ${audioResponse.statusText}`);
       }
       
       const audioArrayBuffer = await audioResponse.arrayBuffer();
       const audioBuffer = Buffer.from(audioArrayBuffer);
+      
+      console.log('[TranscriptionService] Downloaded audio:', {
+        bufferSize: audioBuffer.length,
+        contentType: audioResponse.headers.get('content-type'),
+        contentLength: audioResponse.headers.get('content-length')
+      });
+      
+      if (audioBuffer.length === 0) {
+        throw new Error('Downloaded audio file is empty');
+      }
+      
+      // Check if file is too large (Groq has a 25MB limit)
+      const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
+      if (audioBuffer.length > MAX_FILE_SIZE) {
+        console.error('[TranscriptionService] File too large for transcription:', {
+          size: audioBuffer.length,
+          maxSize: MAX_FILE_SIZE
+        });
+        throw new Error(`File too large for transcription: ${(audioBuffer.length / 1024 / 1024).toFixed(2)}MB (max 25MB)`);
+      }
       
       // Better file extension detection
       let extension = 'mp4'; // Default to mp4
@@ -85,6 +129,10 @@ class TranscriptionService {
         else if (contentType.includes('ogg')) extension = 'ogg';
         else if (contentType.includes('wav')) extension = 'wav';
         else if (contentType.includes('flac')) extension = 'flac';
+        else if (contentType.includes('quicktime')) {
+          extension = 'mp4'; // Treat QuickTime as MP4
+          contentType = 'video/mp4';
+        }
       }
       
       // Create filename with proper extension
@@ -98,8 +146,18 @@ class TranscriptionService {
       });
       
       return await this.transcribeFromBuffer(audioBuffer, filename, contentType, options);
-    } catch (error) {
-      console.error('[TranscriptionService] Error transcribing from URL:', error);
+    } catch (error: any) {
+      console.error('[TranscriptionService] Error transcribing from URL:', {
+        message: error.message,
+        name: error.name,
+        url: audioUrl.substring(0, 100) + '...'
+      });
+      
+      // Check if it's an abort error
+      if (error.name === 'AbortError') {
+        console.error('[TranscriptionService] Download timed out after 60 seconds');
+      }
+      
       return null;
     }
   }
@@ -239,7 +297,11 @@ class TranscriptionService {
                   content.rawData?.download_url ||
                   content.rawData?.videoMeta?.downloadUrl || // Or nested in videoMeta
                   content.rawData?.video?.playUrl || // Or in video object
-                  content.rawData?.video?.downloadUrl;
+                  content.rawData?.video?.downloadUrl ||
+                  content.rawData?.videoUrl_hd || // HD version
+                  content.rawData?.videoUrl_sd || // SD version
+                  content.rawData?.playAddr || // Another TikTok field
+                  content.rawData?.downloadAddr; // Another TikTok field
     
     // Check mediaUrls array for TikTok
     if (!videoUrl && content.rawData?.mediaUrls && Array.isArray(content.rawData.mediaUrls)) {
@@ -249,7 +311,48 @@ class TranscriptionService {
       }
     }
     
+    // For Instagram, check additional fields
+    if (!videoUrl && content.platform === 'instagram') {
+      videoUrl = content.rawData?.videoUrl ||
+                content.rawData?.video_url ||
+                content.rawData?.videoVersions?.[0]?.url ||
+                content.rawData?.video_versions?.[0]?.url ||
+                content.rawData?.media?.[0]?.video_url ||
+                content.rawData?.carousel_media?.[0]?.video_url;
+      
+      if (videoUrl) {
+        console.log('[TranscriptionService] Found Instagram video URL in alternative fields');
+      }
+    }
+    
+    // Log all available URLs in rawData for debugging
+    if (!videoUrl && content.rawData) {
+      const urlFields = Object.entries(content.rawData)
+        .filter(([key, value]) => 
+          (key.toLowerCase().includes('url') || key.toLowerCase().includes('video')) && 
+          typeof value === 'string' && 
+          (value.startsWith('http') || value.startsWith('//'))
+        )
+        .slice(0, 10);
+      
+      if (urlFields.length > 0) {
+        console.log('[TranscriptionService] Found URL fields in rawData:', urlFields);
+        // Try the first URL that looks like a video
+        const potentialVideoUrl = urlFields.find(([key, value]) => 
+          value.includes('.mp4') || value.includes('video') || key.includes('video')
+        );
+        if (potentialVideoUrl) {
+          videoUrl = potentialVideoUrl[1];
+          console.log('[TranscriptionService] Using potential video URL from rawData');
+        }
+      }
+    }
+    
     if (videoUrl) {
+      // Clean up the URL if needed
+      if (videoUrl.startsWith('//')) {
+        videoUrl = 'https:' + videoUrl;
+      }
       console.log('[TranscriptionService] Found video URL:', videoUrl.substring(0, 100) + '...');
       return videoUrl;
     }
@@ -269,9 +372,22 @@ class TranscriptionService {
         }
       }
       
+      // Check adaptiveFormats as fallback
+      if (content.rawData.streamingData?.adaptiveFormats) {
+        const audioFormat = content.rawData.streamingData.adaptiveFormats.find((f: any) => 
+          f.mimeType?.includes('audio') && f.url
+        );
+        
+        if (audioFormat) {
+          console.log('[TranscriptionService] Found YouTube audio URL from adaptiveFormats');
+          return audioFormat.url;
+        }
+      }
+      
       console.log('[TranscriptionService] No suitable YouTube format found in streamingData');
     }
     
+    console.log('[TranscriptionService] No video URL found after checking all fields');
     return null;
   }
 

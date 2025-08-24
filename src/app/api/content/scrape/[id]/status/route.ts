@@ -122,11 +122,31 @@ export async function GET(
           const scrapedContent = await apifyService.getRunResults(scrapeRecord.apify_run_id);
 
           if (scrapedContent) {
-            // Check if audio is available and perform transcription
-            let transcriptionText = null;
+            // Log what we got from the scraper
+            console.log(`[Status API] ScrapedContent from Apify:`, {
+              hasTranscript: !!scrapedContent.transcript,
+              transcriptLength: scrapedContent.transcript?.length,
+              transcriptPreview: scrapedContent.transcript?.substring(0, 100),
+              platform: scrapedContent.platform,
+              hasRawData: !!scrapedContent.rawData,
+              rawDataCaptions: scrapedContent.rawData?.captions ? 'present' : 'missing',
+              rawDataKeys: scrapedContent.rawData ? Object.keys(scrapedContent.rawData).slice(0, 20) : [],
+              hasVideoUrl: !!scrapedContent.videoUrl,
+              hasRawVideoUrl: !!scrapedContent.rawData?.videoUrl,
+              hasMediaUrls: !!scrapedContent.rawData?.mediaUrls
+            });
             
-            // Handle YouTube separately
-            if (scrapedContent.platform === 'youtube') {
+            // Check if audio is available and perform transcription
+            let transcriptionText = scrapedContent.transcript || null;
+            
+            console.log(`[Status API] Initial transcript check:`, {
+              hasTranscript: !!scrapedContent.transcript,
+              transcriptLength: scrapedContent.transcript?.length || 0,
+              platform: scrapedContent.platform
+            });
+            
+            // Handle YouTube separately - only if we don't already have a transcript
+            if (scrapedContent.platform === 'youtube' && !transcriptionText) {
               console.log(`[Status API] YouTube content detected, attempting transcription for ${scrapeId}`);
               
               const videoId = scrapedContent.rawData?.id || scrapedContent.rawData?.videoId;
@@ -196,42 +216,84 @@ export async function GET(
               }
             }
             // Handle other platforms (Instagram, TikTok)
-            else if (TranscriptionService.needsTranscription(scrapedContent)) {
-              console.log(`[Status API] Audio available, performing transcription for ${scrapeId}`);
+            else if (scrapedContent.platform !== 'youtube') {
+              console.log(`[Status API] Non-YouTube content (${scrapedContent.platform}), attempting transcription`);
               
               try {
                 const transcriptionService = new TranscriptionService();
                 const audioUrl = TranscriptionService.getAudioUrl(scrapedContent);
                 
+                console.log(`[Status API] Audio URL extraction result:`, {
+                  found: !!audioUrl,
+                  url: audioUrl ? audioUrl.substring(0, 100) + '...' : null
+                });
+                
                 if (audioUrl) {
-                  console.log(`[Status API] Transcribing audio from: ${audioUrl.substring(0, 100)}...`);
+                  console.log(`[Status API] Starting transcription for ${scrapedContent.platform} content`);
                   
                   // Generate contextual prompt for better transcription
                   const prompt = TranscriptionService.generatePrompt(scrapedContent);
+                  console.log(`[Status API] Generated prompt:`, prompt);
                   
                   const transcriptionResult = await transcriptionService.transcribeFromUrl(audioUrl, {
                     prompt,
                     response_format: 'verbose_json'
                   });
                   
-                  if (transcriptionResult) {
+                  if (transcriptionResult && transcriptionResult.text) {
                     transcriptionText = transcriptionResult.text;
-                    console.log(`[Status API] Transcription successful, length: ${transcriptionText.length} characters`);
+                    console.log(`[Status API] Transcription successful:`, {
+                      length: transcriptionText.length,
+                      language: transcriptionResult.language,
+                      duration: transcriptionResult.duration,
+                      segmentsCount: transcriptionResult.segments?.length || 0,
+                      preview: transcriptionText.substring(0, 100) + '...'
+                    });
                   } else {
-                    console.log(`[Status API] Transcription failed, continuing without transcript`);
+                    console.log(`[Status API] Transcription returned no text`);
                   }
                 } else {
                   console.log(`[Status API] No audio URL found for transcription (${scrapedContent.platform})`);
+                  // Log detailed information about available fields
+                  console.log(`[Status API] Available rawData fields:`, {
+                    allKeys: scrapedContent.rawData ? Object.keys(scrapedContent.rawData) : [],
+                    videoRelatedKeys: scrapedContent.rawData ? 
+                      Object.keys(scrapedContent.rawData).filter(k => 
+                        k.toLowerCase().includes('video') || 
+                        k.toLowerCase().includes('url') ||
+                        k.toLowerCase().includes('media') ||
+                        k.toLowerCase().includes('download')
+                      ) : [],
+                    mediaUrls: scrapedContent.rawData?.mediaUrls,
+                    videoUrl: scrapedContent.rawData?.videoUrl,
+                    video_url: scrapedContent.rawData?.video_url
+                  });
+                  
+                  // Set a message for content without video
+                  if (scrapedContent.platform === 'instagram' && !scrapedContent.videoUrl && !scrapedContent.rawData?.videoUrl) {
+                    console.log(`[Status API] Instagram content appears to be an image post, not a video`);
+                    transcriptionText = "[No transcript - this is an image post]";
+                  }
                 }
-              } catch (transcriptionError) {
-                console.error(`[Status API] Transcription error:`, transcriptionError);
+              } catch (transcriptionError: any) {
+                console.error(`[Status API] Transcription error:`, {
+                  message: transcriptionError.message,
+                  name: transcriptionError.name,
+                  stack: transcriptionError.stack?.split('\n').slice(0, 3).join('\n')
+                });
                 // Continue without transcription - don't fail the entire scraping process
               }
             }
             
             // If we got a transcript, add it to the scraped content
             if (transcriptionText) {
+              console.log(`[Status API] Adding transcription to scrapedContent:`, {
+                length: transcriptionText.length,
+                preview: transcriptionText.substring(0, 100)
+              });
               scrapedContent.transcript = transcriptionText;
+            } else {
+              console.log(`[Status API] No transcript obtained from any method`);
             }
             
             // Now deduct credits since scraping succeeded
@@ -307,7 +369,7 @@ export async function GET(
               title: scrapedContent.title,
               description: scrapedContent.description,
               caption: scrapedContent.caption,
-              transcript: scrapedContent.transcript || transcriptionText, // Use scraped transcript or our transcription
+              transcript: transcriptionText || scrapedContent.transcript || null, // Prefer our transcription, fallback to scraped
               metrics: {
                 views: scrapedContent.viewCount,
                 likes: scrapedContent.likeCount,

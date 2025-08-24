@@ -338,11 +338,14 @@ class TranscriptionService {
       if (urlFields.length > 0) {
         console.log('[TranscriptionService] Found URL fields in rawData:', urlFields);
         // Try the first URL that looks like a video
-        const potentialVideoUrl = urlFields.find(([key, value]) => 
-          value.includes('.mp4') || value.includes('video') || key.includes('video')
-        );
+        const potentialVideoUrl = urlFields.find(([key, value]) => {
+          if (typeof value === 'string') {
+            return value.includes('.mp4') || value.includes('video') || key.includes('video');
+          }
+          return false;
+        });
         if (potentialVideoUrl) {
-          videoUrl = potentialVideoUrl[1];
+          videoUrl = potentialVideoUrl[1] as string;
           console.log('[TranscriptionService] Using potential video URL from rawData');
         }
       }

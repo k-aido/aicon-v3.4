@@ -725,10 +725,10 @@ const CanvasComponent: React.FC<CanvasProps> = ({
         }}
       />
       
-      {/* Alignment Guides - rendered right after background, before elements */}
-      <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 2 }}>
+      {/* Alignment Guides - disabled but keeping the container for future use */}
+      {/* <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 2 }}>
         <AlignmentGuides guides={activeGuides} viewport={viewport} />
-      </div>
+      </div> */}
       
       {/* Canvas Elements */}
       <div 

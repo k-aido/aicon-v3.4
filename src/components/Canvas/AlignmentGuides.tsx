@@ -18,6 +18,11 @@ interface AlignmentGuidesProps {
 }
 
 export const AlignmentGuides: React.FC<AlignmentGuidesProps> = ({ guides, viewport }) => {
+  // Alignment guides disabled - return null to hide visual guides
+  // The snap-to-grid functionality still works in the background
+  return null;
+  
+  /* Original implementation commented out
   const { isDarkMode } = useDarkMode();
   
   // Guide color based on theme - using a subtle gray color

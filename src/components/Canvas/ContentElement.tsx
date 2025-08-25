@@ -19,6 +19,8 @@ interface ContentElementProps {
   onOpenAnalysisPanel?: (element: ContentElementType) => void;
   onReanalyze?: (element: ContentElementType) => void;
   onDragEnd?: () => void;
+  onResizeStart?: () => void;
+  onResizeEnd?: () => void;
 }
 
 const PlatformIcon: React.FC<{ platform: string }> = ({ platform }) => {
@@ -50,7 +52,9 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
   onConnectionStart,
   onOpenAnalysisPanel,
   onReanalyze,
-  onDragEnd
+  onDragEnd,
+  onResizeStart,
+  onResizeEnd
 }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [showContextMenu, setShowContextMenu] = useState(false);
@@ -211,10 +215,12 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
         minWidth={200}
         minHeight={150}
         onResize={handleResize}
+        onResizeStart={onResizeStart}
+        onResizeEnd={onResizeEnd}
         showHandle={selected || isHovered}
         className={`bg-gray-800 rounded-lg shadow-lg ${
-          selected ? 'ring-2 ring-[#E1622B] shadow-xl' : ''
-        } ${connecting !== null && String(connecting) === String(element.id) ? 'ring-2 ring-[#E1622B]' : ''}`}
+          selected ? 'ring-2 ring-[#c96442] shadow-xl' : ''
+        } ${connecting !== null && String(connecting) === String(element.id) ? 'ring-2 ring-[#c96442]' : ''}`}
       >
         <ConnectionPoint
           position="right"
@@ -233,7 +239,7 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
               {/* Analysis Status Indicators */}
               {isAnalyzing && (
                 <div title="Analyzing content...">
-                  <Loader2 className="w-4 h-4 text-[#E1622B] animate-spin" />
+                  <Loader2 className="w-4 h-4 text-[#c96442] animate-spin" />
                 </div>
               )}
               {analysisError && (
@@ -313,8 +319,8 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
               </div>
             ) : (element as any).metadata?.isAnalyzing ? (
               <div className="w-full h-full flex flex-col items-center justify-center">
-                <Loader2 className="w-8 h-8 text-[#E1622B] animate-spin mb-2" />
-                <p className="text-[#E1622B] text-xs">Analyzing content...</p>
+                <Loader2 className="w-8 h-8 text-[#c96442] animate-spin mb-2" />
+                <p className="text-[#c96442] text-xs">Analyzing content...</p>
               </div>
             ) : analysisError || (element as any).metadata?.analysisError ? (
               <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center">

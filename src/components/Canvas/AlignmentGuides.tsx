@@ -18,15 +18,10 @@ interface AlignmentGuidesProps {
 }
 
 export const AlignmentGuides: React.FC<AlignmentGuidesProps> = ({ guides, viewport }) => {
-  // Alignment guides disabled - return null to hide visual guides
-  // The snap-to-grid functionality still works in the background
-  return null;
-  
-  /* Original implementation commented out
   const { isDarkMode } = useDarkMode();
   
-  // Guide color based on theme - using a subtle gray color
-  const guideColor = isDarkMode ? '#6b7280' : '#9ca3af'; // Gray color for subtle guides
+  // Guide color matches the connection lines - orange
+  const guideColor = '#c96442';
   
   if (guides.length === 0) return null;
 
@@ -50,9 +45,9 @@ export const AlignmentGuides: React.FC<AlignmentGuidesProps> = ({ guides, viewpo
               x2={guide.position * viewport.zoom + viewport.x}
               y2={guide.end * viewport.zoom + viewport.y}
               stroke={guideColor}
-              strokeWidth="1"
-              strokeDasharray="2,4"
-              opacity="0.3"
+              strokeWidth="2"
+              strokeDasharray="4,4"
+              opacity="1"
             />
           );
         } else {
@@ -64,9 +59,9 @@ export const AlignmentGuides: React.FC<AlignmentGuidesProps> = ({ guides, viewpo
               x2={guide.end * viewport.zoom + viewport.x}
               y2={guide.position * viewport.zoom + viewport.y}
               stroke={guideColor}
-              strokeWidth="1"
-              strokeDasharray="2,4"
-              opacity="0.3"
+              strokeWidth="2"
+              strokeDasharray="4,4"
+              opacity="1"
             />
           );
         }

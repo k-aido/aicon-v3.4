@@ -128,16 +128,16 @@ export const useCanvasAlignment = ({
         });
       }
       
-      // Center X alignment
-      if (Math.abs(draggedCenterX - centerX) < snapThreshold) {
-        if (snappedX === undefined) snappedX = centerX - draggedElement.width / 2;
-        guides.push({
-          type: 'vertical',
-          position: centerX,
-          start: Math.min(draggedTop, top),
-          end: Math.max(draggedBottom, bottom)
-        });
-      }
+      // Center X alignment - disabled per user request
+      // if (Math.abs(draggedCenterX - centerX) < snapThreshold) {
+      //   if (snappedX === undefined) snappedX = centerX - draggedElement.width / 2;
+      //   guides.push({
+      //     type: 'vertical',
+      //     position: centerX,
+      //     start: Math.min(draggedTop, top),
+      //     end: Math.max(draggedBottom, bottom)
+      //   });
+      // }
 
       // Horizontal alignment checks (top, middle, bottom)
       
@@ -185,16 +185,16 @@ export const useCanvasAlignment = ({
         });
       }
       
-      // Center Y alignment
-      if (Math.abs(draggedCenterY - centerY) < snapThreshold) {
-        if (snappedY === undefined) snappedY = centerY - draggedElement.height / 2;
-        guides.push({
-          type: 'horizontal',
-          position: centerY,
-          start: Math.min(draggedLeft, left),
-          end: Math.max(draggedRight, right)
-        });
-      }
+      // Center Y alignment - disabled per user request
+      // if (Math.abs(draggedCenterY - centerY) < snapThreshold) {
+      //   if (snappedY === undefined) snappedY = centerY - draggedElement.height / 2;
+      //   guides.push({
+      //     type: 'horizontal',
+      //     position: centerY,
+      //     start: Math.min(draggedLeft, left),
+      //     end: Math.max(draggedRight, right)
+      //   });
+      // }
     });
 
     return { snappedX, snappedY, guides };

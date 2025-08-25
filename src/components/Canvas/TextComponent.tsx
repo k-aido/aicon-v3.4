@@ -19,6 +19,8 @@ interface TextComponentProps {
   onDelete: (id: string | number) => void;
   onConnectionStart: (elementId: string | number) => void;
   onDragEnd?: () => void;
+  onResizeStart?: () => void;
+  onResizeEnd?: () => void;
 }
 
 export const TextComponent: React.FC<TextComponentProps> = React.memo(({
@@ -30,7 +32,9 @@ export const TextComponent: React.FC<TextComponentProps> = React.memo(({
   onUpdate,
   onDelete,
   onConnectionStart,
-  onDragEnd
+  onDragEnd,
+  onResizeStart,
+  onResizeEnd
 }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [localContent, setLocalContent] = useState(element.content);
@@ -137,10 +141,12 @@ export const TextComponent: React.FC<TextComponentProps> = React.memo(({
         minWidth={200}
         minHeight={150}
         onResize={handleResize}
+        onResizeStart={onResizeStart}
+        onResizeEnd={onResizeEnd}
         showHandle={selected || isHovered}
         className={`${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-lg border-2 ${isDarkMode ? 'border-gray-600' : 'border-gray-300'} ${
-          selected ? 'ring-2 ring-[#E1622B] shadow-xl' : ''
-        } ${connecting !== null && (String(connecting) === String(element.id) || connecting === Number(element.id)) ? 'ring-2 ring-[#E1622B]' : ''}`}
+          selected ? 'ring-2 ring-[#c96442] shadow-xl' : ''
+        } ${connecting !== null && (String(connecting) === String(element.id) || connecting === Number(element.id)) ? 'ring-2 ring-[#c96442]' : ''}`}
       >
         <ConnectionPoint
           position="right"

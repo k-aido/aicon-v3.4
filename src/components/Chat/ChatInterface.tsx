@@ -814,7 +814,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 createNewConversation();
               }}
               onMouseDown={(e) => e.stopPropagation()}
-              className="w-full px-3 py-2 bg-[#E1622B] hover:bg-[#c93d14] text-white rounded-lg flex items-center justify-center gap-2 transition-colors"
+              className="w-full px-3 py-2 bg-[#c96442] hover:bg-[#b85432] text-white rounded-lg flex items-center justify-center gap-2 transition-colors"
               data-no-drag
             >
               <Plus className="w-4 h-4" />
@@ -834,7 +834,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   onMouseDown={(e) => e.stopPropagation()}
                   className={`p-3 rounded-lg cursor-pointer transition-colors ${
                     activeConversationId === conv.id 
-                      ? 'bg-[#E1622B]/20 border border-[#E1622B]' 
+                      ? 'bg-[#c96442]/20 border border-[#c96442]' 
                       : isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-200'
                   }`}
                   role="button"
@@ -883,7 +883,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         <div className={`${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b px-4 py-3 flex items-center justify-between`} style={{ paddingLeft: '3.5rem' }}>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
-              <MessageSquare className={`w-5 h-5 ${currentModel.provider === 'openai' ? 'text-green-600' : 'text-[#E1622B]'}`} />
+              <MessageSquare className={`w-5 h-5 ${currentModel.provider === 'openai' ? 'text-green-600' : 'text-[#c96442]'}`} />
               <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{activeConversation?.title || 'AI Assistant'}</span>
             </div>
           </div>
@@ -1046,7 +1046,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 placeholder="Type a message..."
                 disabled={isLoading}
                 data-no-drag
-                className={`flex-1 px-4 py-3 ${isDarkMode ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:bg-gray-700' : 'bg-gray-100 border-gray-200 text-gray-900 placeholder-gray-500 focus:bg-white'} rounded-xl border outline-none focus:border-[#E1622B] transition-all resize-none overflow-hidden`}
+                className={`flex-1 px-4 py-3 ${isDarkMode ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:bg-gray-700' : 'bg-gray-100 border-gray-200 text-gray-900 placeholder-gray-500 focus:bg-white'} rounded-xl border outline-none focus:border-[#c96442] transition-all resize-none overflow-hidden`}
                 style={{ 
                   pointerEvents: 'auto', 
                   zIndex: 10,
@@ -1073,7 +1073,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 }}
                 onMouseDown={(e) => e.stopPropagation()}
                 disabled={!input.trim() || isLoading}
-                className="w-[52px] h-[52px] bg-[#E1622B] text-white rounded-xl hover:bg-[#c93d14] disabled:opacity-50 transition-colors flex items-center justify-center flex-shrink-0"
+                className="w-[52px] h-[52px] bg-[#c96442] text-white rounded-xl hover:bg-[#b85432] disabled:opacity-50 transition-colors flex items-center justify-center flex-shrink-0"
                 data-no-drag
               >
                 <ArrowUp className="w-5 h-5" />

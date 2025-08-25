@@ -65,7 +65,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
           setIsOpen(!isOpen);
         }}
         onMouseDown={(e) => e.stopPropagation()}
-        className={`w-[136px] h-[25px] flex items-center justify-between gap-2 px-2 py-0 bg-gray-100 rounded-lg text-xs border border-gray-200 outline-none hover:bg-gray-50 focus:border-[#E1622B] cursor-pointer ${className}`}
+        className={`w-[136px] h-[25px] flex items-center justify-between gap-2 px-2 py-0 bg-gray-100 rounded-lg text-xs border border-gray-200 outline-none hover:bg-gray-50 focus:border-[#c96442] cursor-pointer ${className}`}
         data-no-drag
         style={{ pointerEvents: 'auto' }}
       >
@@ -124,7 +124,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                   </div>
                   
                   {selectedModel === model.id && (
-                    <Check className="w-3 h-3 text-[#E1622B] flex-shrink-0 ml-1" />
+                    <Check className="w-3 h-3 text-[#c96442] flex-shrink-0 ml-1" />
                   )}
                 </button>
               ))}

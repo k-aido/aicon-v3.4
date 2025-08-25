@@ -66,12 +66,14 @@ const CanvasComponent: React.FC<CanvasProps> = ({
   const [mousePos, setMousePos] = useState<Position>({ x: 0, y: 0 });
   const [selectedElementIds, setSelectedElementIds] = useState<number[]>([]);
   const [lastClickedElementId, setLastClickedElementId] = useState<number | null>(null);
+  const [isDraggingElement, setIsDraggingElement] = useState(false);
+  const [isResizingElement, setIsResizingElement] = useState(false);
   
-  // Alignment system
+  // Alignment system - enabled when dragging or resizing
   const { checkAlignment, clearGuides, activeGuides } = useCanvasAlignment({
     elements,
     snapThreshold: 10,
-    enabled: true
+    enabled: isDraggingElement || isResizingElement
   });
   
   // Focus canvas on mount and handle keyboard events
@@ -303,27 +305,48 @@ const CanvasComponent: React.FC<CanvasProps> = ({
   const handleElementUpdate = useCallback((id: string | number, updates: Partial<CanvasElement>) => {
     console.log('🔧 [Canvas] handleElementUpdate called:', { id, idType: typeof id, updates });
     
+    const element = elements.find(el => String(el.id) === String(id));
+    if (!element) return;
+    
     // Check if this is a position update (dragging)
     if ('x' in updates || 'y' in updates) {
-      const element = elements.find(el => String(el.id) === String(id));
-      if (element) {
-        // Check alignment with other elements
-        const alignmentResult = checkAlignment({
-          id,
-          x: updates.x ?? element.x,
-          y: updates.y ?? element.y,
-          width: element.width,
-          height: element.height
-        });
-        
-        // Apply snapped positions if available
-        if (alignmentResult.snappedX !== undefined) {
-          updates.x = alignmentResult.snappedX;
-        }
-        if (alignmentResult.snappedY !== undefined) {
-          updates.y = alignmentResult.snappedY;
-        }
+      // Set dragging state to true when position updates happen
+      setIsDraggingElement(true);
+      
+      // Check alignment with other elements
+      const alignmentResult = checkAlignment({
+        id,
+        x: updates.x ?? element.x,
+        y: updates.y ?? element.y,
+        width: element.width,
+        height: element.height
+      });
+      
+      // Apply snapped positions if available
+      if (alignmentResult.snappedX !== undefined) {
+        updates.x = alignmentResult.snappedX;
       }
+      if (alignmentResult.snappedY !== undefined) {
+        updates.y = alignmentResult.snappedY;
+      }
+    }
+    
+    // Check if this is a resize update
+    if ('width' in updates || 'height' in updates) {
+      // Set resizing state to true when size updates happen
+      setIsResizingElement(true);
+      
+      // Check alignment with other elements using new dimensions
+      const alignmentResult = checkAlignment({
+        id,
+        x: element.x,
+        y: element.y,
+        width: updates.width ?? element.width,
+        height: updates.height ?? element.height
+      });
+      
+      // For resize, we might want to snap the dimensions
+      // This creates alignment when edges align during resize
     }
     
     setElements(prev => {
@@ -725,10 +748,10 @@ const CanvasComponent: React.FC<CanvasProps> = ({
         }}
       />
       
-      {/* Alignment Guides - disabled but keeping the container for future use */}
-      {/* <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 2 }}>
+      {/* Alignment Guides */}
+      <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 2 }}>
         <AlignmentGuides guides={activeGuides} viewport={viewport} />
-      </div> */}
+      </div>
       
       {/* Canvas Elements */}
       <div 
@@ -744,9 +767,9 @@ const CanvasComponent: React.FC<CanvasProps> = ({
         <svg className="absolute inset-0 pointer-events-none" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
           <defs>
             <linearGradient id="connectionGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#E1622B" stopOpacity="0.3" />
-              <stop offset="50%" stopColor="#E1622B" stopOpacity="1" />
-              <stop offset="100%" stopColor="#E1622B" stopOpacity="0.3" />
+              <stop offset="0%" stopColor="#c96442" stopOpacity="0.3" />
+              <stop offset="50%" stopColor="#c96442" stopOpacity="1" />
+              <stop offset="100%" stopColor="#c96442" stopOpacity="0.3" />
             </linearGradient>
           </defs>
           
@@ -766,7 +789,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
               {/* Thicker background line for visibility */}
               <path
                 d={connectionPreview}
-                stroke="#E1622B"
+                stroke="#c96442"
                 strokeWidth="4"
                 fill="none"
                 strokeOpacity="0.2"
@@ -775,7 +798,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
               {/* Main connection line */}
               <path
                 d={connectionPreview}
-                stroke="#E1622B"
+                stroke="#c96442"
                 strokeWidth="2"
                 fill="none"
                 strokeDasharray="8 4"
@@ -787,9 +810,9 @@ const CanvasComponent: React.FC<CanvasProps> = ({
                 cx={mousePos.x}
                 cy={mousePos.y}
                 r="12"
-                fill="#E1622B"
+                fill="#c96442"
                 fillOpacity="0.3"
-                stroke="#E1622B"
+                stroke="#c96442"
                 strokeWidth="2"
                 className="pointer-events-none animate-pulse"
               />
@@ -797,7 +820,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
                 cx={mousePos.x}
                 cy={mousePos.y}
                 r="4"
-                fill="#E1622B"
+                fill="#c96442"
                 className="pointer-events-none"
               />
             </g>
@@ -823,7 +846,17 @@ const CanvasComponent: React.FC<CanvasProps> = ({
                 onConnectionStart={handleConnectionStart}
                 onOpenAnalysisPanel={onOpenAnalysisPanel}
                 onReanalyze={handleReanalysis}
-                onDragEnd={clearGuides}
+                onDragEnd={() => {
+                  setIsDraggingElement(false);
+                  clearGuides();
+                }}
+                onResizeStart={() => {
+                  setIsResizingElement(true);
+                }}
+                onResizeEnd={() => {
+                  setIsResizingElement(false);
+                  clearGuides();
+                }}
               />
             );
           } else if (element.type === 'chat') {
@@ -839,7 +872,17 @@ const CanvasComponent: React.FC<CanvasProps> = ({
                 onUpdate={handleElementUpdate}
                 onDelete={handleElementDelete}
                 onConnectionStart={handleConnectionStart}
-                onDragEnd={clearGuides}
+                onDragEnd={() => {
+                  setIsDraggingElement(false);
+                  clearGuides();
+                }}
+                onResizeStart={() => {
+                  setIsResizingElement(true);
+                }}
+                onResizeEnd={() => {
+                  setIsResizingElement(false);
+                  clearGuides();
+                }}
               />
             );
           } else if (element.type === 'text') {
@@ -854,7 +897,17 @@ const CanvasComponent: React.FC<CanvasProps> = ({
                 onUpdate={handleElementUpdate}
                 onDelete={handleElementDelete}
                 onConnectionStart={handleConnectionStart}
-                onDragEnd={clearGuides}
+                onDragEnd={() => {
+                  setIsDraggingElement(false);
+                  clearGuides();
+                }}
+                onResizeStart={() => {
+                  setIsResizingElement(true);
+                }}
+                onResizeEnd={() => {
+                  setIsResizingElement(false);
+                  clearGuides();
+                }}
               />
             );
           }

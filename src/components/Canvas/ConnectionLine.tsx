@@ -99,7 +99,7 @@ export const ConnectionLine: React.FC<ConnectionLineProps> = React.memo(({
       {/* Animated connection line */}
       <path
         d={pathData.path}
-        stroke="#E1622B"
+        stroke="#c96442"
         strokeWidth="2"
         fill="none"
         className="connection-line"

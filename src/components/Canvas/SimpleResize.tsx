@@ -9,6 +9,8 @@ interface SimpleResizeProps {
   maxWidth?: number;
   maxHeight?: number;
   onResize: (width: number, height: number) => void;
+  onResizeStart?: () => void;
+  onResizeEnd?: () => void;
   showHandle?: boolean;
   className?: string;
   maintainAspectRatio?: boolean;
@@ -25,6 +27,8 @@ export const SimpleResize: React.FC<SimpleResizeProps> = ({
   maxWidth,
   maxHeight,
   onResize,
+  onResizeStart,
+  onResizeEnd,
   showHandle = false,
   className = '',
   maintainAspectRatio = false
@@ -60,7 +64,12 @@ export const SimpleResize: React.FC<SimpleResizeProps> = ({
     
     document.body.style.cursor = cursorMap[direction];
     document.body.style.userSelect = 'none';
-  }, [width, height]);
+    
+    // Call onResizeStart callback
+    if (onResizeStart) {
+      onResizeStart();
+    }
+  }, [width, height, onResizeStart]);
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!isResizing || !resizeDirection) return;
@@ -133,7 +142,12 @@ export const SimpleResize: React.FC<SimpleResizeProps> = ({
     setResizeDirection(null);
     document.body.style.cursor = '';
     document.body.style.userSelect = '';
-  }, []);
+    
+    // Call onResizeEnd callback
+    if (onResizeEnd) {
+      onResizeEnd();
+    }
+  }, [onResizeEnd]);
 
   useEffect(() => {
     if (isResizing) {

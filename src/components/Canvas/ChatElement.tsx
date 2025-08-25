@@ -17,6 +17,8 @@ interface ChatElementProps {
   onDelete: (id: string | number) => void;
   onConnectionStart: (elementId: string | number) => void;
   onDragEnd?: () => void;
+  onResizeStart?: () => void;
+  onResizeEnd?: () => void;
 }
 
 /**
@@ -32,7 +34,9 @@ export const ChatElement: React.FC<ChatElementProps> = React.memo(({
   onUpdate,
   onDelete,
   onConnectionStart,
-  onDragEnd
+  onDragEnd,
+  onResizeStart,
+  onResizeEnd
 }) => {
   const [isHovered, setIsHovered] = useState(false);
   
@@ -90,10 +94,12 @@ export const ChatElement: React.FC<ChatElementProps> = React.memo(({
         maxWidth={1600}
         maxHeight={1200}
         onResize={handleResize}
+        onResizeStart={onResizeStart}
+        onResizeEnd={onResizeEnd}
         showHandle={selected || isHovered}
         className={`rounded-lg shadow-lg outline-none focus:outline-none ${
-          selected ? 'ring-2 ring-[#E1622B] shadow-xl' : ''
-        } ${connecting !== null && String(connecting) === String(element.id) ? 'ring-2 ring-[#E1622B]' : ''}`}
+          selected ? 'ring-2 ring-[#c96442] shadow-xl' : ''
+        } ${connecting !== null && String(connecting) === String(element.id) ? 'ring-2 ring-[#c96442]' : ''}`}
       >
         <ConnectionPoint
           position="left"

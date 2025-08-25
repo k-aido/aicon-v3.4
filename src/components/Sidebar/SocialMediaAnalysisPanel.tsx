@@ -129,7 +129,7 @@ export const SocialMediaAnalysisPanel: React.FC<SocialMediaAnalysisPanelProps> =
           .single();
 
         if (!analysisError && analysisData) {
-          setAnalysis(analysisData);
+          setAnalysis(analysisData as ExtendedContentAnalysis);
           setLoading(false);
           return;
         }
@@ -168,7 +168,7 @@ export const SocialMediaAnalysisPanel: React.FC<SocialMediaAnalysisPanelProps> =
           .single();
 
         if (!analysisError && analysisData) {
-          setAnalysis(analysisData);
+          setAnalysis(analysisData as ExtendedContentAnalysis);
           setLoading(false);
           return;
         }

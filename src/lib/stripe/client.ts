@@ -1,17 +1,31 @@
 import Stripe from 'stripe';
 
-if (!process.env.STRIPE_SECRET_KEY) {
-  throw new Error('STRIPE_SECRET_KEY is not set in environment variables');
+// During build time, we might not have all env vars available
+// Create stripe instance lazily to avoid build errors
+let stripeInstance: Stripe | null = null;
+
+function getStripe(): Stripe {
+  if (!stripeInstance) {
+    if (!process.env.STRIPE_SECRET_KEY) {
+      throw new Error('STRIPE_SECRET_KEY is not set in environment variables');
+    }
+    stripeInstance = new Stripe(process.env.STRIPE_SECRET_KEY, {
+      apiVersion: '2025-07-30.basil',
+      typescript: true,
+    });
+  }
+  return stripeInstance;
 }
 
-export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: '2025-07-30.basil',
-  typescript: true,
+export const stripe = new Proxy({} as Stripe, {
+  get(_, prop) {
+    return getStripe()[prop as keyof Stripe];
+  }
 });
 
 export async function createStripeCustomer(email: string, metadata?: Record<string, string>) {
   try {
-    const customer = await stripe.customers.create({
+    const customer = await getStripe().customers.create({
       email,
       metadata: metadata || {},
     });
@@ -30,7 +44,7 @@ export async function createCheckoutSession(
   metadata?: Record<string, string>
 ) {
   try {
-    const session = await stripe.checkout.sessions.create({
+    const session = await getStripe().checkout.sessions.create({
       customer: customerId,
       payment_method_types: ['card'],
       line_items: [
@@ -61,7 +75,7 @@ export async function createBillingPortalSession(
   returnUrl: string
 ) {
   try {
-    const session = await stripe.billingPortal.sessions.create({
+    const session = await getStripe().billingPortal.sessions.create({
       customer: customerId,
       return_url: returnUrl,
     });
@@ -74,7 +88,7 @@ export async function createBillingPortalSession(
 
 export async function cancelSubscription(subscriptionId: string) {
   try {
-    const subscription = await stripe.subscriptions.update(subscriptionId, {
+    const subscription = await getStripe().subscriptions.update(subscriptionId, {
       cancel_at_period_end: true,
     });
     return subscription;
@@ -86,7 +100,7 @@ export async function cancelSubscription(subscriptionId: string) {
 
 export async function getSubscription(subscriptionId: string) {
   try {
-    const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+    const subscription = await getStripe().subscriptions.retrieve(subscriptionId);
     return subscription;
   } catch (error) {
     console.error('Error retrieving subscription:', error);
@@ -99,9 +113,9 @@ export async function updateSubscription(
   newPriceId: string
 ) {
   try {
-    const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+    const subscription = await getStripe().subscriptions.retrieve(subscriptionId);
     
-    const updatedSubscription = await stripe.subscriptions.update(subscriptionId, {
+    const updatedSubscription = await getStripe().subscriptions.update(subscriptionId, {
       items: [
         {
           id: subscription.items.data[0].id,

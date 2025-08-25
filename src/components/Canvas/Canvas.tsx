@@ -725,6 +725,11 @@ const CanvasComponent: React.FC<CanvasProps> = ({
         }}
       />
       
+      {/* Alignment Guides - rendered right after background, before elements */}
+      <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 2 }}>
+        <AlignmentGuides guides={activeGuides} viewport={viewport} />
+      </div>
+      
       {/* Canvas Elements */}
       <div 
         style={{
@@ -856,11 +861,6 @@ const CanvasComponent: React.FC<CanvasProps> = ({
           // Fallback for any other element types
           return null;
         })}
-      </div>
-      
-      {/* Alignment Guides - rendered as separate layer after elements */}
-      <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 45 }}>
-        <AlignmentGuides guides={activeGuides} viewport={viewport} />
       </div>
       
       {/* Connection Mode Indicator */}

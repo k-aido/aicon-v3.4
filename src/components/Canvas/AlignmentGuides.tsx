@@ -32,7 +32,8 @@ export const AlignmentGuides: React.FC<AlignmentGuidesProps> = ({ guides, viewpo
         width: '100%', 
         height: '100%', 
         overflow: 'visible',
-        zIndex: 1000 // Ensure guides are above connections but below elements
+        zIndex: 5, // Lower z-index, behind connections
+        mixBlendMode: 'multiply' // Blend mode to prevent color overlap
       }}
     >
       {guides.map((guide, index) => {

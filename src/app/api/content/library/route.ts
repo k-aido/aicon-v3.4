@@ -60,14 +60,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    console.log('[Library API] Fetching content for element IDs:', contentIds);
+    console.log('[Library API] Fetching content for IDs:', contentIds);
 
-    // First, we need to map canvas element IDs to scrape IDs
-    // The contentIds are the canvas element IDs, but we need to find the corresponding scrape IDs
-    // For now, we'll fetch by scrape_id directly if the IDs match
+    // The contentIds array may contain:
+    // 1. Scrape IDs (UUIDs from content_scrapes table)
+    // 2. Canvas element IDs (numeric IDs from the canvas)
+    // We need to handle both cases
     
-    // Try to fetch content analysis data for the selected content IDs
-    const { data: contentData, error: contentError } = await supabase
+    // First, try to fetch by scrape_id directly
+    const { data: contentByScrapId, error: scrapeError } = await supabase
       .from('content_analysis')
       .select(`
         *,
@@ -80,28 +81,112 @@ export async function POST(request: NextRequest) {
           user_id
         )
       `)
-      .in('scrape_id', contentIds.map(String)) // Convert IDs to strings and match scrape_id
+      .in('scrape_id', contentIds.map(String))
       .eq('content_scrapes.project_id', projectId)
       .eq('content_scrapes.user_id', userId);
 
-    if (contentError) {
-      console.error('[Library API] Error fetching content:', contentError);
-      return NextResponse.json(
-        { error: 'Failed to fetch content library' },
-        { status: 500 }
-      );
+    if (scrapeError) {
+      console.error('[Library API] Error fetching by scrape_id:', scrapeError);
     }
 
-    if (!contentData || contentData.length === 0) {
+    // Also try to fetch by canvas element ID stored in processed_data
+    // Some implementations store the canvas element ID in processed_data.canvasElementId
+    const { data: contentByElementId, error: elementError } = await supabase
+      .from('content_analysis')
+      .select(`
+        *,
+        content_scrapes!inner(
+          id,
+          url,
+          platform,
+          processed_data,
+          project_id,
+          user_id
+        )
+      `)
+      .in('content_scrapes.processed_data->canvasElementId', contentIds.map(String))
+      .eq('content_scrapes.project_id', projectId)
+      .eq('content_scrapes.user_id', userId);
+
+    if (elementError) {
+      console.error('[Library API] Error fetching by element_id:', elementError);
+    }
+
+    // Combine results and remove duplicates
+    const contentData = [...(contentByScrapId || []), ...(contentByElementId || [])];
+    const uniqueContent = Array.from(new Map(contentData.map(item => [item.id, item])).values());
+
+    console.log('[Library API] Found analyzed content:', {
+      byScrapId: contentByScrapId?.length || 0,
+      byElementId: contentByElementId?.length || 0,
+      total: uniqueContent.length,
+      requestedIds: contentIds
+    });
+
+    // If no analyzed content found, check if there are scraped items waiting for analysis
+    if (uniqueContent.length === 0) {
+      console.log('[Library API] No analyzed content found, checking for scraped content...');
+      
+      // Check content_scrapes table directly
+      const { data: scrapedContent, error: scrapedError } = await supabase
+        .from('content_scrapes')
+        .select('*')
+        .in('id', contentIds.map(String))
+        .eq('project_id', projectId)
+        .eq('user_id', userId)
+        .eq('status', 'completed');
+
+      if (scrapedContent && scrapedContent.length > 0) {
+        console.log('[Library API] Found scraped content without analysis:', scrapedContent.length);
+        
+        // Format scraped content as basic content items
+        const formattedScrapedContent = scrapedContent.map(scrape => {
+          const processedData = scrape.processed_data || {};
+          return {
+            id: scrape.id,
+            scrapeId: scrape.id,
+            platform: scrape.platform,
+            url: scrape.url,
+            title: processedData.title || 'Untitled Content',
+            description: processedData.description || processedData.caption || '',
+            transcript: processedData.transcript || processedData.subtitles || '',
+            metrics: processedData.metrics || {},
+            processedData: processedData,
+            creatorUsername: processedData.authorUsername || processedData.ownerUsername || 'Unknown',
+            creatorName: processedData.author?.name || processedData.authorName || '',
+            thumbnailUrl: processedData.thumbnailUrl || processedData.thumbnail || '',
+            uploadDate: processedData.uploadDate || processedData.publishedAt || '',
+            analysis: null, // No analysis yet
+            analyzedAt: null,
+            needsAnalysis: true
+          };
+        });
+
+        return NextResponse.json({
+          success: true,
+          content: formattedScrapedContent,
+          message: 'Content found but not yet analyzed'
+        });
+      }
+    }
+
+    if (!uniqueContent || uniqueContent.length === 0) {
+      // Log for debugging
+      console.log('[Library API] No content found. Debug info:', {
+        requestedIds: contentIds,
+        projectId,
+        userId
+      });
+      
       return NextResponse.json({
         success: true,
         content: [],
-        message: 'No analyzed content found'
+        message: 'No analyzed content found for the provided IDs'
       });
     }
 
     // Format the content for RAG usage
-    const formattedContent = contentData.map(item => {
+    const formattedContent = uniqueContent.map(item => {
       // Extract creator info from processed_data
       const processedData = item.content_scrapes.processed_data || {};
       const creatorUsername = String(processedData.authorUsername || 
@@ -140,11 +225,11 @@ export async function POST(request: NextRequest) {
         scrapeId: item.scrape_id,
         platform: item.content_scrapes.platform,
         url: item.content_scrapes.url,
-        title: item.title,
-        description: item.description,
+        title: item.title || processedData.title || 'Untitled Content',
+        description: item.description || processedData.description || processedData.caption || '',
         transcript: transcript,
         captions: item.captions,
-        metrics: item.metrics,
+        metrics: item.metrics || processedData.metrics || {},
         processedData: item.content_scrapes.processed_data,
         creatorUsername: creatorUsername,
         creatorName: creatorName,
@@ -162,7 +247,8 @@ export async function POST(request: NextRequest) {
           sentiment: item.sentiment,
           complexity: item.complexity
         },
-        analyzedAt: item.analyzed_at
+        analyzedAt: item.analyzed_at,
+        needsAnalysis: false
       };
     });
 

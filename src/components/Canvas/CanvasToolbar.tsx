@@ -215,7 +215,7 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({ onAddElement, view
     <div
       className={`fixed left-4 top-1/2 -translate-y-1/2 rounded-lg shadow-lg z-30 p-1 transition-colors duration-200`}
       style={{
-        backgroundColor: isDarkMode ? '#30302e' : '#ffffff'
+        backgroundColor: isDarkMode ? '#202a37' : '#ffffff'
       }}
       data-toolbar
       onDrop={handleDrop}

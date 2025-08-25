@@ -1,7 +1,7 @@
 // PRIMARY CHAT INTERFACE - DO NOT MODIFY
 // Has working conversation sidebar and is the main chat component used on canvas
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Loader2, MessageSquare, Plus, Send, X, ChevronLeft, ChevronRight, Trash2, AtSign, Copy, Check } from 'lucide-react';
+import { Loader2, MessageSquare, Plus, ArrowUp, X, ChevronLeft, ChevronRight, Trash2, AtSign, Copy, Check } from 'lucide-react';
 import { ChatElement, Connection, ContentElement, Message, CanvasElement } from '@/types';
 import { useChatStore } from '@/store/chatStore';
 import { createBrowserClient } from '@/lib/supabase/client';
@@ -395,7 +395,12 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
     try {
       const projectId = window.location.pathname.split('/canvas/')[1];
-      console.log('[ChatInterface] Fetching from /api/content/library with:', { contentIds, projectId });
+      console.log('[ChatInterface] Fetching from /api/content/library with:', { 
+        contentIds, 
+        projectId,
+        contentIdsTypes: contentIds.map(id => typeof id),
+        contentIdsLength: contentIds.map(id => id.toString().length)
+      });
       const response = await fetch('/api/content/library', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -407,10 +412,25 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
       if (response.ok) {
         const data = await response.json();
-        console.log('[ChatInterface] Content library API response:', data);
+        console.log('[ChatInterface] Content library API response:', {
+          success: data.success,
+          contentCount: data.content?.length || 0,
+          message: data.message,
+          firstContent: data.content?.[0] ? {
+            id: data.content[0].id,
+            scrapeId: data.content[0].scrapeId,
+            title: data.content[0].title,
+            platform: data.content[0].platform
+          } : null
+        });
         return data.content || [];
       } else {
-        console.error('[ChatInterface] Content library API error:', response.status, await response.text());
+        const errorText = await response.text();
+        console.error('[ChatInterface] Content library API error:', {
+          status: response.status,
+          error: errorText,
+          requestedIds: contentIds
+        });
       }
     } catch (error) {
       console.error('[ChatInterface] Error fetching content analysis:', error);
@@ -469,7 +489,15 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       .map(content => {
         const metadata = (content as any).metadata;
         const id = metadata?.scrapeId || content.id.toString();
-        console.log(`[ChatInterface] Content ${content.id} mapped to ID:`, id, 'metadata:', metadata);
+        console.log(`[ChatInterface] Content element mapping:`, {
+          elementId: content.id,
+          scrapeId: metadata?.scrapeId,
+          mappedId: id,
+          hasMetadata: !!metadata,
+          metadataKeys: metadata ? Object.keys(metadata) : [],
+          platform: content.platform,
+          title: content.title
+        });
         return id;
       });
     
@@ -539,26 +567,34 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       }));
       
       // Prepare connected content for RAG
-      const connectedContentForChat = contentAnalysis.map((content: any) => ({
-        type: 'content',
-        title: content.title,
-        platform: content.platform,
-        url: content.url,
-        thumbnailUrl: content.thumbnailUrl || content.thumbnail || '',
-        creatorUsername: content.creatorUsername || 'Unknown Creator',
-        creatorName: content.creatorName || '',
-        creatorHandle: content.creatorHandle || content.creatorUsername || '@unknown',
-        authorName: content.creatorName || '', // Alias for backward compatibility
-        uploadDate: content.uploadDate || content.publishedAt || content.postedDate || '',
-        publishedAt: content.publishedAt || content.uploadDate || content.postedDate || '',
-        postedDate: content.postedDate || content.uploadDate || content.publishedAt || '',
-        transcript: content.transcript || content.subtitles || '',
-        subtitles: content.transcript || content.subtitles || '', // Alias for backward compatibility
-        analysis: content.analysis,
-        metrics: content.metrics,
-        keyTopics: content.analysis?.keyTopics || [],
-        engagementTactics: content.analysis?.engagementTactics || []
-      }));
+      const connectedContentForChat = contentAnalysis.map((content: any) => {
+        // Handle content that might not have analysis yet
+        const hasAnalysis = content.analysis && Object.keys(content.analysis).length > 0;
+        
+        return {
+          type: 'content',
+          title: content.title || 'Untitled Content',
+          platform: content.platform,
+          url: content.url,
+          thumbnailUrl: content.thumbnailUrl || content.thumbnail || '',
+          creatorUsername: content.creatorUsername || 'Unknown Creator',
+          creatorName: content.creatorName || '',
+          creatorHandle: content.creatorHandle || content.creatorUsername || '@unknown',
+          authorName: content.creatorName || '', // Alias for backward compatibility
+          uploadDate: content.uploadDate || content.publishedAt || content.postedDate || '',
+          publishedAt: content.publishedAt || content.uploadDate || content.postedDate || '',
+          postedDate: content.postedDate || content.uploadDate || content.publishedAt || '',
+          transcript: content.transcript || content.subtitles || content.captions || '',
+          subtitles: content.transcript || content.subtitles || '', // Alias for backward compatibility
+          description: content.description || '',
+          analysis: hasAnalysis ? content.analysis : null,
+          metrics: content.metrics || {},
+          keyTopics: content.analysis?.keyTopics || [],
+          engagementTactics: content.analysis?.engagementTactics || [],
+          rawData: content.processedData || {},
+          needsAnalysis: content.needsAnalysis || !hasAnalysis
+        };
+      });
       
       // Combine text elements first, then content elements
       const allConnectedData = [...textDataForChat, ...connectedContentForChat];
@@ -766,12 +802,12 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   };
 
   return (
-    <div className="h-full flex overflow-hidden rounded-lg bg-white">
+    <div className={`h-full flex overflow-hidden rounded-lg ${isDarkMode ? 'bg-gray-900' : 'bg-white'}`}>
       {/* Collapsible Conversation Sidebar */}
-      <div className={`${isSidebarOpen ? 'w-60 border-r border-gray-700' : 'w-0'} transition-all duration-300 overflow-hidden`} style={{ backgroundColor: '#202a37' }}>
+      <div className={`${isSidebarOpen ? `w-60 border-r ${isDarkMode ? 'border-gray-700' : 'border-gray-300'}` : 'w-0'} transition-all duration-300 overflow-hidden`} style={{ backgroundColor: isDarkMode ? '#202a37' : '#f3f4f6' }}>
         <div className="w-60 h-full flex flex-col">
           {/* New Chat Button */}
-          <div className="p-3 border-b border-gray-700">
+          <div className={`p-3 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-300'}`}>
             <button 
               onClick={(e) => {
                 e.stopPropagation();
@@ -799,12 +835,12 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   className={`p-3 rounded-lg cursor-pointer transition-colors ${
                     activeConversationId === conv.id 
                       ? 'bg-[#E1622B]/20 border border-[#E1622B]' 
-                      : 'hover:bg-gray-800'
+                      : isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-200'
                   }`}
                   role="button"
                 >
-                  <div className="text-sm text-white truncate pr-8">{conv.title}</div>
-                  <div className="text-xs text-gray-400 mt-1">
+                  <div className={`text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'} truncate pr-8`}>{conv.title}</div>
+                  <div className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'} mt-1`}>
                     {conv.messages.length} messages
                   </div>
                 </div>
@@ -829,7 +865,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       </div>
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col bg-white relative">
+      <div className={`flex-1 flex flex-col ${isDarkMode ? 'bg-gray-900' : 'bg-white'} relative`}>
         {/* Toggle Sidebar Button */}
         <button
           onClick={(e) => {
@@ -837,18 +873,18 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
             setIsSidebarOpen(!isSidebarOpen);
           }}
           onMouseDown={(e) => e.stopPropagation()}
-          className="absolute left-2 top-2 z-10 p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          className={`absolute left-2 top-2 z-10 p-2 ${isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100'} rounded-lg transition-colors`}
           data-no-drag
         >
-          {isSidebarOpen ? <ChevronLeft className="w-5 h-5 text-gray-500" /> : <ChevronRight className="w-5 h-5 text-gray-500" />}
+          {isSidebarOpen ? <ChevronLeft className={`w-5 h-5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} /> : <ChevronRight className={`w-5 h-5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />}
         </button>
         
         {/* Header */}
-        <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between" style={{ paddingLeft: '3.5rem' }}>
+        <div className={`${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b px-4 py-3 flex items-center justify-between`} style={{ paddingLeft: '3.5rem' }}>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
               <MessageSquare className={`w-5 h-5 ${currentModel.provider === 'openai' ? 'text-green-600' : 'text-[#E1622B]'}`} />
-              <span className="font-medium text-gray-900">{activeConversation?.title || 'AI Assistant'}</span>
+              <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{activeConversation?.title || 'AI Assistant'}</span>
             </div>
           </div>
           
@@ -860,20 +896,20 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 onDelete(element.id);
               }}
               onMouseDown={(e) => e.stopPropagation()}
-              className="p-1 hover:bg-gray-100 rounded transition-colors"
+              className={`p-1 ${isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'} rounded transition-colors`}
               title="Delete chat"
               data-no-drag
             >
-              <X className="w-5 h-5 text-gray-500 hover:text-red-500" />
+              <X className={`w-5 h-5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'} hover:text-red-500`} />
             </button>
           )}
         </div>
 
         {/* Messages Area - DRAGGABLE but text selectable */}
-        <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-6 bg-gray-50" style={{ userSelect: 'text' }}>
+        <div ref={messagesContainerRef} className={`flex-1 overflow-y-auto p-6 ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'}`} style={{ userSelect: 'text' }}>
           {messages.length === 0 && (
-            <div className="text-center text-gray-500 mt-12">
-              <MessageSquare className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+            <div className={`text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-500'} mt-12`}>
+              <MessageSquare className={`w-12 h-12 mx-auto mb-4 ${isDarkMode ? 'text-gray-600' : 'text-gray-300'}`} />
               <p className="text-lg">Start a conversation</p>
               <p className="text-sm mt-2">Ask me anything or connect content to analyze</p>
             </div>
@@ -887,16 +923,16 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
               >
                 <div className={`relative max-w-[80%] ${
                   message.role === 'user' 
-                    ? '' 
+                    ? 'mr-2' 
                     : ''
                 }`}>
                   {/* AICON Header floating above assistant messages */}
                   {message.role === 'assistant' && (
                     <div className="flex items-center gap-2 mb-2 px-1">
-                      <span className="font-semibold text-gray-700 text-sm">AICON</span>
+                      <span className={`font-semibold ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} text-sm`}>AICON</span>
                       {message.model && (
                         <>
-                          <span className="text-gray-400">•</span>
+                          <span className={isDarkMode ? 'text-gray-500' : 'text-gray-400'}>•</span>
                           <span className={`text-sm ${
                             LLM_MODELS.find(m => m.id === message.model)?.color || 'text-gray-600'
                           }`}>
@@ -916,23 +952,30 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                         setCopiedMessageId(message.id);
                         setTimeout(() => setCopiedMessageId(null), 2000);
                       }}
-                      className="absolute -right-10 top-8 p-2 opacity-0 group-hover:opacity-100 transition-opacity bg-gray-100 hover:bg-gray-200 rounded-lg"
+                      className={`absolute -right-10 top-8 p-2 opacity-0 group-hover:opacity-100 transition-opacity ${isDarkMode ? 'bg-gray-800 hover:bg-gray-700' : 'bg-gray-100 hover:bg-gray-200'} rounded-lg`}
                       title="Copy message"
                     >
                       {copiedMessageId === message.id ? (
                         <Check className="w-4 h-4 text-green-600" />
                       ) : (
-                        <Copy className="w-4 h-4 text-gray-600" />
+                        <Copy className={`w-4 h-4 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`} />
                       )}
                     </button>
                   )}
                   
                   <div className={`p-4 rounded-2xl ${
                     message.role === 'user' 
-                      ? 'bg-[#E1622B] text-white' 
-                      : 'bg-white border border-gray-200 text-gray-900 shadow-sm'
+                      ? '' 
+                      : isDarkMode ? 'bg-gray-800 border border-gray-700 text-white shadow-sm' : 'bg-white border border-gray-200 text-gray-900 shadow-sm'
                   }`}
-                  style={{ userSelect: 'text', WebkitUserSelect: 'text' }}
+                  style={{ 
+                    userSelect: 'text', 
+                    WebkitUserSelect: 'text',
+                    ...(message.role === 'user' ? {
+                      backgroundColor: isDarkMode ? '#4c3634' : '#efd8d2',
+                      color: isDarkMode ? '#f3f4f6' : '#374151'
+                    } : {})
+                  }}
                   >
                     {message.role === 'assistant' ? (
                       <MarkdownMessage 
@@ -940,14 +983,14 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                         className=""
                       />
                     ) : (
-                      <div className="whitespace-pre-wrap">{message.content}</div>
+                      <div className="whitespace-pre-wrap leading-relaxed">{message.content}</div>
                     )}
                   </div>
                 </div>
               </div>
             ))}
             {isLoading && (
-              <div className="flex items-center gap-3 text-gray-500">
+              <div className={`flex items-center gap-3 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                 <Loader2 className="w-5 h-5 animate-spin" />
                 <span>AI is thinking...</span>
               </div>
@@ -986,7 +1029,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         )}
         
         {/* Input Area - Container allows drag */}
-        <div className="border-t border-gray-200 bg-white p-4">
+        <div className={`border-t ${isDarkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-gray-50'} p-4`}>
           <div className="space-y-3">
             <div className="flex gap-3 relative items-end">
               <textarea
@@ -1003,7 +1046,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 placeholder="Type a message..."
                 disabled={isLoading}
                 data-no-drag
-                className="flex-1 px-4 py-3 bg-gray-100 rounded-xl border border-gray-200 outline-none focus:border-[#E1622B] focus:bg-white transition-all resize-none overflow-hidden"
+                className={`flex-1 px-4 py-3 ${isDarkMode ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:bg-gray-700' : 'bg-gray-100 border-gray-200 text-gray-900 placeholder-gray-500 focus:bg-white'} rounded-xl border outline-none focus:border-[#E1622B] transition-all resize-none overflow-hidden`}
                 style={{ 
                   pointerEvents: 'auto', 
                   zIndex: 10,
@@ -1033,7 +1076,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 className="w-[52px] h-[52px] bg-[#E1622B] text-white rounded-xl hover:bg-[#c93d14] disabled:opacity-50 transition-colors flex items-center justify-center flex-shrink-0"
                 data-no-drag
               >
-                <Send className="w-5 h-5" />
+                <ArrowUp className="w-5 h-5" />
               </button>
             </div>
             
@@ -1060,7 +1103,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 }}
                 onMouseDown={(e) => e.stopPropagation()}
                 disabled={connectedContent.length === 0 || isLoading}
-                className="w-[136px] h-[25px] flex items-center justify-center px-2 py-0 bg-gray-100 text-gray-700 rounded-lg text-xs border border-gray-200 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className={`w-[136px] h-[25px] flex items-center justify-center px-2 py-0 ${isDarkMode ? 'bg-gray-700 text-gray-300 border-gray-600 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-50'} rounded-lg text-xs border disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
                 data-no-drag
               >
                 Summarize
@@ -1074,7 +1117,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 }}
                 onMouseDown={(e) => e.stopPropagation()}
                 disabled={connectedContent.length === 0 || isLoading}
-                className="w-[136px] h-[25px] flex items-center justify-center px-2 py-0 bg-gray-100 text-gray-700 rounded-lg text-xs border border-gray-200 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className={`w-[136px] h-[25px] flex items-center justify-center px-2 py-0 ${isDarkMode ? 'bg-gray-700 text-gray-300 border-gray-600 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-50'} rounded-lg text-xs border disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
                 data-no-drag
               >
                 Get Insights
@@ -1088,12 +1131,12 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   }}
                   onMouseDown={(e) => e.stopPropagation()}
                   disabled={true}
-                  className="w-[136px] h-[25px] flex items-center justify-center px-2 py-0 bg-gray-100 text-gray-400 rounded-lg text-xs border border-gray-200 opacity-50 cursor-not-allowed transition-colors"
+                  className={`w-[136px] h-[25px] flex items-center justify-center px-2 py-0 ${isDarkMode ? 'bg-gray-700 text-gray-500 border-gray-600' : 'bg-gray-100 text-gray-400 border-gray-200'} rounded-lg text-xs border opacity-50 cursor-not-allowed transition-colors`}
                   data-no-drag
                 >
                   Research
                 </button>
-                <span className="fixed px-2 py-1 text-xs bg-gray-800 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none" 
+                <span className={`fixed px-2 py-1 text-xs ${isDarkMode ? 'bg-gray-700' : 'bg-gray-800'} text-white rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none`} 
                   style={{ 
                     zIndex: 99999,
                     marginTop: '30px',

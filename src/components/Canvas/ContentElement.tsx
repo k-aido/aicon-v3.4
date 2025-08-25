@@ -18,6 +18,7 @@ interface ContentElementProps {
   onConnectionStart: (elementId: string | number) => void;
   onOpenAnalysisPanel?: (element: ContentElementType) => void;
   onReanalyze?: (element: ContentElementType) => void;
+  onDragEnd?: () => void;
 }
 
 const PlatformIcon: React.FC<{ platform: string }> = ({ platform }) => {
@@ -48,7 +49,8 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
   onDelete,
   onConnectionStart,
   onOpenAnalysisPanel,
-  onReanalyze
+  onReanalyze,
+  onDragEnd
 }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [showContextMenu, setShowContextMenu] = useState(false);
@@ -76,7 +78,8 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
     elementId: element.id,
     initialPosition: { x: element.x, y: element.y },
     onUpdate,
-    onSelect: (event) => onSelect(element, event)
+    onSelect: (event) => onSelect(element, event),
+    onDragEnd
   });
 
   console.log('[ContentElement] Drag hook initialized:', {
@@ -287,9 +290,10 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
           
           
           {/* Thumbnail */}
-          <div className={`bg-gray-900 rounded-lg overflow-hidden mb-3 h-[180px] relative transition-all duration-200 ${
+          <div className={`bg-gray-900 rounded-lg overflow-hidden mb-3 relative transition-all duration-200 ${
             isHovered ? 'ring-2 ring-blue-500/50 cursor-pointer' : ''
-          }`}>
+          }`}
+          style={{ height: `${Math.max(element.height - 100, 80)}px` }}>
             {(element as any).metadata?.scrapingError ? (
               <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center">
                 <AlertCircle className="w-8 h-8 text-red-500 mb-2" />

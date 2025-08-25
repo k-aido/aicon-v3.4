@@ -3,10 +3,12 @@ import { CanvasElement, Connection, Viewport, Position, Platform } from '@/types
 import { ContentElement as ContentElementType } from '@/types';
 import { useCanvasDrag } from '@/hooks/useCanvasDrag';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
+import { useCanvasAlignment } from '@/hooks/useCanvasAlignment';
 import { ConnectionLine } from './ConnectionLine';
 import { ContentElement } from './ContentElement';
 import { ChatElement } from './ChatElement';
 import { TextComponent } from './TextComponent';
+import { AlignmentGuides } from './AlignmentGuides';
 import { useCanvasStore } from '@/store/canvasStore';
 import { 
   createTextElement, 
@@ -64,6 +66,13 @@ const CanvasComponent: React.FC<CanvasProps> = ({
   const [mousePos, setMousePos] = useState<Position>({ x: 0, y: 0 });
   const [selectedElementIds, setSelectedElementIds] = useState<number[]>([]);
   const [lastClickedElementId, setLastClickedElementId] = useState<number | null>(null);
+  
+  // Alignment system
+  const { checkAlignment, clearGuides, activeGuides } = useCanvasAlignment({
+    elements,
+    snapThreshold: 10,
+    enabled: true
+  });
   
   // Focus canvas on mount and handle keyboard events
   useEffect(() => {
@@ -290,9 +299,33 @@ const CanvasComponent: React.FC<CanvasProps> = ({
     }
   };
 
-  // Handle element updates
+  // Handle element updates with alignment support
   const handleElementUpdate = useCallback((id: string | number, updates: Partial<CanvasElement>) => {
     console.log('🔧 [Canvas] handleElementUpdate called:', { id, idType: typeof id, updates });
+    
+    // Check if this is a position update (dragging)
+    if ('x' in updates || 'y' in updates) {
+      const element = elements.find(el => String(el.id) === String(id));
+      if (element) {
+        // Check alignment with other elements
+        const alignmentResult = checkAlignment({
+          id,
+          x: updates.x ?? element.x,
+          y: updates.y ?? element.y,
+          width: element.width,
+          height: element.height
+        });
+        
+        // Apply snapped positions if available
+        if (alignmentResult.snappedX !== undefined) {
+          updates.x = alignmentResult.snappedX;
+        }
+        if (alignmentResult.snappedY !== undefined) {
+          updates.y = alignmentResult.snappedY;
+        }
+      }
+    }
+    
     setElements(prev => {
       // Convert both sides to string for comparison to handle mixed ID types
       const updated = prev.map(el => String(el.id) === String(id) ? { ...el, ...updates } as CanvasElement : el);
@@ -300,7 +333,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
       console.log('🔧 [Canvas] Element found:', elementFound, 'Elements after update:', updated.map(e => ({ id: e.id, idType: typeof e.id, type: e.type, title: (e as any).title || 'N/A' })));
       return updated;
     });
-  }, [setElements]);
+  }, [setElements, elements, checkAlignment]);
 
   // Handle element deletion (single)
   const handleElementDelete = useCallback(async (id: string | number) => {
@@ -692,6 +725,9 @@ const CanvasComponent: React.FC<CanvasProps> = ({
         }}
       />
       
+      {/* Alignment Guides - rendered before elements for proper layering */}
+      <AlignmentGuides guides={activeGuides} viewport={viewport} />
+      
       {/* Canvas Elements */}
       <div 
         style={{
@@ -700,6 +736,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
         }}
         className="absolute inset-0 pointer-events-none"
       >
+        
         {/* Connection Lines SVG */}
         <svg className="absolute inset-0 pointer-events-none" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
           <defs>
@@ -783,6 +820,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
                 onConnectionStart={handleConnectionStart}
                 onOpenAnalysisPanel={onOpenAnalysisPanel}
                 onReanalyze={handleReanalysis}
+                onDragEnd={clearGuides}
               />
             );
           } else if (element.type === 'chat') {
@@ -798,6 +836,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
                 onUpdate={handleElementUpdate}
                 onDelete={handleElementDelete}
                 onConnectionStart={handleConnectionStart}
+                onDragEnd={clearGuides}
               />
             );
           } else if (element.type === 'text') {
@@ -812,6 +851,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
                 onUpdate={handleElementUpdate}
                 onDelete={handleElementDelete}
                 onConnectionStart={handleConnectionStart}
+                onDragEnd={clearGuides}
               />
             );
           }
@@ -832,7 +872,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
       {/* Top-Right Controls - Credit Counter and Dark Mode Toggle */}
       <div className={`fixed top-4 right-4 h-12 rounded-lg shadow-lg z-50 flex items-center px-4 gap-3 transition-colors duration-200`}
         style={{
-          backgroundColor: isDarkMode ? '#30302e' : '#ffffff'
+          backgroundColor: isDarkMode ? '#202a37' : '#ffffff'
         }}>
         <CreditCounter />
         <div className={`h-6 w-px ${isDarkMode ? 'bg-gray-600' : 'bg-gray-300'}`}></div>
@@ -845,7 +885,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
         {/* Fit to Screen and Reset Zoom buttons */}
         <div className={`rounded-lg shadow-lg p-1 flex gap-1 transition-colors duration-200`}
           style={{
-            backgroundColor: isDarkMode ? '#30302e' : '#ffffff'
+            backgroundColor: isDarkMode ? '#202a37' : '#ffffff'
           }}>
           <button 
             onClick={handleFitToScreen}
@@ -870,7 +910,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
         {/* Zoom percentage and +/- controls */}
         <div className={`rounded-lg shadow-lg p-1 flex gap-1 items-center transition-colors duration-200`}
           style={{
-            backgroundColor: isDarkMode ? '#30302e' : '#ffffff'
+            backgroundColor: isDarkMode ? '#202a37' : '#ffffff'
           }}>
           <span className={`px-2 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
             {Math.round(viewport.zoom * 100)}%

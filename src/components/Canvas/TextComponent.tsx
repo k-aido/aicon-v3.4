@@ -7,6 +7,7 @@ import { ConnectionPoint } from './ConnectionPoint';
 import { useElementDrag } from '@/hooks/useElementDrag';
 import { SimpleResize } from './SimpleResize';
 import { complexToSimpleConnections } from '@/utils/typeAdapters';
+import { useDarkMode } from '@/contexts/DarkModeContext';
 
 interface TextComponentProps {
   element: TextData | any; // Accept both type systems
@@ -17,6 +18,7 @@ interface TextComponentProps {
   onUpdate: (id: number | string, updates: any) => void;
   onDelete: (id: string | number) => void;
   onConnectionStart: (elementId: string | number) => void;
+  onDragEnd?: () => void;
 }
 
 export const TextComponent: React.FC<TextComponentProps> = React.memo(({
@@ -27,11 +29,13 @@ export const TextComponent: React.FC<TextComponentProps> = React.memo(({
   onSelect,
   onUpdate,
   onDelete,
-  onConnectionStart
+  onConnectionStart,
+  onDragEnd
 }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [localContent, setLocalContent] = useState(element.content);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const { isDarkMode } = useDarkMode();
 
   // Convert connections to simple format if needed
   const simpleConnections = connections[0] && 'source' in connections[0] 
@@ -59,7 +63,8 @@ export const TextComponent: React.FC<TextComponentProps> = React.memo(({
       };
       onUpdate(id, updates);
     },
-    onSelect: (event) => onSelect(element, event)
+    onSelect: (event) => onSelect(element, event),
+    onDragEnd
   });
 
   const handleConnectionClick = (e: React.MouseEvent) => {
@@ -133,7 +138,7 @@ export const TextComponent: React.FC<TextComponentProps> = React.memo(({
         minHeight={150}
         onResize={handleResize}
         showHandle={selected || isHovered}
-        className={`bg-white rounded-lg shadow-lg border-2 border-gray-300 ${
+        className={`${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-lg border-2 ${isDarkMode ? 'border-gray-600' : 'border-gray-300'} ${
           selected ? 'ring-2 ring-[#E1622B] shadow-xl' : ''
         } ${connecting !== null && (String(connecting) === String(element.id) || connecting === Number(element.id)) ? 'ring-2 ring-[#E1622B]' : ''}`}
       >
@@ -181,12 +186,12 @@ export const TextComponent: React.FC<TextComponentProps> = React.memo(({
           </div>
 
           {/* Content - Not draggable */}
-          <div className="flex-1 p-4 bg-white rounded-b-lg" onMouseDown={(e) => e.stopPropagation()}>
+          <div className={`flex-1 p-4 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-b-lg`} onMouseDown={(e) => e.stopPropagation()}>
             <textarea
               value={localContent}
               onChange={handleContentChange}
               placeholder="Enter your text here..."
-              className="w-full h-full resize-none outline-none bg-white text-gray-900 placeholder-gray-400 pointer-events-auto"
+              className={`w-full h-full resize-none outline-none ${isDarkMode ? 'bg-gray-800 text-white placeholder-gray-500' : 'bg-white text-gray-900 placeholder-gray-400'} pointer-events-auto`}
               onClick={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
               onFocus={(e) => e.stopPropagation()}

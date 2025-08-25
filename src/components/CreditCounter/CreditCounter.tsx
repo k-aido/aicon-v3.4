@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Coins, TrendingDown, RefreshCw } from 'lucide-react';
+import { useDarkMode } from '@/contexts/DarkModeContext';
 
 interface CreditBalance {
   total: number;
@@ -15,6 +16,7 @@ export default function CreditCounter() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const { isDarkMode } = useDarkMode();
 
   const fetchCredits = async () => {
     try {
@@ -83,6 +85,7 @@ export default function CreditCounter() {
   };
 
   const getCreditsBackground = () => {
+    if (isDarkMode) return '#202a37';
     if (!credits) return 'bg-gray-50';
     if (credits.total === 0) return 'bg-red-50';
     if (credits.total < 100) return 'bg-orange-50';
@@ -92,7 +95,7 @@ export default function CreditCounter() {
 
   if (loading && !credits) {
     return (
-      <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-lg">
+      <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg`} style={{ backgroundColor: isDarkMode ? '#202a37' : '#f9fafb' }}>
         <Coins className="h-4 w-4 text-gray-400 animate-pulse" />
         <span className="text-sm font-medium text-gray-400">Loading...</span>
       </div>
@@ -101,7 +104,7 @@ export default function CreditCounter() {
 
   if (error && !credits) {
     return (
-      <div className="flex items-center gap-2 px-3 py-1.5 bg-red-50 rounded-lg">
+      <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg`} style={{ backgroundColor: isDarkMode ? '#202a37' : '#fef2f2' }}>
         <Coins className="h-4 w-4 text-red-400" />
         <span className="text-sm font-medium text-red-600">Error</span>
       </div>
@@ -109,7 +112,10 @@ export default function CreditCounter() {
   }
 
   return (
-    <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all ${getCreditsBackground()}`}>
+    <div 
+      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all ${!isDarkMode ? getCreditsBackground() : ''}`}
+      style={isDarkMode ? { backgroundColor: '#202a37' } : {}}
+    >
       <div className="flex items-center gap-2">
         <Coins className={`h-4 w-4 ${getCreditsColor()}`} />
         <div className="flex flex-col">

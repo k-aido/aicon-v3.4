@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  X, ExternalLink, TrendingUp, Clock, Eye, ThumbsUp, MessageSquare, 
-  Share2, Youtube, Instagram, Music2, CheckCircle, AlertCircle, 
-  ChevronDown, ChevronUp, Copy, RefreshCw, Loader2, UserCheck,
-  Users, Calendar, BarChart3
+  X, Eye, ThumbsUp, MessageSquare, 
+  Youtube, Instagram, Music2, AlertCircle, 
+  RefreshCw, Loader2, Calendar, Target, Folder, Flag, FileText,
+  ExternalLink
 } from 'lucide-react';
-import { formatNumber, formatDuration, formatRelativeTime, calculateEngagementRate } from '@/utils/formatters';
+import { formatNumber, formatDuration, formatRelativeTime, formatCalendarDate, calculateEngagementRate } from '@/utils/formatters';
 import { createBrowserClient } from '@/lib/supabase/client';
+import { getProxiedImageUrl, getPlatformPlaceholder } from '@/utils/imageProxy';
 // Define types locally since social-media types file doesn't exist
 interface ExtendedContentAnalysis {
   id?: string;
@@ -21,6 +22,38 @@ interface SocialMediaContent {
 }
 
 const supabase = createBrowserClient();
+
+// Helper function to strip markdown formatting
+const stripMarkdown = (text: string): string => {
+  if (!text) return '';
+  
+  // Debug log to see what we're dealing with
+  console.log('[stripMarkdown] Original text:', text);
+  
+  const stripped = text
+    // First pass - handle nested/multiple asterisks
+    .replace(/\*{3,}(.*?)\*{3,}/g, '$1') // Remove 3+ asterisks
+    .replace(/\*{2}(.*?)\*{2}/g, '$1') // Remove exactly 2 asterisks (bold)
+    .replace(/\*(.*?)\*/g, '$1') // Remove single asterisks (italic)
+    // Handle underscores
+    .replace(/_{2,}(.*?)_{2,}/g, '$1') // Remove 2+ underscores
+    .replace(/_(.*?)_/g, '$1') // Remove single underscores
+    // Other markdown
+    .replace(/~~(.*?)~~/g, '$1') // Remove strikethrough
+    .replace(/`{3}[^`]*`{3}/g, '') // Remove code blocks
+    .replace(/`([^`]+)`/g, '$1') // Remove inline code
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Remove links
+    .replace(/^#+\s+/gm, '') // Remove headers
+    .replace(/^[-*+]\s+/gm, '') // Remove list markers
+    .replace(/^>\s+/gm, '') // Remove blockquotes
+    .replace(/\n{3,}/g, '\n\n') // Reduce multiple newlines
+    // Final cleanup - catch any remaining asterisks
+    .replace(/\*+/g, '')
+    .trim();
+  
+  console.log('[stripMarkdown] Stripped text:', stripped);
+  return stripped;
+};
 
 interface SocialMediaAnalysisPanelProps {
   element: any; // Canvas element with social media data
@@ -42,63 +75,9 @@ const PlatformIcon: React.FC<{ platform: string; size?: number }> = ({ platform,
   }
 };
 
-const SkeletonLoader: React.FC<{ className?: string }> = ({ className = '' }) => (
-  <div className={`animate-pulse bg-gray-200 rounded ${className}`} />
-);
 
-const MetricCard: React.FC<{ 
-  icon: React.ReactNode; 
-  label: string; 
-  value: string | number; 
-  loading?: boolean;
-}> = ({ icon, label, value, loading = false }) => (
-  <div className="bg-gray-50 rounded-lg p-3">
-    <div className="flex items-center gap-2 text-gray-600 mb-1">
-      {icon}
-      <span className="text-xs font-medium">{label}</span>
-    </div>
-    {loading ? (
-      <SkeletonLoader className="h-6 w-20" />
-    ) : (
-      <p className="text-lg font-semibold text-gray-900">{value}</p>
-    )}
-  </div>
-);
 
-const AnalysisSection: React.FC<{
-  title: string;
-  icon: React.ReactNode;
-  children: React.ReactNode;
-  className?: string;
-}> = ({ title, icon, children, className = '' }) => (
-  <div className={`border-t pt-4 ${className}`}>
-    <div className="flex items-center gap-2 mb-3">
-      {icon}
-      <h3 className="font-semibold text-gray-900">{title}</h3>
-    </div>
-    {children}
-  </div>
-);
 
-const CopyButton: React.FC<{ text: string }> = ({ text }) => {
-  const [copied, setCopied] = useState(false);
-  
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-  
-  return (
-    <button
-      onClick={handleCopy}
-      className="text-gray-400 hover:text-gray-600 transition-colors"
-      title="Copy to clipboard"
-    >
-      {copied ? <CheckCircle size={16} className="text-green-500" /> : <Copy size={16} />}
-    </button>
-  );
-};
 
 export const SocialMediaAnalysisPanel: React.FC<SocialMediaAnalysisPanelProps> = ({
   element,
@@ -109,34 +88,86 @@ export const SocialMediaAnalysisPanel: React.FC<SocialMediaAnalysisPanelProps> =
   const [error, setError] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<ExtendedContentAnalysis | null>(null);
   const [socialMediaContent, setSocialMediaContent] = useState<SocialMediaContent | null>(null);
-  const [rawDataOpen, setRawDataOpen] = useState(false);
   const [retrying, setRetrying] = useState(false);
 
   // Fetch analysis data when panel opens
   useEffect(() => {
-    if (!isOpen || !element?.metadata?.contentPiece?.id) {
+    if (!isOpen || (!element?.metadata?.contentPiece?.id && !element?.metadata?.analysis && !element?.metadata?.scrapeId)) {
       return;
     }
 
     fetchAnalysisData();
-  }, [isOpen, element?.metadata?.contentPiece?.id]);
+  }, [isOpen, element?.metadata?.contentPiece?.id, element?.metadata?.analysis, element?.metadata?.scrapeId]);
 
   const fetchAnalysisData = async () => {
-    if (!element?.metadata?.contentPiece?.id) return;
+    // Don't fetch if content is still being analyzed
+    if (element?.metadata?.isAnalyzing || element?.metadata?.isScraping) {
+      setLoading(false);
+      return;
+    }
     
     setLoading(true);
     setError(null);
 
     try {
-      // Fetch content analysis
-      const { data: analysisData, error: analysisError } = await supabase
-        .from('content_analysis')
-        .select('*, hook_analysis, body_analysis, cta_analysis')
-        .eq('content_piece_id', element.metadata.contentPiece.id)
-        .single();
+      // First check if we have a scrapeId - this is the new flow
+      if (element?.metadata?.scrapeId) {
+        // Fetch analysis by scrape_id
+        const { data: analysisData, error: analysisError } = await supabase
+          .from('content_analysis')
+          .select('*, hook_analysis, body_analysis, cta_analysis')
+          .eq('scrape_id', element.metadata.scrapeId)
+          .single();
 
-      if (analysisError) throw analysisError;
-      setAnalysis(analysisData);
+        if (!analysisError && analysisData) {
+          setAnalysis(analysisData);
+          setLoading(false);
+          return;
+        }
+      }
+      
+      // Check if analysis data is already in element metadata (API response)
+      if (element?.metadata?.analysis) {
+        // Use the analysis data directly from metadata without transformation
+        const metadataAnalysis = element.metadata.analysis;
+        
+        // Only set analysis if we have actual data
+        if (metadataAnalysis.hook_analysis || metadataAnalysis.body_analysis || metadataAnalysis.cta_analysis) {
+          setAnalysis({
+            id: 'metadata-analysis',
+            content_piece_id: element.id,
+            hook_analysis: metadataAnalysis.hook_analysis || null,
+            body_analysis: metadataAnalysis.body_analysis || null,
+            cta_analysis: metadataAnalysis.cta_analysis || null,
+            created_at: metadataAnalysis.created_at || new Date().toISOString(),
+            updated_at: metadataAnalysis.updated_at || new Date().toISOString()
+          } as ExtendedContentAnalysis);
+        } else {
+          setError('No analysis data available');
+        }
+        
+        setLoading(false);
+        return;
+      }
+      
+      // Legacy flow - check for contentPiece.id
+      if (element?.metadata?.contentPiece?.id) {
+        const { data: analysisData, error: analysisError } = await supabase
+          .from('content_analysis')
+          .select('*, hook_analysis, body_analysis, cta_analysis')
+          .eq('content_piece_id', element.metadata.contentPiece.id)
+          .single();
+
+        if (!analysisError && analysisData) {
+          setAnalysis(analysisData);
+          setLoading(false);
+          return;
+        }
+      }
+      
+      // No analysis found
+      setError('No analysis data found for this content');
+      setLoading(false);
 
       // Fetch social media content if available
       if (element.metadata.resultData?.social_media_content_id) {
@@ -167,446 +198,242 @@ export const SocialMediaAnalysisPanel: React.FC<SocialMediaAnalysisPanelProps> =
   if (!isOpen || !element) return null;
 
   const jobStatus = element.metadata?.jobStatus;
-  const isProcessing = ['creating', 'pending', 'processing'].includes(jobStatus);
-  const isFailed = jobStatus === 'failed';
+  const isProcessing = ['creating', 'pending', 'processing'].includes(jobStatus) || element.metadata?.isAnalyzing || element.metadata?.isScraping;
+  const isFailed = jobStatus === 'failed' || element.metadata?.analysisError || element.metadata?.scrapingError;
   const contentPiece = element.metadata?.contentPiece;
 
   return (
-    <div className={`fixed right-0 top-0 h-full bg-white shadow-xl transition-transform z-40 ${
+    <div className={`fixed right-0 top-0 h-full w-[380px] bg-[#1a1b26] shadow-2xl transform transition-transform duration-300 z-50 ${
       isOpen ? 'translate-x-0' : 'translate-x-full'
-    }`} style={{ width: '420px' }}>
-      {/* Header */}
-      <div className="sticky top-0 bg-white border-b z-10">
-        <div className="p-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Social Media Analysis</h2>
+    }`} style={{ fontFamily: 'Noto Sans, sans-serif' }}>
+      <div className="h-full flex flex-col text-white">
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-gray-700">
+          <h2 className="text-lg font-semibold">Content Analysis</h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
+            className="p-1 hover:bg-gray-700 rounded transition-colors"
           >
-            <X size={20} />
+            <X className="w-5 h-5 text-gray-400" />
           </button>
         </div>
-      </div>
 
-      {/* Content */}
-      <div className="overflow-y-auto h-full pb-20">
-        <div className="p-4 space-y-4">
-          {/* Platform & Basic Info */}
-          <div>
-            {/* Thumbnail */}
-            {element.thumbnail && (
-              <img 
-                src={element.thumbnail} 
-                alt={element.title}
-                className="w-full h-48 object-cover rounded-lg mb-4"
-              />
-            )}
-            
-            {/* Platform Badge & URL */}
-            <div className="flex items-start justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <PlatformIcon platform={element.platform || 'unknown'} />
-                <span className="font-medium capitalize">{element.platform || 'Unknown'}</span>
-              </div>
-              <a 
-                href={element.url} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-blue-600 hover:text-blue-700 flex items-center gap-1 text-sm"
-              >
-                <span>View Original</span>
-                <ExternalLink size={14} />
-              </a>
-            </div>
-            
-            {/* Title */}
-            <h3 className="font-semibold text-gray-900 mb-2">
-              {contentPiece?.title || element.title || 'Untitled Content'}
-            </h3>
-
-            {/* URL */}
-            <p className="text-xs text-gray-500 truncate">{element.url}</p>
-          </div>
-
-          {/* Status Messages */}
-          {isProcessing && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <div className="flex items-center gap-2 text-blue-700">
-                <Loader2 size={16} className="animate-spin" />
-                <span className="font-medium">Analysis in progress...</span>
-              </div>
-              <p className="text-sm text-blue-600 mt-1">
-                This may take 30-60 seconds. The panel will update automatically.
+        {/* Scrollable Content */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="p-4 space-y-4">
+            {/* Debug Info */}
+            <div className="p-2 bg-yellow-900/20 border border-yellow-700/50 rounded text-xs">
+              <p className="font-mono text-yellow-400">
+                <span className="font-semibold">Debug ID:</span> {element.id}
+              </p>
+              {element.metadata?.scrapeId && (
+                <p className="font-mono text-yellow-400">
+                  <span className="font-semibold">Scrape ID:</span> {element.metadata.scrapeId}
+                </p>
+              )}
+              {element.metadata?.contentPiece?.id && (
+                <p className="font-mono text-yellow-400">
+                  <span className="font-semibold">Content Piece ID:</span> {element.metadata.contentPiece.id}
+                </p>
+              )}
+              <p className="font-mono text-yellow-400">
+                <span className="font-semibold">Has Analysis:</span> {analysis ? 'Yes' : 'No'}
               </p>
             </div>
-          )}
-
-          {isFailed && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-red-700">
-                  <AlertCircle size={16} />
-                  <span className="font-medium">Analysis failed</span>
-                </div>
-                <button
-                  onClick={handleRetry}
-                  disabled={retrying}
-                  className="text-red-600 hover:text-red-700 flex items-center gap-1 text-sm"
-                >
-                  {retrying ? (
-                    <Loader2 size={14} className="animate-spin" />
-                  ) : (
-                    <RefreshCw size={14} />
-                  )}
-                  <span>Retry</span>
-                </button>
-              </div>
-              {element.metadata?.error && (
-                <p className="text-sm text-red-600 mt-1">{element.metadata.error}</p>
-              )}
-            </div>
-          )}
-
-          {/* Content Metrics */}
-          {!isProcessing && !isFailed && (
+          
+            {/* Thumbnail and Title */}
             <div>
-              <h3 className="font-semibold text-gray-900 mb-3">Content Metrics</h3>
-              <div className="grid grid-cols-2 gap-3">
-                <MetricCard 
-                  icon={<Eye size={16} />} 
-                  label="Views" 
-                  value={formatNumber(socialMediaContent?.view_count || contentPiece?.viewCount)}
-                  loading={loading}
-                />
-                <MetricCard 
-                  icon={<ThumbsUp size={16} />} 
-                  label="Likes" 
-                  value={formatNumber(socialMediaContent?.like_count || contentPiece?.likeCount)}
-                  loading={loading}
-                />
-                <MetricCard 
-                  icon={<MessageSquare size={16} />} 
-                  label="Comments" 
-                  value={formatNumber(socialMediaContent?.comment_count || contentPiece?.commentCount)}
-                  loading={loading}
-                />
-                <MetricCard 
-                  icon={<Share2 size={16} />} 
-                  label="Shares" 
-                  value={formatNumber(socialMediaContent?.share_count || 0)}
-                  loading={loading}
-                />
+              <img 
+                src={getProxiedImageUrl(
+                  element.thumbnail || 
+                  element.metadata?.processedData?.thumbnailUrl || 
+                  element.metadata?.processedData?.thumbnail ||
+                  contentPiece?.thumbnail
+                )} 
+                alt={element.title}
+                className="w-full rounded-lg mb-3 h-52"
+                style={{ objectFit: 'cover' }}
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = getPlatformPlaceholder(element.platform || 'content');
+                }}
+              />
+              <h3 className="text-xl font-semibold mb-2">{contentPiece?.title || element.title || 'Untitled Content'}</h3>
+              <div className="flex items-center gap-1 text-sm text-gray-400">
+                <Calendar className="w-4 h-4" />
+                <span>{formatCalendarDate(contentPiece?.uploadDate || contentPiece?.publishedAt || contentPiece?.createdAt || new Date().toISOString())}</span>
               </div>
-              
-              {/* Engagement Rate */}
-              {socialMediaContent?.view_count && (
-                <div className="mt-3 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg p-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-gray-700">
-                      <BarChart3 size={16} />
-                      <span className="text-sm font-medium">Engagement Rate</span>
-                    </div>
-                    <span className="text-lg font-semibold text-purple-700">
-                      {calculateEngagementRate(
-                        socialMediaContent.like_count,
-                        socialMediaContent.comment_count,
-                        socialMediaContent.share_count,
-                        socialMediaContent.view_count
-                      )}
-                    </span>
-                  </div>
-                </div>
-              )}
             </div>
-          )}
 
-          {/* Creator Information */}
-          {socialMediaContent?.author_username && !isProcessing && !isFailed && (
-            <AnalysisSection 
-              title="Creator Information" 
-              icon={<Users size={18} className="text-gray-600" />}
-            >
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    {socialMediaContent.author_avatar_url && (
-                      <img 
-                        src={socialMediaContent.author_avatar_url} 
-                        alt={socialMediaContent.author_name || socialMediaContent.author_username}
-                        className="w-12 h-12 rounded-full"
-                      />
-                    )}
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium text-gray-900">
-                          {socialMediaContent.author_name || socialMediaContent.author_username}
-                        </p>
-                        {socialMediaContent.author_metadata?.verified && (
-                          <UserCheck size={16} className="text-blue-500" />
-                        )}
-                      </div>
-                      <p className="text-sm text-gray-600">@{socialMediaContent.author_username}</p>
-                    </div>
-                  </div>
-                  {socialMediaContent.author_profile_url && (
-                    <a 
-                      href={socialMediaContent.author_profile_url} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="text-blue-600 hover:text-blue-700"
-                    >
-                      <ExternalLink size={16} />
-                    </a>
-                  )}
+            {/* Status Messages */}
+            {isProcessing && (
+              <div className="bg-blue-900/20 border border-blue-700/50 rounded-lg p-4">
+                <div className="flex items-center gap-2 text-blue-400">
+                  <Loader2 size={16} className="animate-spin" />
+                  <span className="font-medium">
+                    {element.metadata?.isScraping ? 'Scraping content...' : 'Analyzing content...'}
+                  </span>
                 </div>
-                
-                {socialMediaContent.author_metadata?.follower_count && (
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <Users size={14} />
-                    <span>{formatNumber(socialMediaContent.author_metadata.follower_count)} followers</span>
+                <p className="text-sm text-blue-300 mt-1">
+                  This may take 30-60 seconds. The panel will update automatically.
+                </p>
+              </div>
+            )}
+
+            {isFailed && (
+              <div className="bg-red-900/20 border border-red-700/50 rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-red-400">
+                    <AlertCircle size={16} />
+                    <span className="font-medium">Analysis failed</span>
                   </div>
-                )}
-                
-                {socialMediaContent.author_metadata?.description && (
-                  <p className="text-sm text-gray-600 bg-gray-50 rounded p-2">
-                    {socialMediaContent.author_metadata.description}
-                  </p>
+                  <button
+                    onClick={handleRetry}
+                    disabled={retrying}
+                    className="text-red-400 hover:text-red-300 flex items-center gap-1 text-sm"
+                  >
+                    {retrying ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : (
+                      <RefreshCw size={14} />
+                    )}
+                    <span>Retry</span>
+                  </button>
+                </div>
+                {element.metadata?.error && (
+                  <p className="text-sm text-red-300 mt-1">{element.metadata.error}</p>
                 )}
               </div>
-            </AnalysisSection>
-          )}
+            )}
+
+            {/* Engagement Metrics */}
+            {!isProcessing && !isFailed && (
+              <div className="bg-gray-800/50 rounded-lg p-4">
+                <h4 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                  Engagement Metrics
+                </h4>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="text-center">
+                    <Eye className="w-5 h-5 mx-auto mb-1 text-gray-400" />
+                    <p className="text-xs text-gray-400">Views</p>
+                    <p className="text-lg font-semibold">{formatNumber(element.metadata?.processedData?.metrics?.views || element.metadata?.processedData?.viewCount || contentPiece?.viewCount || socialMediaContent?.view_count || 0)}</p>
+                  </div>
+                  <div className="text-center">
+                    <ThumbsUp className="w-5 h-5 mx-auto mb-1 text-gray-400" />
+                    <p className="text-xs text-gray-400">Likes</p>
+                    <p className="text-lg font-semibold">{formatNumber(element.metadata?.processedData?.metrics?.likes || element.metadata?.processedData?.likeCount || contentPiece?.likeCount || socialMediaContent?.like_count || 0)}</p>
+                  </div>
+                  <div className="text-center">
+                    <MessageSquare className="w-5 h-5 mx-auto mb-1 text-gray-400" />
+                    <p className="text-xs text-gray-400">Comments</p>
+                    <p className="text-lg font-semibold">{formatNumber(element.metadata?.processedData?.metrics?.comments || element.metadata?.processedData?.commentCount || contentPiece?.commentCount || socialMediaContent?.comment_count || 0)}</p>
+                  </div>
+                </div>
+              
+              </div>
+            )}
+
+            {/* Caption */}
+            {(contentPiece?.caption || contentPiece?.description || element.metadata?.processedData?.caption) && !isProcessing && !isFailed && (
+              <div className="bg-gray-800/50 rounded-lg p-4">
+                <h4 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-2">
+                  Caption
+                </h4>
+                <p className="text-gray-300 whitespace-pre-wrap text-xs">
+                  {contentPiece?.caption || contentPiece?.description || element.metadata?.processedData?.caption || 'No caption available'}
+                </p>
+              </div>
+            )}
+
 
           {/* AI Analysis Results */}
           {analysis && !isProcessing && !isFailed && (
             <>
               {/* Hook Analysis */}
               {analysis.hook_analysis && (
-                <AnalysisSection 
-                  title="Hook Analysis" 
-                  icon={<TrendingUp size={18} className="text-gray-600" />}
-                >
-                  <div className="space-y-3">
-                    <div className="bg-gray-50 rounded-lg p-3">
-                      <div className="flex items-start justify-between mb-2">
-                        <p className="text-sm font-medium text-gray-700">Effectiveness Score</p>
-                        <span className="text-lg font-semibold text-blue-600">
-                          {Math.round((analysis.hook_analysis.effectiveness_score || 0) * 100)}%
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-600">
-                        Type: <span className="font-medium">{analysis.hook_analysis.hook_type}</span>
-                      </p>
-                    </div>
-                    
-                    {analysis.hook_analysis.emotional_triggers?.length > 0 && (
-                      <div>
-                        <p className="text-sm font-medium text-gray-700 mb-1">Emotional Triggers</p>
-                        <div className="flex flex-wrap gap-2">
-                          {analysis.hook_analysis.emotional_triggers.map((trigger: any, i: number) => (
-                            <span key={i} className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">
-                              {trigger}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    
-                    {analysis.hook_analysis.improvements?.length > 0 && (
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <p className="text-sm font-medium text-gray-700">Suggested Improvements</p>
-                          <CopyButton text={analysis.hook_analysis.improvements.join('\n')} />
-                        </div>
-                        <ul className="space-y-1">
-                          {analysis.hook_analysis.improvements.map((improvement: any, i: number) => (
-                            <li key={i} className="text-sm text-gray-600 flex items-start gap-2">
-                              <span className="text-gray-400 mt-0.5">•</span>
-                              <span>{improvement}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
+                <div className="border-l-4 border-green-500 bg-gray-800/50 rounded-r-lg p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Target className="w-5 h-5 text-red-400" />
+                    <h4 className="text-sm font-semibold uppercase tracking-wider">Hook</h4>
                   </div>
-                </AnalysisSection>
+                  <p className="text-xs text-gray-300 mb-3 whitespace-pre-wrap">
+                    {stripMarkdown(typeof analysis.hook_analysis === 'string' ? analysis.hook_analysis : analysis.hook_analysis.primary_hook || 'No hook analysis available')}
+                  </p>
+                </div>
               )}
 
               {/* Body Analysis */}
               {analysis.body_analysis && (
-                <AnalysisSection 
-                  title="Body Analysis" 
-                  icon={<BarChart3 size={18} className="text-gray-600" />}
-                >
-                  <div className="space-y-3">
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="bg-gray-50 rounded-lg p-3">
-                        <p className="text-xs text-gray-600 mb-1">Structure Type</p>
-                        <p className="text-sm font-medium capitalize">
-                          {analysis.body_analysis.structure_type?.replace('-', ' ')}
-                        </p>
-                      </div>
-                      <div className="bg-gray-50 rounded-lg p-3">
-                        <p className="text-xs text-gray-600 mb-1">Flow Score</p>
-                        <p className="text-sm font-medium">
-                          {Math.round((analysis.body_analysis.flow_score || 0) * 100)}%
-                        </p>
-                      </div>
-                    </div>
-                    
-                    {analysis.body_analysis.key_points?.length > 0 && (
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <p className="text-sm font-medium text-gray-700">Key Points</p>
-                          <CopyButton text={analysis.body_analysis.key_points.join('\n')} />
-                        </div>
-                        <ul className="space-y-1">
-                          {analysis.body_analysis.key_points.map((point: any, i: number) => (
-                            <li key={i} className="text-sm text-gray-600 flex items-start gap-2">
-                              <span className="text-blue-500 mt-0.5">{i + 1}.</span>
-                              <span>{point}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    
-                    {analysis.body_analysis.pacing_analysis && (
-                      <div className="bg-gray-50 rounded-lg p-3">
-                        <p className="text-sm font-medium text-gray-700 mb-2">Pacing Analysis</p>
-                        <div className="space-y-1 text-xs text-gray-600">
-                          <div className="flex justify-between">
-                            <span>Intro</span>
-                            <span>{analysis.body_analysis.pacing_analysis.intro_length}%</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>Main Content</span>
-                            <span>{analysis.body_analysis.pacing_analysis.main_content_length}%</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>Conclusion</span>
-                            <span>{analysis.body_analysis.pacing_analysis.conclusion_length}%</span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
+                <div className="border-l-4 border-yellow-500 bg-gray-800/50 rounded-r-lg p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Folder className="w-5 h-5 text-yellow-400" />
+                    <h4 className="text-sm font-semibold uppercase tracking-wider">Body</h4>
                   </div>
-                </AnalysisSection>
+                  <p className="text-xs text-gray-300 mb-3 whitespace-pre-wrap">
+                    {stripMarkdown(typeof analysis.body_analysis === 'string' ? analysis.body_analysis : 'No body analysis available')}
+                  </p>
+                </div>
               )}
 
-              {/* CTA Analysis */}
+              {/* Call to Action */}
               {analysis.cta_analysis && (
-                <AnalysisSection 
-                  title="Call-to-Action Analysis" 
-                  icon={<MessageSquare size={18} className="text-gray-600" />}
-                >
-                  <div className="space-y-3">
-                    {analysis.cta_analysis.primary_cta && (
-                      <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg p-3">
-                        <div className="flex items-center justify-between mb-1">
-                          <p className="text-sm font-medium text-gray-700">Primary CTA</p>
-                          <CopyButton text={analysis.cta_analysis.primary_cta} />
-                        </div>
-                        <p className="text-sm text-gray-900 font-medium">
-                          "{analysis.cta_analysis.primary_cta}"
-                        </p>
-                        <div className="flex items-center gap-4 mt-2 text-xs">
-                          <span className="text-gray-600">
-                            Strength: <span className="font-medium capitalize">{analysis.cta_analysis.cta_strength}</span>
-                          </span>
-                          <span className="text-gray-600">
-                            Urgency: <span className="font-medium capitalize">{analysis.cta_analysis.urgency_level}</span>
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                    
-                    {analysis.cta_analysis.secondary_ctas?.length > 0 && (
-                      <div>
-                        <p className="text-sm font-medium text-gray-700 mb-1">Secondary CTAs</p>
-                        <ul className="space-y-1">
-                          {analysis.cta_analysis.secondary_ctas.map((cta: any, i: number) => (
-                            <li key={i} className="text-sm text-gray-600 bg-gray-50 rounded px-2 py-1">
-                              {cta}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    
-                    {analysis.cta_analysis.recommendations?.length > 0 && (
-                      <div>
-                        <p className="text-sm font-medium text-gray-700 mb-1">Recommendations</p>
-                        <ul className="space-y-1">
-                          {analysis.cta_analysis.recommendations.map((rec: any, i: number) => (
-                            <li key={i} className="text-sm text-gray-600 flex items-start gap-2">
-                              <span className="text-green-500 mt-0.5">✓</span>
-                              <span>{rec}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
+                <div className="border-l-4 border-red-500 bg-gray-800/50 rounded-r-lg p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Flag className="w-5 h-5 text-red-400" />
+                    <h4 className="text-sm font-semibold uppercase tracking-wider text-red-400">
+                      Call to Action
+                    </h4>
                   </div>
-                </AnalysisSection>
+                  <p className="text-xs text-gray-300 mb-3 whitespace-pre-wrap">
+                    {stripMarkdown(typeof analysis.cta_analysis === 'string' ? analysis.cta_analysis : analysis.cta_analysis.primary_cta || 'No CTA analysis available')}
+                  </p>
+                </div>
+              )}
+
+              {/* Video Transcript */}
+              {(analysis.transcript || contentPiece?.transcript || element.metadata?.processedData?.transcript) && (
+                <div className="border-l-4 border-purple-500 bg-gray-800/50 rounded-r-lg p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <FileText className="w-5 h-5 text-purple-400" />
+                    <h4 className="text-sm font-semibold uppercase tracking-wider text-purple-400">
+                      Video Transcript
+                    </h4>
+                  </div>
+                  <div className="max-h-96 overflow-y-auto">
+                    <p className="text-xs text-gray-300 whitespace-pre-wrap" style={{ fontFamily: 'Noto Sans, sans-serif', fontWeight: 400 }}>
+                      {analysis.transcript || contentPiece?.transcript || element.metadata?.processedData?.transcript || 'No transcript available for this content.'}
+                    </p>
+                  </div>
+                </div>
               )}
             </>
           )}
 
-          {/* Raw Data */}
-          {!isProcessing && !isFailed && (analysis || socialMediaContent) && (
-            <div className="border-t pt-4">
-              <button
-                onClick={() => setRawDataOpen(!rawDataOpen)}
-                className="w-full flex items-center justify-between text-left"
-              >
-                <h3 className="font-semibold text-gray-900">Raw Data</h3>
-                {rawDataOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-              </button>
-              
-              {rawDataOpen && (
-                <div className="mt-3 space-y-3">
-                  {socialMediaContent && (
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <p className="text-sm font-medium text-gray-700">Social Media Content</p>
-                        <CopyButton text={JSON.stringify(socialMediaContent, null, 2)} />
-                      </div>
-                      <pre className="bg-gray-900 text-gray-100 p-3 rounded-lg text-xs overflow-x-auto">
-                        <code>{JSON.stringify(socialMediaContent, null, 2)}</code>
-                      </pre>
-                    </div>
-                  )}
-                  
-                  {analysis && (
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <p className="text-sm font-medium text-gray-700">Analysis Data</p>
-                        <CopyButton text={JSON.stringify(analysis, null, 2)} />
-                      </div>
-                      <pre className="bg-gray-900 text-gray-100 p-3 rounded-lg text-xs overflow-x-auto">
-                        <code>{JSON.stringify(analysis, null, 2)}</code>
-                      </pre>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
 
-          {/* Empty State */}
-          {!loading && !error && !isProcessing && !analysis && !socialMediaContent && (
-            <div className="text-center py-8">
-              <AlertCircle size={48} className="text-gray-300 mx-auto mb-3" />
-              <p className="text-gray-500">No analysis data available</p>
-              <button
-                onClick={handleRetry}
-                className="mt-3 text-blue-600 hover:text-blue-700 flex items-center gap-1 mx-auto text-sm"
-              >
-                <RefreshCw size={14} />
-                <span>Refresh</span>
-              </button>
-            </div>
-          )}
+            {/* Empty State */}
+            {!loading && !error && !isProcessing && !analysis && !socialMediaContent && (
+              <div className="text-center py-8">
+                <AlertCircle size={48} className="text-gray-500 mx-auto mb-3" />
+                <p className="text-gray-400">No analysis data available</p>
+                <button
+                  onClick={handleRetry}
+                  className="mt-3 text-blue-400 hover:text-blue-300 flex items-center gap-1 mx-auto text-sm"
+                >
+                  <RefreshCw size={14} />
+                  <span>Refresh</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="p-4 border-t border-gray-700">
+          <button
+            onClick={() => window.open(element.url, '_blank')}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 rounded-lg transition-colors"
+          >
+            View Original
+          </button>
         </div>
       </div>
     </div>

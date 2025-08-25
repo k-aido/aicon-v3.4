@@ -1,5 +1,4 @@
 import { useState, useCallback, useMemo } from 'react';
-import { CanvasElement } from '@/types/canvas';
 
 interface AlignmentGuide {
   type: 'vertical' | 'horizontal';
@@ -14,8 +13,19 @@ interface AlignmentResult {
   guides: AlignmentGuide[];
 }
 
+// Define a minimal element interface that works with both type systems
+interface AlignableElement {
+  id: string | number;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  position?: { x: number; y: number };
+  dimensions?: { width: number; height: number };
+}
+
 interface UseCanvasAlignmentProps {
-  elements: Record<string, CanvasElement> | CanvasElement[];
+  elements: AlignableElement[] | Record<string, AlignableElement>;
   snapThreshold?: number;
   enabled?: boolean;
 }
@@ -40,7 +50,7 @@ export const useCanvasAlignment = ({
       width: number;
       height: number;
     },
-    otherElements: CanvasElement[]
+    otherElements: AlignableElement[]
   ): AlignmentResult => {
     if (!enabled) return { guides: [] };
 

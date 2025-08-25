@@ -135,7 +135,7 @@ export const CanvasNavigation: React.FC<CanvasNavigationProps> = ({ lastSaved })
   return (
     <nav className={`fixed top-4 left-4 h-12 rounded-lg shadow-lg z-50 flex items-center px-4 w-auto transition-colors duration-200`}
       style={{
-        backgroundColor: isDarkMode ? '#30302e' : '#ffffff'
+        backgroundColor: isDarkMode ? '#202a37' : '#ffffff'
       }}>
       {/* Home Button */}
       <button 

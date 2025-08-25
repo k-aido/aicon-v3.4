@@ -6,6 +6,7 @@ interface UseElementDragProps {
   initialPosition: Position;
   onUpdate: (id: string | number, position: Position) => void;
   onSelect: (event?: React.MouseEvent) => void;
+  onDragEnd?: () => void;
 }
 
 /**
@@ -16,7 +17,8 @@ export const useElementDrag = ({
   elementId,
   initialPosition,
   onUpdate,
-  onSelect
+  onSelect,
+  onDragEnd
 }: UseElementDragProps) => {
   const [isDragging, setIsDragging] = useState(false);
   const [localPosition, setLocalPosition] = useState<Position>(initialPosition);
@@ -100,7 +102,12 @@ export const useElementDrag = ({
     
     // Remove global dragging class
     document.body.classList.remove('dragging');
-  }, [isDragging, elementId, onUpdate]);
+    
+    // Call onDragEnd if provided
+    if (onDragEnd) {
+      onDragEnd();
+    }
+  }, [isDragging, elementId, onUpdate, onDragEnd]);
 
   // Mouse down handler
   const handleMouseDown = useCallback((e: React.MouseEvent) => {

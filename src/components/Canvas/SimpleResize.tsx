@@ -149,9 +149,9 @@ export const SimpleResize: React.FC<SimpleResizeProps> = ({
 
   const handleStyle = {
     position: 'absolute' as const,
-    opacity: showHandle ? 1 : 0,
+    opacity: 0, // Always invisible
     transition: 'opacity 0.2s',
-    background: '#E1622B',
+    background: 'transparent',
     borderRadius: '2px',
   };
 
@@ -175,7 +175,7 @@ export const SimpleResize: React.FC<SimpleResizeProps> = ({
       {children}
       
       {/* Resize Handles - All 8 directions */}
-      {showHandle && (
+      {true && (
         <>
           {/* Corner handles */}
           <div
@@ -208,7 +208,7 @@ export const SimpleResize: React.FC<SimpleResizeProps> = ({
               bottom: -4,
               right: -4,
               cursor: 'se-resize',
-              background: 'linear-gradient(-45deg, transparent 30%, #E1622B 30%, #E1622B 70%, transparent 70%)',
+              background: 'transparent',
               width: '12px',
               height: '12px',
             }}
@@ -229,7 +229,7 @@ export const SimpleResize: React.FC<SimpleResizeProps> = ({
           {/* Edge handles */}
           <div
             data-resize-handle
-            className="hover:bg-[#E1622B]/20"
+            className=""
             style={{
               ...edgeHandleStyle,
               top: 0,
@@ -242,7 +242,7 @@ export const SimpleResize: React.FC<SimpleResizeProps> = ({
           />
           <div
             data-resize-handle
-            className="hover:bg-[#E1622B]/20"
+            className=""
             style={{
               ...edgeHandleStyle,
               bottom: 0,
@@ -255,7 +255,7 @@ export const SimpleResize: React.FC<SimpleResizeProps> = ({
           />
           <div
             data-resize-handle
-            className="hover:bg-[#E1622B]/20"
+            className=""
             style={{
               ...edgeHandleStyle,
               left: 0,
@@ -268,7 +268,7 @@ export const SimpleResize: React.FC<SimpleResizeProps> = ({
           />
           <div
             data-resize-handle
-            className="hover:bg-[#E1622B]/20"
+            className=""
             style={{
               ...edgeHandleStyle,
               right: 0,

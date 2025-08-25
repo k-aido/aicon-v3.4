@@ -62,3 +62,23 @@ export const calculateEngagementRate = (likes: number, comments: number, shares:
   
   return `${rate.toFixed(2)}%`;
 };
+
+/**
+ * Format date to calendar date (e.g., "Jan 15, 2024")
+ */
+export const formatCalendarDate = (date: Date | string | undefined): string => {
+  if (!date) return '';
+  
+  const dateObj = new Date(date);
+  
+  // Check if date is valid
+  if (isNaN(dateObj.getTime())) return '';
+  
+  const options: Intl.DateTimeFormatOptions = {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric'
+  };
+  
+  return dateObj.toLocaleDateString('en-US', options);
+};

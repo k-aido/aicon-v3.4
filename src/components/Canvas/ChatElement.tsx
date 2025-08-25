@@ -16,6 +16,7 @@ interface ChatElementProps {
   onUpdate: (id: string | number, updates: Partial<ChatElementType>) => void;
   onDelete: (id: string | number) => void;
   onConnectionStart: (elementId: string | number) => void;
+  onDragEnd?: () => void;
 }
 
 /**
@@ -30,7 +31,8 @@ export const ChatElement: React.FC<ChatElementProps> = React.memo(({
   onSelect,
   onUpdate,
   onDelete,
-  onConnectionStart
+  onConnectionStart,
+  onDragEnd
 }) => {
   const [isHovered, setIsHovered] = useState(false);
   
@@ -46,7 +48,8 @@ export const ChatElement: React.FC<ChatElementProps> = React.memo(({
     elementId: element.id,
     initialPosition: { x: element.x, y: element.y },
     onUpdate: handleDragUpdate,
-    onSelect: (event) => onSelect(element, event)
+    onSelect: (event) => onSelect(element, event),
+    onDragEnd
   });
 
   const handleConnectionClick = (e: React.MouseEvent) => {

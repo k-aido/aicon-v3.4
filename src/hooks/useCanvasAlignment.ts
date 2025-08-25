@@ -1,5 +1,4 @@
 import { useState, useCallback, useMemo } from 'react';
-import { CanvasElement } from '@/types/canvas';
 
 interface AlignmentGuide {
   type: 'vertical' | 'horizontal';
@@ -14,8 +13,19 @@ interface AlignmentResult {
   guides: AlignmentGuide[];
 }
 
+// Define a minimal element interface that works with both type systems
+interface AlignableElement {
+  id: string | number;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  position?: { x: number; y: number };
+  dimensions?: { width: number; height: number };
+}
+
 interface UseCanvasAlignmentProps {
-  elements: Record<string, CanvasElement> | CanvasElement[];
+  elements: AlignableElement[] | Record<string, AlignableElement>;
   snapThreshold?: number;
   enabled?: boolean;
 }
@@ -40,7 +50,7 @@ export const useCanvasAlignment = ({
       width: number;
       height: number;
     },
-    otherElements: CanvasElement[]
+    otherElements: AlignableElement[]
   ): AlignmentResult => {
     if (!enabled) return { guides: [] };
 
@@ -59,11 +69,11 @@ export const useCanvasAlignment = ({
     otherElements.forEach(element => {
       if (String(element.id) === String(draggedElement.id)) return;
 
-      // Get element position and dimensions
-      const elementX = 'x' in element ? element.x : element.position?.x || 0;
-      const elementY = 'y' in element ? element.y : element.position?.y || 0;
-      const elementWidth = 'width' in element ? element.width : element.dimensions?.width || 0;
-      const elementHeight = 'height' in element ? element.height : element.dimensions?.height || 0;
+      // Get element position and dimensions with explicit type assertions
+      const elementX: number = ('x' in element && element.x !== undefined) ? element.x : (element.position?.x ?? 0);
+      const elementY: number = ('y' in element && element.y !== undefined) ? element.y : (element.position?.y ?? 0);
+      const elementWidth: number = ('width' in element && element.width !== undefined) ? element.width : (element.dimensions?.width ?? 0);
+      const elementHeight: number = ('height' in element && element.height !== undefined) ? element.height : (element.dimensions?.height ?? 0);
 
       const left = elementX;
       const right = elementX + elementWidth;

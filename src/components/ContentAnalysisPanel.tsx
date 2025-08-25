@@ -18,6 +18,7 @@ export const ContentAnalysisPanel: React.FC<ContentAnalysisPanelProps> = ({
   onClose
 }) => {
   const [analysisData, setAnalysisData] = useState<any>(null);
+  const [fetchingTranscript, setFetchingTranscript] = useState(false);
 
   // Format date nicely
   const formatDate = (dateString: string | undefined): string => {
@@ -37,6 +38,29 @@ export const ContentAnalysisPanel: React.FC<ContentAnalysisPanelProps> = ({
     }
   };
 
+  // Fetch transcript if deferred
+  const fetchTranscript = async (scrapeId: string) => {
+    setFetchingTranscript(true);
+    try {
+      const response = await fetch(`/api/content/transcript/${scrapeId}`, {
+        method: 'POST'
+      });
+      const data = await response.json();
+      
+      if (data.success && data.transcript) {
+        // Update analysis data with fetched transcript
+        setAnalysisData((prev: any) => ({
+          ...prev,
+          transcript: data.transcript
+        }));
+      }
+    } catch (error) {
+      console.error('[ContentAnalysisPanel] Failed to fetch transcript:', error);
+    } finally {
+      setFetchingTranscript(false);
+    }
+  };
+
   useEffect(() => {
     if (content && isOpen) {
       // Debug log to see what data we have
@@ -44,26 +68,77 @@ export const ContentAnalysisPanel: React.FC<ContentAnalysisPanelProps> = ({
         content,
         thumbnail: content.thumbnail,
         metadata: (content as any).metadata,
-        processedData: (content as any).metadata?.processedData
+        processedData: (content as any).metadata?.processedData,
+        analysis: (content as any).metadata?.analysis
       });
       
-      // For now, using mock data. In production, this would fetch from your API
-      const mockAnalysis = {
-        hook: {
-          text: 'The content grabs attention with a bold and assertive statement, "Just win," which immediately conveys a sense of urgency and determination. The simplicity of the title "Whatever" adds an element of intrigue, prompting viewers to engage further.',
-          effectiveness: 8
-        },
-        body: {
-          text: 'The storytelling technique relies on minimalism, using short, impactful phrases that resonate with a competitive mindset. The value is delivered through the emphasis on winning, appealing to viewers\' aspirations and motivating them to take action.',
-          effectiveness: 8
-        },
-        cta: {
-          text: 'The desired outcome is implicit; it encourages viewers to adopt a winning mentality and focus on success, rather than getting bogged down by distractions.',
-          effectiveness: 8
-        },
-        transcript: processedData.transcript || processedData.subtitles || processedData.captions || null
-      };
-      setAnalysisData(mockAnalysis);
+      const metadata = (content as any).metadata || {};
+      const processedData = metadata.processedData || {};
+      const existingAnalysis = metadata.analysis;
+      
+      // Debug transcript data
+      console.log('[ContentAnalysisPanel] Loading content data:', {
+        contentPlatform: content.platform,
+        hasProcessedData: !!processedData,
+        processedDataKeys: Object.keys(processedData),
+        transcript: processedData.transcript,
+        transcriptDeferred: processedData.transcriptDeferred,
+        subtitles: processedData.subtitles,
+        captions: processedData.captions
+      });
+      
+      // Use real analysis data if available, otherwise use mock data
+      if (existingAnalysis) {
+        // Transform analysis data to match the panel's expected format
+        const analysisData = {
+          hook: {
+            text: existingAnalysis.hook_analysis || existingAnalysis.hook || 'No hook analysis available',
+            effectiveness: existingAnalysis.hookScore || 8
+          },
+          body: {
+            text: existingAnalysis.body_analysis || existingAnalysis.contentStrategy || 'No body analysis available',
+            effectiveness: 8
+          },
+          cta: {
+            text: existingAnalysis.cta_analysis || 'No CTA analysis available',
+            effectiveness: 8
+          },
+          transcript: processedData.transcript || processedData.subtitles || processedData.captions || null,
+          keyTopics: existingAnalysis.key_topics || existingAnalysis.keyInsights || [],
+          engagementTactics: existingAnalysis.engagement_tactics || existingAnalysis.improvements || [],
+          sentiment: existingAnalysis.sentiment || 'neutral',
+          complexity: existingAnalysis.complexity || 'moderate'
+        };
+        console.log('[ContentAnalysisPanel] Setting analysis data with transcript:', analysisData.transcript);
+        setAnalysisData(analysisData);
+        
+        // Check if transcript was deferred and needs fetching
+        if (processedData.transcriptDeferred && !processedData.transcript && metadata.scrapeId) {
+          fetchTranscript(metadata.scrapeId);
+        }
+      } else {
+        // Fallback to mock data if no analysis exists
+        const mockAnalysis = {
+          hook: {
+            text: 'The content grabs attention with a bold and assertive statement that immediately conveys a sense of urgency and determination.',
+            effectiveness: 8
+          },
+          body: {
+            text: 'The storytelling technique relies on effective visual and narrative elements that resonate with the target audience.',
+            effectiveness: 8
+          },
+          cta: {
+            text: 'The desired outcome encourages viewers to engage further with the content and take specific actions.',
+            effectiveness: 8
+          },
+          transcript: processedData.transcript || processedData.subtitles || processedData.captions || null,
+          keyTopics: [],
+          engagementTactics: [],
+          sentiment: 'positive',
+          complexity: 'moderate'
+        };
+        setAnalysisData(mockAnalysis);
+      }
     }
   }, [content, isOpen]);
 
@@ -86,7 +161,7 @@ export const ContentAnalysisPanel: React.FC<ContentAnalysisPanelProps> = ({
   };
 
   return (
-    <div className={`fixed right-0 top-0 h-full w-[380px] bg-[#1a1b26] shadow-2xl transform transition-transform duration-300 z-50 ${
+    <div className={`fixed right-0 top-0 h-full w-[380px] bg-[#201e1c] shadow-2xl transform transition-transform duration-300 z-50 ${
       isOpen ? 'translate-x-0' : 'translate-x-full'
     }`} style={{ fontFamily: 'Noto Sans, sans-serif' }}>
       <div className="h-full flex flex-col text-white">
@@ -151,13 +226,13 @@ export const ContentAnalysisPanel: React.FC<ContentAnalysisPanelProps> = ({
               </div>
             </div>
 
-            {/* Caption */}
+            {/* Caption/Description */}
             <div className="bg-gray-800/50 rounded-lg p-4">
               <h4 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-2">
-                Caption
+                {content.platform === 'youtube' ? 'Description' : 'Caption'}
               </h4>
               <p className="text-gray-300 whitespace-pre-wrap text-xs">
-                {processedData.caption || processedData.description || 'Whatever.\n\nJust win.'}
+                {processedData.caption || processedData.description || 'No description available'}
               </p>
             </div>
 
@@ -239,13 +314,88 @@ export const ContentAnalysisPanel: React.FC<ContentAnalysisPanelProps> = ({
                 <h4 className="text-sm font-semibold uppercase tracking-wider text-purple-400">
                   Video Transcript
                 </h4>
+                {fetchingTranscript && (
+                  <span className="text-xs text-purple-400 animate-pulse">Loading...</span>
+                )}
               </div>
               <div className="max-h-96 overflow-y-auto">
-                <p className="text-xs text-gray-300 whitespace-pre-wrap" style={{ fontFamily: 'Noto Sans, sans-serif', fontWeight: 400 }}>
-                  {analysisData?.transcript || 'No transcript available for this content.'}
-                </p>
+                {fetchingTranscript ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="text-center">
+                      <div className="w-8 h-8 border-2 border-purple-400 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+                      <p className="text-xs text-gray-400">Fetching transcript...</p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-300 whitespace-pre-wrap" style={{ fontFamily: 'Noto Sans, sans-serif', fontWeight: 400 }}>
+                    {analysisData?.transcript || 'No transcript available for this content.'}
+                  </p>
+                )}
               </div>
             </div>
+
+            {/* Key Topics */}
+            {analysisData?.keyTopics && analysisData.keyTopics.length > 0 && (
+              <div className="border-l-4 border-blue-500 bg-gray-800/50 rounded-r-lg p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Target className="w-5 h-5 text-blue-400" />
+                  <h4 className="text-sm font-semibold uppercase tracking-wider text-blue-400">
+                    Key Topics
+                  </h4>
+                </div>
+                <ul className="space-y-1">
+                  {analysisData.keyTopics.map((topic: string, index: number) => (
+                    <li key={index} className="text-xs text-gray-300 flex items-start">
+                      <span className="text-blue-400 mr-2">•</span>
+                      <span>{topic}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Engagement Tactics */}
+            {analysisData?.engagementTactics && analysisData.engagementTactics.length > 0 && (
+              <div className="border-l-4 border-green-500 bg-gray-800/50 rounded-r-lg p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Target className="w-5 h-5 text-green-400" />
+                  <h4 className="text-sm font-semibold uppercase tracking-wider text-green-400">
+                    Engagement Tactics
+                  </h4>
+                </div>
+                <ul className="space-y-1">
+                  {analysisData.engagementTactics.map((tactic: string, index: number) => (
+                    <li key={index} className="text-xs text-gray-300 flex items-start">
+                      <span className="text-green-400 mr-2">•</span>
+                      <span>{tactic}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Analysis Metadata */}
+            {analysisData && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-gray-800/50 rounded-lg p-3">
+                  <p className="text-xs text-gray-400 mb-1">Sentiment</p>
+                  <p className={`text-sm font-semibold capitalize ${
+                    analysisData.sentiment === 'positive' ? 'text-green-400' :
+                    analysisData.sentiment === 'negative' ? 'text-red-400' :
+                    'text-yellow-400'
+                  }`}>
+                    {analysisData.sentiment}
+                  </p>
+                </div>
+                <div className="bg-gray-800/50 rounded-lg p-3">
+                  <p className="text-xs text-gray-400 mb-1">Complexity</p>
+                  <p className="text-sm font-semibold text-gray-300 capitalize">
+                    {analysisData.complexity}
+                  </p>
+                </div>
+              </div>
+            )}
+
           </div>
         </div>
 

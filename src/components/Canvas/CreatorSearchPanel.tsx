@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, Search, Loader2, Plus, Heart, MessageCircle, Eye, AlertCircle, Clock, CheckCircle, XCircle } from 'lucide-react';
+import { X, Search, Loader2, Plus, Heart, MessageCircle, Eye, AlertCircle, Clock, CheckCircle, XCircle, Check } from 'lucide-react';
 import type { CreatorSearchRequest, CreatorSearchResponse, CreatorContent } from '@/types/creator-search';
 import { addCreatorContentToCanvas } from '../../../lib/canvas/creatorContentHelpers';
 import { useToast } from '@/components/Modal/ToastContainer';
 import { getProxiedImageUrl } from '@/utils/imageProxy';
+import { useCanvasStore } from '@/store/canvasStore';
 
 interface CreatorSearchPanelProps {
   isOpen: boolean;
@@ -55,6 +56,49 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
   });
   const [displayedResults, setDisplayedResults] = useState(10);
   const [addingContentIds, setAddingContentIds] = useState<Set<string>>(new Set());
+  
+  // Get canvas elements to check for already-added content
+  const canvasElements = useCanvasStore((state) => state.elements);
+  
+  // Create a set of URLs already on the canvas for quick lookup
+  const existingContentUrls = useMemo(() => {
+    const urls = new Set<string>();
+    canvasElements.forEach(element => {
+      if (element.type === 'content' && element.url) {
+        // Normalize URLs to handle different formats
+        let normalizedUrl = element.url;
+        // Handle Instagram reel vs post URLs
+        if (element.url.includes('instagram.com')) {
+          const match = element.url.match(/\/(reel|p)\/([^\/\?]+)/);
+          if (match && match[2]) {
+            normalizedUrl = `instagram.com/p/${match[2]}`;
+          }
+        }
+        urls.add(normalizedUrl);
+        urls.add(element.url); // Also add original URL
+      }
+    });
+    return urls;
+  }, [canvasElements]);
+  
+  // Helper function to check if content is already added
+  const isContentAlreadyAdded = (content: CreatorContent): boolean => {
+    if (!content.content_url) return false;
+    
+    // Check original URL
+    if (existingContentUrls.has(content.content_url)) return true;
+    
+    // Check normalized URL for Instagram
+    if (content.content_url.includes('instagram.com')) {
+      const match = content.content_url.match(/\/(reel|p)\/([^\/\?]+)/);
+      if (match && match[2]) {
+        const normalizedUrl = `instagram.com/p/${match[2]}`;
+        if (existingContentUrls.has(normalizedUrl)) return true;
+      }
+    }
+    
+    return false;
+  };
 
   // Sort results based on selected filter
   const sortedResults = useMemo(() => {
@@ -344,13 +388,6 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
                     >
                       {platform.name}
                     </button>
-                    {platform.comingSoon && (
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <span className="bg-gray-800 text-xs px-2 py-1 rounded text-gray-400">
-                          Soon
-                        </span>
-                      </div>
-                    )}
                   </div>
                 ))}
               </div>
@@ -489,7 +526,11 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
                     });
                     
                     return (
-                    <div key={content.id} className="group relative bg-gray-800 rounded-lg overflow-hidden hover:bg-gray-750 transition-colors">
+                    <div key={content.id} className={`group relative rounded-lg overflow-hidden transition-all ${
+                      isContentAlreadyAdded(content) 
+                        ? 'bg-gray-700 ring-2 ring-blue-500 opacity-75' 
+                        : 'bg-gray-800 hover:bg-gray-750'
+                    }`}>
                       {/* Thumbnail */}
                       <div className="relative aspect-square">
                         <img
@@ -505,15 +546,25 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
                         {/* Add to Canvas Button */}
                         <button
                           onClick={() => handleAddToCanvas(content)}
-                          disabled={addingContentIds.has(content.id)}
+                          disabled={addingContentIds.has(content.id) || isContentAlreadyAdded(content)}
                           className={`absolute top-2 right-2 w-8 h-8 ${
-                            addingContentIds.has(content.id) 
-                              ? 'bg-gray-600 cursor-not-allowed' 
-                              : 'bg-green-600 hover:bg-green-700'
+                            isContentAlreadyAdded(content)
+                              ? 'bg-blue-600 cursor-not-allowed'
+                              : addingContentIds.has(content.id) 
+                                ? 'bg-gray-600 cursor-not-allowed' 
+                                : 'bg-green-600 hover:bg-green-700'
                           } text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity`}
-                          title={addingContentIds.has(content.id) ? "Adding..." : "Add to canvas"}
+                          title={
+                            isContentAlreadyAdded(content) 
+                              ? "Already on canvas" 
+                              : addingContentIds.has(content.id) 
+                                ? "Adding..." 
+                                : "Add to canvas"
+                          }
                         >
-                          {addingContentIds.has(content.id) ? (
+                          {isContentAlreadyAdded(content) ? (
+                            <Check className="w-4 h-4" />
+                          ) : addingContentIds.has(content.id) ? (
                             <Loader2 className="w-4 h-4 animate-spin" />
                           ) : (
                             <Plus className="w-4 h-4" />

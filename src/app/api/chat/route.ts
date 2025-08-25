@@ -65,6 +65,206 @@ async function getUserIdFromCookies(): Promise<string | null> {
   return null;
 }
 
+// Helper function for storing conversation in database
+async function storeConversationInDatabase(params: {
+  threadId: string;
+  chatInterfaceId: string | null;
+  chatElementId: string | null;
+  userId: string;
+  projectId: string | null;
+  accountId: string;
+  messages: any[];
+  response: string;
+  model: string;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  CHAT_COMPLETION_CREDITS: number;
+}) {
+  const { 
+    threadId, chatInterfaceId, chatElementId, userId, projectId, accountId, 
+    messages, response, model, promptTokens, completionTokens, totalTokens, CHAT_COMPLETION_CREDITS 
+  } = params;
+  
+  try {
+    // Use the provided chatInterfaceId or create one if needed
+    let chatInterfaceUuid = chatInterfaceId;
+    let projectIdToUse = projectId;
+    
+    if (!chatInterfaceUuid && chatElementId) {
+      // Use the provided projectId if available, otherwise get the first project
+      if (!projectIdToUse) {
+        const { data: projects, error: projectError } = await supabase
+          .from('projects')
+          .select('id')
+          .eq('account_id', accountId)
+          .limit(1);
+        
+        if (projectError) {
+          console.error('[API] Error fetching project:', projectError);
+        }
+        
+        projectIdToUse = projects && projects.length > 0 ? projects[0].id : null;
+      }
+      
+      if (projectIdToUse) {
+        // Create a chat_interface if it doesn't exist
+        const { data: newInterface } = await supabase
+          .from('chat_interfaces')
+          .insert({
+            project_id: projectIdToUse,
+            name: `Chat Interface ${chatElementId}`,
+            user_id: userId,
+            ai_model_preference: model,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .select()
+          .single();
+        
+        if (newInterface) {
+          chatInterfaceUuid = newInterface.id;
+          console.log('[API] Created new chat interface:', chatInterfaceUuid);
+        } else {
+          console.error('[API] Failed to create chat interface');
+        }
+      } else {
+        console.error('[API] No project found for account');
+      }
+    }
+    
+    // If we still don't have a chat interface ID, we can't proceed with database storage
+    if (!chatInterfaceUuid) {
+      console.warn('[API] No chat_interface_id available, skipping database persistence');
+      return;
+    }
+    
+    // Check if thread exists
+    const { data: existingThread } = await supabase
+      .from('chat_threads')
+      .select('id, title, created_by_user_id')
+      .eq('id', threadId)
+      .single();
+
+    if (!existingThread) {
+      // For new threads, use the first user message as the title
+      const firstUserMessage = messages.find((m: any) => m.role === 'user');
+      const threadTitle = firstUserMessage?.content?.substring(0, 50) || 'New Chat';
+      
+      // Create new thread with proper user ID
+      const { error: insertError } = await supabase
+        .from('chat_threads')
+        .insert({
+          id: threadId,
+          chat_interface_id: chatInterfaceUuid,
+          title: threadTitle,
+          created_by_user_id: userId,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
+        
+      if (insertError) {
+        console.error('[API] Error creating thread:', insertError);
+      } else {
+        console.log('[API] Created new thread with title:', threadTitle, 'and user:', userId);
+      }
+    } else {
+      // Update existing thread's updated_at timestamp
+      let updates: any = {
+        updated_at: new Date().toISOString()
+      };
+      
+      // Update user ID if it was null
+      if (!existingThread.created_by_user_id) {
+        updates.created_by_user_id = userId;
+      }
+      
+      // Update title if it's still "New Chat"
+      if (existingThread.title === 'New Chat') {
+        const firstUserMessage = messages.find((m: any) => m.role === 'user');
+        if (firstUserMessage) {
+          updates.title = firstUserMessage.content.substring(0, 50);
+        }
+      }
+      
+      const { error: updateError } = await supabase
+        .from('chat_threads')
+        .update(updates)
+        .eq('id', threadId);
+        
+      if (updateError) {
+        console.error('[API] Error updating thread:', updateError);
+      }
+    }
+
+    // Store user message
+    const userMessage = messages[messages.length - 1];
+    if (userMessage) {
+      await supabase
+        .from('chat_messages')
+        .insert({
+          thread_id: threadId,
+          role: 'user',
+          content: userMessage.content,
+          tool_calls: {},
+          usage: {},
+          model: null,
+          prompt_tokens: 0,
+          completion_tokens: 0,
+          total_tokens: 0,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
+    }
+
+    // Store assistant response with token usage
+    await supabase
+      .from('chat_messages')
+      .insert({
+        thread_id: threadId,
+        role: 'assistant',
+        content: response,
+        tool_calls: {},
+        usage: {
+          prompt_tokens: promptTokens,
+          completion_tokens: completionTokens,
+          total_tokens: totalTokens,
+          credits_used: CHAT_COMPLETION_CREDITS
+        },
+        model: model,
+        prompt_tokens: promptTokens,
+        completion_tokens: completionTokens,
+        total_tokens: totalTokens,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
+
+    // Also log in message_usage_records for billing tracking
+    const projectIdForTracking = projectId || projectIdToUse;
+    
+    if (projectIdForTracking) {
+      await supabase
+        .from('message_usage_records')
+        .insert({
+          message_id: crypto.randomUUID(),
+          account_id: accountId,
+          project_id: projectIdForTracking,
+          model: model,
+          prompt_tokens: promptTokens,
+          completion_tokens: completionTokens,
+          total_tokens: totalTokens,
+          cost_usd: CHAT_COMPLETION_CREDITS / 100,
+          billing_period: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
+    }
+  } catch (dbError) {
+    console.error('[API] Error storing message in database:', dbError);
+    // Don't fail the request if DB storage fails
+  }
+}
+
 // Helper function to check and deduct credits
 async function checkAndDeductCredits(accountId: string): Promise<{ success: boolean; error?: string }> {
   try {
@@ -192,7 +392,13 @@ export async function POST(request: NextRequest) {
     });
 
     // Get user authentication
-    const userId = await getUserIdFromCookies();
+    let userId = await getUserIdFromCookies();
+    
+    // In demo mode, use the demo user ID
+    if (!userId && process.env.NEXT_PUBLIC_DEMO_MODE === 'true') {
+      userId = process.env.NEXT_PUBLIC_DEMO_USER_ID || '550e8400-e29b-41d4-a716-446655440002';
+    }
+    
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -225,7 +431,7 @@ export async function POST(request: NextRequest) {
       'gpt-5-nano': { provider: 'openai', model: 'gpt-5-nano-2025-08-07' },
       
       // Anthropic models
-      'claude-opus-4': { provider: 'anthropic', model: 'claude-opus-4-20250514' },
+      'claude-opus-4': { provider: 'anthropic', model: 'claude-opus-4-1-20250805' },
       'claude-sonnet-4': { provider: 'anthropic', model: 'claude-sonnet-4-20250514' }
     };
 
@@ -311,7 +517,7 @@ export async function POST(request: NextRequest) {
     console.log(`[API] Attempting to use ${selectedModel.provider} with model ${selectedModel.model}`);
     
     if (selectedModel.provider === 'openai' && openai) {
-      console.log('[API] Using OpenAI API');
+      console.log('[API] Using OpenAI API with streaming');
       try {
         // GPT-5 models use max_completion_tokens instead of max_tokens
         const completionParams: any = {
@@ -324,31 +530,99 @@ export async function POST(request: NextRequest) {
 
         // GPT-5 models have specific requirements
         if (selectedModel.model.startsWith('gpt-5')) {
-          completionParams.max_completion_tokens = 4096; // Maximum for GPT-5
+          completionParams.max_completion_tokens = 1000; // Reduced for faster responses
           // GPT-5 only supports default temperature value (1)
           // Don't set temperature to use the default
         } else {
-          completionParams.max_tokens = 4096; // Maximum commonly supported
+          completionParams.max_tokens = 1000; // Reduced for faster responses
           completionParams.temperature = 0.7;
         }
 
-        const completion = await openai.chat.completions.create(completionParams);
-
-        console.log('[API] OpenAI completion response:', {
-          hasChoices: !!completion.choices,
-          choicesLength: completion.choices?.length,
-          firstChoice: completion.choices[0],
-          content: completion.choices[0]?.message?.content?.substring(0, 100)
+        const stream = await openai.chat.completions.create({
+          ...completionParams,
+          stream: true
         });
 
-        response = completion.choices[0]?.message?.content || 'No response generated';
+        console.log('[API] OpenAI streaming initiated');
+
+        // Create encoder for streaming
+        const encoder = new TextEncoder();
+        let fullResponse = '';
         
-        // Extract token usage
-        if (completion.usage) {
-          promptTokens = completion.usage.prompt_tokens;
-          completionTokens = completion.usage.completion_tokens;
-          totalTokens = completion.usage.total_tokens;
-        }
+        // Create streaming response
+        const readableStream = new ReadableStream({
+          async start(controller) {
+            try {
+              // Type guard to check if stream is iterable
+              if (Symbol.asyncIterator in Object(stream)) {
+                for await (const chunk of stream as any) {
+                  const content = chunk.choices[0]?.delta?.content || '';
+                  if (content) {
+                    fullResponse += content;
+                    controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content })}\n\n`));
+                  }
+                }
+              } else {
+                // Fallback for non-streaming response
+                const response = stream as OpenAI.Chat.Completions.ChatCompletion;
+                fullResponse = response.choices[0]?.message?.content || '';
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content: fullResponse })}\n\n`));
+                
+                // Extract usage from response
+                if (response.usage) {
+                  promptTokens = response.usage.prompt_tokens || 0;
+                  completionTokens = response.usage.completion_tokens || 0;
+                  totalTokens = response.usage.total_tokens || 0;
+                }
+              }
+              
+              // Token counting for streaming will be estimated if not already set
+              // In production, you'd track this server-side or use a different approach
+              if (promptTokens === 0) {
+                promptTokens = Math.floor(systemMessage.length / 4) + Math.floor(JSON.stringify(messages).length / 4);
+                completionTokens = Math.floor(fullResponse.length / 4);
+                totalTokens = promptTokens + completionTokens;
+              }
+              
+              // Send completion signal
+              controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+              
+              // Store in database after streaming is complete
+              if (threadId && (chatInterfaceId || chatElementId)) {
+                await storeConversationInDatabase({
+                  threadId,
+                  chatInterfaceId,
+                  chatElementId,
+                  userId,
+                  projectId,
+                  accountId: userData.account_id,
+                  messages,
+                  response: fullResponse,
+                  model,
+                  promptTokens,
+                  completionTokens,
+                  totalTokens,
+                  CHAT_COMPLETION_CREDITS
+                });
+              }
+              
+              controller.close();
+            } catch (error) {
+              console.error('[API] Streaming error:', error);
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: 'Streaming error occurred' })}\n\n`));
+              controller.close();
+              throw error;
+            }
+          },
+        });
+
+        return new Response(readableStream, {
+          headers: {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+          },
+        });
 
       } catch (error: any) {
         console.error('OpenAI API error:', error);
@@ -388,7 +662,7 @@ export async function POST(request: NextRequest) {
         throw new Error(errorMessage);
       }
     } else if (selectedModel.provider === 'anthropic' && anthropic) {
-      console.log('[API] Using Anthropic API');
+      console.log('[API] Using Anthropic API with streaming');
       try {
         // Convert messages to Anthropic format
         const anthropicMessages = messages.map((msg: any) => ({
@@ -396,38 +670,81 @@ export async function POST(request: NextRequest) {
           content: msg.content
         }));
 
-        const completion = await anthropic.messages.create({
+        const stream = await anthropic.messages.create({
           model: selectedModel.model,
           system: systemMessage,
           messages: anthropicMessages,
-          max_tokens: 4096, // Maximum for Claude models
+          max_tokens: 1000, // Reduced for faster responses
+          stream: true, // Enable streaming
         });
 
-        console.log('[API] Anthropic completion response:', {
-          hasContent: !!completion.content,
-          contentLength: completion.content?.length,
-          firstContent: completion.content?.[0],
-          type: completion.content?.[0]?.type,
-          text: (completion.content?.[0] as any)?.text?.substring(0, 100),
-          fullResponse: JSON.stringify(completion, null, 2)
+        console.log('[API] Anthropic streaming initiated');
+
+        // Create encoder for streaming
+        const encoder = new TextEncoder();
+        let fullResponse = '';
+        
+        // Create streaming response
+        const readableStream = new ReadableStream({
+          async start(controller) {
+            try {
+              for await (const chunk of stream) {
+                // Handle different event types from Anthropic
+                if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
+                  const content = chunk.delta.text || '';
+                  if (content) {
+                    fullResponse += content;
+                    controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content })}\n\n`));
+                  }
+                }
+                
+                // Extract usage from message_stop event
+                if ('usage' in chunk && chunk.usage) {
+                  promptTokens = chunk.usage.input_tokens || 0;
+                  completionTokens = chunk.usage.output_tokens || 0;
+                  totalTokens = promptTokens + completionTokens;
+                }
+              }
+              
+              // Send completion signal
+              controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+              
+              // Store in database after streaming is complete
+              if (threadId && (chatInterfaceId || chatElementId)) {
+                await storeConversationInDatabase({
+                  threadId,
+                  chatInterfaceId,
+                  chatElementId,
+                  userId,
+                  projectId,
+                  accountId: userData.account_id,
+                  messages,
+                  response: fullResponse,
+                  model,
+                  promptTokens,
+                  completionTokens,
+                  totalTokens,
+                  CHAT_COMPLETION_CREDITS
+                });
+              }
+              
+              controller.close();
+            } catch (error) {
+              console.error('[API] Streaming error:', error);
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: 'Streaming error occurred' })}\n\n`));
+              controller.close();
+              throw error;
+            }
+          },
         });
 
-        // Safely extract response from Anthropic format
-        if (completion.content && completion.content.length > 0) {
-          const firstContent = completion.content[0];
-          response = firstContent.type === 'text' 
-            ? (firstContent as any).text 
-            : 'No response generated';
-        } else {
-          response = 'No response generated';
-        }
-          
-        // Extract token usage (Anthropic provides this differently)
-        if (completion.usage) {
-          promptTokens = completion.usage.input_tokens || 0;
-          completionTokens = completion.usage.output_tokens || 0;
-          totalTokens = promptTokens + completionTokens;
-        }
+        return new Response(readableStream, {
+          headers: {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+          },
+        });
       } catch (error: any) {
         console.error('Anthropic API error:', error);
         
@@ -510,233 +827,37 @@ Based on the connected content, here are some insights:
       }
     }
 
-    // Store the conversation in the database if we have thread/element info
-    console.log('[API] Database persistence check:', { 
-      threadId, 
-      chatInterfaceId, 
-      chatElementId,
-      willPersist: !!(threadId && (chatInterfaceId || chatElementId))
-    });
-    
-    if (threadId && (chatInterfaceId || chatElementId)) {
-      try {
-        // Use the provided chatInterfaceId or create one if needed
-        chatInterfaceUuid = chatInterfaceId;
-        let projectIdToUse = projectId; // Declare in outer scope
-        
-        if (!chatInterfaceUuid && chatElementId) {
-          // Use the provided projectId if available, otherwise get the first project
-          projectIdToUse = projectId;
-          
-          if (!projectIdToUse) {
-            const { data: projects, error: projectError } = await supabase
-              .from('projects')
-              .select('id')
-              .eq('account_id', userData.account_id)
-              .limit(1);
-            
-            if (projectError) {
-              console.error('[API] Error fetching project:', projectError);
-            }
-            
-            projectIdToUse = projects && projects.length > 0 ? projects[0].id : null;
-          }
-          
-          if (projectIdToUse) {
-            // Create a chat_interface if it doesn't exist
-            const { data: newInterface } = await supabase
-              .from('chat_interfaces')
-              .insert({
-                project_id: projectIdToUse,
-                name: `Chat Interface ${chatElementId}`,
-                user_id: userId,
-                ai_model_preference: model,
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString()
-              })
-              .select()
-              .single();
-            
-            if (newInterface) {
-              chatInterfaceUuid = newInterface.id;
-              console.log('[API] Created new chat interface:', chatInterfaceUuid);
-            } else {
-              console.error('[API] Failed to create chat interface');
-            }
-          } else {
-            console.error('[API] No project found for account');
-          }
-        }
-        
-        // If we still don't have a chat interface ID, we can't proceed with database storage
-        if (!chatInterfaceUuid) {
-          console.warn('[API] No chat_interface_id available, skipping database persistence');
-          // Return early but still include response
-          return NextResponse.json({ 
-            content: response,
-            usage: {
-              prompt_tokens: promptTokens,
-              completion_tokens: completionTokens,
-              total_tokens: totalTokens,
-              credits_used: CHAT_COMPLETION_CREDITS
-            }
-          });
-        }
-        
-        // Check if thread exists
-        const { data: existingThread } = await supabase
-          .from('chat_threads')
-          .select('id, title, created_by_user_id')
-          .eq('id', threadId)
-          .single();
-
-        if (!existingThread) {
-          // Ensure we have a chat_interface_id before creating the thread
-          if (!chatInterfaceUuid) {
-            console.error('[API] Cannot create thread without chat_interface_id');
-            // Skip database persistence if we can't create a proper thread
-            return NextResponse.json({ 
-              content: response,
-              usage: {
-                prompt_tokens: promptTokens,
-                completion_tokens: completionTokens,
-                total_tokens: totalTokens,
-                credits_used: CHAT_COMPLETION_CREDITS
-              }
-            });
-          }
-          
-          // For new threads, use the first user message as the title
-          const firstUserMessage = messages.find((m: any) => m.role === 'user');
-          const threadTitle = firstUserMessage?.content?.substring(0, 50) || 'New Chat';
-          
-          // Create new thread with proper user ID
-          const { error: insertError } = await supabase
-            .from('chat_threads')
-            .insert({
-              id: threadId,
-              chat_interface_id: chatInterfaceUuid,
-              title: threadTitle,
-              created_by_user_id: userId, // This should now properly set the user ID
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
-            });
-            
-          if (insertError) {
-            console.error('[API] Error creating thread:', insertError);
-          } else {
-            console.log('[API] Created new thread with title:', threadTitle, 'and user:', userId);
-          }
-        } else {
-          // Update existing thread's updated_at timestamp
-          // Also update title if it's still "New Chat" and we have a user message
-          let updates: any = {
-            updated_at: new Date().toISOString()
-          };
-          
-          // Update user ID if it was null
-          if (!existingThread.created_by_user_id) {
-            updates.created_by_user_id = userId;
-          }
-          
-          // Update title if it's still "New Chat"
-          if (existingThread.title === 'New Chat') {
-            const firstUserMessage = messages.find((m: any) => m.role === 'user');
-            if (firstUserMessage) {
-              updates.title = firstUserMessage.content.substring(0, 50);
-            }
-          }
-          
-          const { error: updateError } = await supabase
-            .from('chat_threads')
-            .update(updates)
-            .eq('id', threadId);
-            
-          if (updateError) {
-            console.error('[API] Error updating thread:', updateError);
-          }
-        }
-
-        // Store user message
-        const userMessage = messages[messages.length - 1];
-        if (userMessage) {
-          await supabase
-            .from('chat_messages')
-            .insert({
-              thread_id: threadId,
-              role: 'user',
-              content: userMessage.content,
-              tool_calls: {},
-              usage: {},
-              model: null,
-              prompt_tokens: 0,
-              completion_tokens: 0,
-              total_tokens: 0,
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
-            });
-        }
-
-        // Store assistant response with token usage
-        await supabase
-          .from('chat_messages')
-          .insert({
-            thread_id: threadId,
-            role: 'assistant',
-            content: response,
-            tool_calls: {},
-            usage: {
-              prompt_tokens: promptTokens,
-              completion_tokens: completionTokens,
-              total_tokens: totalTokens,
-              credits_used: CHAT_COMPLETION_CREDITS
-            },
-            model: model,
-            prompt_tokens: promptTokens,
-            completion_tokens: completionTokens,
-            total_tokens: totalTokens,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          });
-
-        // Also log in message_usage_records for billing tracking
-        // Use the projectId we already have from earlier
-        const projectIdForTracking = projectId || projectIdToUse;
-        
-        if (projectIdForTracking) {
-          await supabase
-            .from('message_usage_records')
-            .insert({
-              message_id: crypto.randomUUID(), // Generate a UUID for the message
-              account_id: userData.account_id,
-              project_id: projectIdForTracking, // Use the actual project ID from the request
-              model: model,
-              prompt_tokens: promptTokens,
-              completion_tokens: completionTokens,
-              total_tokens: totalTokens,
-              cost_usd: CHAT_COMPLETION_CREDITS / 100, // Convert credits to rough USD estimate
-              billing_period: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`,
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
-            });
-        }
-
-      } catch (dbError) {
-        console.error('[API] Error storing message in database:', dbError);
-        // Don't fail the request if DB storage fails
+    // For non-streaming responses, store in database and return
+    if (response) {
+      if (threadId && (chatInterfaceId || chatElementId)) {
+        await storeConversationInDatabase({
+          threadId,
+          chatInterfaceId,
+          chatElementId,
+          userId,
+          projectId,
+          accountId: userData.account_id,
+          messages,
+          response,
+          model,
+          promptTokens,
+          completionTokens,
+          totalTokens,
+          CHAT_COMPLETION_CREDITS
+        });
       }
-    }
 
-    return NextResponse.json({ 
-      content: response,
-      usage: {
-        prompt_tokens: promptTokens,
-        completion_tokens: completionTokens,
-        total_tokens: totalTokens,
-        credits_used: CHAT_COMPLETION_CREDITS
-      },
-      chatInterfaceId: chatInterfaceUuid // Return the interface ID to the frontend
-    });
+      return NextResponse.json({ 
+        content: response,
+        usage: {
+          prompt_tokens: promptTokens,
+          completion_tokens: completionTokens,
+          total_tokens: totalTokens,
+          credits_used: CHAT_COMPLETION_CREDITS
+        },
+        chatInterfaceId: chatInterfaceUuid // Return the interface ID to the frontend
+      });
+    }
   } catch (error: any) {
     console.error('Chat API error:', error);
     return NextResponse.json(

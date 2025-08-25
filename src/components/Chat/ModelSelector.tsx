@@ -17,7 +17,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   className = ''
 }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 });
   const buttonRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const modelsByCategory = getModelsByCategory();
@@ -32,7 +32,8 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
       const dropdownHeight = 250;
       setDropdownPosition({
         top: rect.top + window.scrollY - dropdownHeight - 4, // 4px gap
-        left: rect.left + window.scrollX
+        left: rect.left + window.scrollX,
+        width: rect.width
       });
     }
   }, [isOpen]);
@@ -67,33 +68,34 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
           setIsOpen(!isOpen);
         }}
         onMouseDown={(e) => e.stopPropagation()}
-        className={`h-8 flex items-center justify-between gap-2 px-3 border ${isDarkMode ? 'border-gray-600 hover:bg-gray-700 text-white' : 'border-gray-300 hover:bg-gray-100 text-gray-600'} rounded-lg text-sm outline-none cursor-pointer transition-colors ${className}`}
+        className={`h-6 flex items-center justify-between gap-1 px-2 border ${isDarkMode ? 'border-gray-600 hover:bg-gray-700 text-white' : 'border-gray-300 hover:bg-gray-100 text-gray-600'} rounded-md text-xs outline-none cursor-pointer transition-colors ${className}`}
         data-no-drag
         style={{ pointerEvents: 'auto' }}
       >
         {/* Current model with logo */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           {(currentModel.provider === 'openai' || currentModel.provider === 'anthropic') && (
             <>
               {React.createElement(getProviderLogo(currentModel.provider), {
-                size: 10,
+                size: 8,
                 className: currentModel.provider === 'anthropic' ? '' : 'text-gray-600'
               })}
             </>
           )}
           <span className={`whitespace-nowrap truncate ${isDarkMode ? 'text-white' : 'text-gray-700'}`}>{currentModel.name}</span>
         </div>
-        <ChevronDown className={`w-3 h-3 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'} transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`w-2.5 h-2.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'} transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {/* Dropdown rendered with portal */}
       {isOpen && typeof document !== 'undefined' && createPortal(
         <div 
           ref={dropdownRef}
-          className={`fixed w-[180px] ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-xl border overflow-hidden max-h-80 overflow-y-auto`}
+          className={`fixed ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-md shadow-xl border overflow-hidden max-h-64 overflow-y-auto`}
           style={{
             top: `${dropdownPosition.top}px`,
             left: `${dropdownPosition.left}px`,
+            width: `${Math.max(dropdownPosition.width, 140)}px`,
             zIndex: 9999,
           }}
           onClick={(e) => e.stopPropagation()}
@@ -101,8 +103,8 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
         >
           {(['low-cost', 'high-reasoning'] as const).map((category) => (
             <div key={category}>
-              <div className={`px-3 py-1.5 ${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'} border-b`}>
-                <h3 className={`text-xs font-semibold ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+              <div className={`px-2 py-1 ${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'} border-b`}>
+                <h3 className={`text-[10px] font-semibold ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
                   {MODEL_CATEGORIES[category]}
                 </h3>
               </div>
@@ -110,23 +112,23 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                 <button
                   key={model.id}
                   onClick={() => handleSelect(model)}
-                  className={`w-full px-2 py-1 flex items-center justify-between ${isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-50'}`}
+                  className={`w-full px-2 py-0.5 flex items-center justify-between ${isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-50'}`}
                 >
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 flex-1 min-w-0">
                     {/* Logo */}
                     <div className="flex-shrink-0">
                       {React.createElement(getProviderLogo(model.provider), {
-                        size: 10,
+                        size: 8,
                         className: model.provider === 'anthropic' ? '' : 'text-gray-600'
                       })}
                     </div>
                     
                     {/* Model name */}
-                    <span className={`text-xs font-medium whitespace-nowrap ${isDarkMode ? 'text-white' : 'text-gray-700'}`}>{model.name}</span>
+                    <span className={`text-[10px] font-medium whitespace-nowrap ${isDarkMode ? 'text-white' : 'text-gray-700'}`}>{model.name}</span>
                   </div>
                   
                   {selectedModel === model.id && (
-                    <Check className="w-3 h-3 text-[#c96442] flex-shrink-0 ml-1" />
+                    <Check className="w-2.5 h-2.5 text-[#c96442] flex-shrink-0 ml-1" />
                   )}
                 </button>
               ))}

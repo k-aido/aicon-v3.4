@@ -684,7 +684,7 @@ class ApifyService {
         if (match) {
           const timeStr = match[0].split(/[-–—]/)[0].trim();
           const title = match[2].trim();
-          const timeParts = timeStr.split(':').map(p => parseInt(p));
+          const timeParts = timeStr.split(':').map((p: string) => parseInt(p));
           
           let seconds = 0;
           if (timeParts.length === 3) {

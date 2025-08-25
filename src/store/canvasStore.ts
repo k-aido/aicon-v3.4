@@ -83,7 +83,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   connecting: null,
   canvasTitle: 'Canvas Title',
   workspaceId: null,
-  viewport: { x: 0, y: 0, zoom: 1.0 },
+  viewport: { x: 0, y: 0, zoom: 0.5 }, // 0.5 is the "100%" zoom level
   
   addElement: (element) => {
     set((state) => {

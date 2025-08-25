@@ -558,9 +558,57 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       const contentAnalysis = await fetchContentAnalysis(allConnectedContentIds);
       console.log('[ChatInterface] Fetched content analysis for', contentAnalysis.length, 'pieces of content:', contentAnalysis);
       
+      // Helper function to optimize connected content for smaller payload
+      const optimizeConnectedContent = (content: any[]) => {
+        return content.map(item => {
+          if (item.type === 'text') {
+            // For text elements, send a summary if content is too long
+            return {
+              type: 'text',
+              id: item.id,
+              title: item.title,
+              content: item.content?.length > 500 
+                ? item.content.substring(0, 500) + '...' 
+                : item.content,
+              isTruncated: item.content?.length > 500
+            };
+          }
+          
+          // For content elements, send only essential data
+          return {
+            type: 'content',
+            id: item.id,
+            title: item.title,
+            platform: item.platform,
+            url: item.url,
+            creatorHandle: item.creatorHandle || item.creatorUsername || '@unknown',
+            // Only send essential analysis, not full transcripts
+            keyPoints: item.analysis?.keyTopics?.slice(0, 3) || [],
+            hookAnalysis: item.analysis?.hookAnalysis?.substring(0, 200) || '',
+            summary: item.analysis?.summary || 
+                     item.description?.substring(0, 200) || 
+                     item.transcript?.substring(0, 200) || 
+                     'No summary available',
+            metrics: {
+              views: item.metrics?.views || 0,
+              likes: item.metrics?.likes || 0,
+              engagement: item.metrics?.engagement || 0
+            },
+            // Flag to indicate if full analysis is available
+            hasFullAnalysis: !!(item.analysis && Object.keys(item.analysis).length > 0),
+            // Remove heavy data - these are commented out to show what we're NOT sending
+            // transcript: item.transcript,
+            // subtitles: item.subtitles,
+            // fullAnalysis: item.analysis,
+            // rawData: item.processedData,
+          };
+        });
+      };
+
       // Prepare connected text elements first
       const textDataForChat = connectedTextElements.map((textEl: any) => ({
         type: 'text',
+        id: textEl.id,
         title: textEl.title || 'Untitled Text',
         content: textEl.content || '',
         lastModified: textEl.lastModified || textEl.updatedAt || new Date()
@@ -573,6 +621,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         
         return {
           type: 'content',
+          id: content.id,
           title: content.title || 'Untitled Content',
           platform: content.platform,
           url: content.url,
@@ -599,10 +648,16 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       // Combine text elements first, then content elements
       const allConnectedData = [...textDataForChat, ...connectedContentForChat];
       
-      console.log('[ChatInterface] Sending to API with content:', {
+      // Optimize the content before sending
+      const optimizedContent = optimizeConnectedContent(allConnectedData);
+      
+      console.log('[ChatInterface] Sending to API with optimized content:', {
         textElements: textDataForChat.length,
         contentElements: connectedContentForChat.length,
-        total: allConnectedData.length
+        total: optimizedContent.length,
+        originalSize: JSON.stringify(allConnectedData).length,
+        optimizedSize: JSON.stringify(optimizedContent).length,
+        reduction: `${Math.round((1 - JSON.stringify(optimizedContent).length / JSON.stringify(allConnectedData).length) * 100)}%`
       });
 
       // Call real AI API with thread and element IDs for database persistence
@@ -615,7 +670,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
             content: (index === updatedMessages.length - 1 && displayText) ? messageText : m.content 
           })),
           model: selectedModel,
-          connectedContent: allConnectedData, // Pass text and analyzed content for RAG
+          connectedContent: optimizedContent, // Pass optimized content for smaller payload
           threadId: currentActiveConversationId, // Pass thread ID for database persistence
           chatElementId: element.id.toString(), // Pass chat element ID
           chatInterfaceId: chatInterfaceId, // Pass the actual chat interface UUID
@@ -623,7 +678,11 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         })
       });
 
-      if (!response.ok) {
+      // Check if this is a streaming response
+      const contentType = response.headers.get('content-type');
+      const isStreaming = contentType?.includes('text/event-stream');
+
+      if (!response.ok && !isStreaming) {
         const errorData = await response.json();
         
         // Handle insufficient credits specifically
@@ -643,7 +702,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
           }
           
           // Remove the user message from the conversation since it wasn't processed
-          const revertedConversations = workingConversations.map(conv =>
+          // Get fresh conversations from store
+          const currentConvs = getConversations(Number(element.id));
+          const revertedConversations = currentConvs.map(conv =>
             conv.id === currentActiveConversationId
               ? { ...conv, messages: currentMessages } // Revert to original messages
               : conv
@@ -659,61 +720,156 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
       }
 
-      const data = await response.json();
-      
-      if (data.error) {
-        throw new Error(data.error);
-      }
+      let aiContent = '';
+      let usage = {};
+      let newChatInterfaceId: string | null = null;
 
-      // Store usage information if available
-      const usage = data.usage || {};
-      console.log('[ChatInterface] Token usage:', usage);
-      
-      // If we got a new chat interface ID back, store it
-      if (data.chatInterfaceId && !chatInterfaceId) {
-        setChatInterfaceId(data.chatInterfaceId);
-        const localStorageKey = `chat-interface-${elementIdStr}`;
-        localStorage.setItem(localStorageKey, data.chatInterfaceId);
-        console.log('[ChatInterface] Stored new interface ID:', data.chatInterfaceId, 'with key:', localStorageKey);
-      }
-      
-      // Trigger credit update since a chat message was sent successfully
-      window.dispatchEvent(new Event('creditUpdate'));
-
-      const aiMessage = {
-        id: Date.now() + 1,
-        role: 'assistant' as const,
-        content: data.content || 'No response received',
-        timestamp: new Date(),
-        model: selectedModel,
-        usage: usage // Store token usage
-      };
-      
-      const finalMessages = [...updatedMessages, aiMessage];
-      
-      // Add AI message and update title if needed
-      const finalConversations = workingConversations.map(conv => 
-        conv.id === currentActiveConversationId 
-          ? { 
-              ...conv, 
-              messages: finalMessages,
-              lastMessageAt: new Date(),
-              title: conv.title === 'New Chat' ? generateConversationTitle([userMessage]) : conv.title
+      if (isStreaming) {
+        // Handle streaming response
+        if (!response.body) throw new Error('No response body');
+        
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        
+        // Create assistant message immediately
+        const assistantId = Date.now() + 1;
+        const aiMessage = {
+          id: assistantId,
+          role: 'assistant' as const,
+          content: '',
+          timestamp: new Date(),
+          model: selectedModel,
+          usage: {}
+        };
+        
+        // Add assistant message to UI
+        const updatedWithAssistant = [...updatedMessages, aiMessage];
+        // Get fresh conversations from store
+        const currentConversations = getConversations(Number(element.id));
+        setStoreConversations(Number(element.id), 
+          currentConversations.map(conv =>
+            conv.id === currentActiveConversationId
+              ? { ...conv, messages: updatedWithAssistant, lastMessageAt: new Date() }
+              : conv
+          )
+        );
+        
+        // Stream the response
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          
+          const chunk = decoder.decode(value);
+          const lines = chunk.split('\n');
+          
+          for (const line of lines) {
+            if (line.startsWith('data: ') && line !== 'data: [DONE]') {
+              try {
+                const data = JSON.parse(line.slice(6));
+                if (data.content) {
+                  aiContent += data.content;
+                  
+                  // Update the assistant message in real-time
+                  // Get fresh conversations from store to avoid stale data
+                  const currentConversations = getConversations(Number(element.id));
+                  setStoreConversations(Number(element.id), 
+                    currentConversations.map(conv =>
+                      conv.id === currentActiveConversationId
+                        ? {
+                            ...conv,
+                            messages: conv.messages.map(msg =>
+                              msg.id === assistantId
+                                ? { ...msg, content: aiContent }
+                                : msg
+                            )
+                          }
+                        : conv
+                    )
+                  );
+                  
+                  // Scroll to bottom as content streams in
+                  setTimeout(scrollToBottom, 10);
+                }
+                
+                if (data.error) {
+                  throw new Error(data.error);
+                }
+              } catch (e) {
+                // Ignore parsing errors for incomplete chunks
+                console.error('Parse error:', e);
+              }
             }
-          : conv
-      );
-      
-      console.log('[ChatInterface] Setting final conversations:', {
-        elementId: element.id,
-        conversationId: currentActiveConversationId,
-        messageCount: finalMessages.length,
-        finalConversations: finalConversations.map(c => ({ id: c.id, messageCount: c.messages.length }))
-      });
-      
-      setStoreConversations(Number(element.id), finalConversations);
-      
-      // Scroll to bottom after AI response
-      setTimeout(scrollToBottom, 100);
+          }
+        }
+        
+        // Trigger credit update since a chat message was sent successfully
+        window.dispatchEvent(new Event('creditUpdate'));
+      } else {
+        // Handle regular response
+        const data = await response.json();
+        
+        if (data.error) {
+          throw new Error(data.error);
+        }
+
+        // Store usage information if available
+        usage = data.usage || {};
+        console.log('[ChatInterface] Token usage:', usage);
+        
+        aiContent = data.content || 'No response received';
+        newChatInterfaceId = data.chatInterfaceId;
+        
+        // If we got a new chat interface ID back, store it
+        if (newChatInterfaceId && !chatInterfaceId) {
+          setChatInterfaceId(newChatInterfaceId);
+          const localStorageKey = `chat-interface-${elementIdStr}`;
+          localStorage.setItem(localStorageKey, newChatInterfaceId);
+          console.log('[ChatInterface] Stored new interface ID:', newChatInterfaceId, 'with key:', localStorageKey);
+        }
+        
+        // Trigger credit update since a chat message was sent successfully
+        window.dispatchEvent(new Event('creditUpdate'));
+      }
+
+      // For non-streaming responses, update the conversation with the AI message
+      if (!isStreaming) {
+        const aiMessage = {
+          id: Date.now() + 1,
+          role: 'assistant' as const,
+          content: aiContent,
+          timestamp: new Date(),
+          model: selectedModel,
+          usage: usage // Store token usage
+        };
+        
+        const finalMessages = [...updatedMessages, aiMessage];
+        
+        // Add AI message and update title if needed
+        // Get fresh conversations from store
+        const currentConversations = getConversations(Number(element.id));
+        const finalConversations = currentConversations.map(conv => 
+          conv.id === currentActiveConversationId 
+            ? { 
+                ...conv, 
+                messages: finalMessages,
+                lastMessageAt: new Date(),
+                title: conv.title === 'New Chat' ? generateConversationTitle([userMessage]) : conv.title
+              }
+            : conv
+        );
+        
+        console.log('[ChatInterface] Setting final conversations:', {
+          elementId: element.id,
+          conversationId: currentActiveConversationId,
+          messageCount: finalMessages.length,
+          finalConversations: finalConversations.map(c => ({ id: c.id, messageCount: c.messages.length }))
+        });
+        
+        setStoreConversations(Number(element.id), finalConversations);
+        
+        // Scroll to bottom after AI response
+        setTimeout(scrollToBottom, 100);
+      }
     } catch (error) {
       console.error('Error calling AI API:', error);
       let errorContent = error instanceof Error ? error.message : 'Unknown error';
@@ -727,7 +883,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
           timestamp: new Date()
         };
         const finalMessages = [...updatedMessages, errorMessage];
-        const finalConversations = workingConversations.map(conv => 
+        // Get fresh conversations from store
+        const errorConversations = getConversations(Number(element.id));
+        const finalConversations = errorConversations.map(conv => 
           conv.id === currentActiveConversationId 
             ? { 
                 ...conv, 
@@ -804,10 +962,10 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   return (
     <div className={`h-full flex overflow-hidden rounded-lg ${isDarkMode ? '' : 'bg-white'}`} style={isDarkMode ? { backgroundColor: '#262625' } : {}}>
       {/* Collapsible Conversation Sidebar */}
-      <div className={`${isSidebarOpen ? 'w-60' : 'w-16'} transition-all duration-300 overflow-hidden border-r ${isDarkMode ? 'border-gray-700' : 'border-gray-300'}`} style={{ backgroundColor: isDarkMode ? '#201e1d' : '#f3f4f6' }}>
-        <div className={`${isSidebarOpen ? 'w-60' : 'w-16'} h-full flex flex-col`}>
+      <div className={`${isSidebarOpen ? 'w-56' : 'w-16'} transition-all duration-300 overflow-hidden border-r ${isDarkMode ? 'border-gray-700' : 'border-gray-300'}`} style={{ backgroundColor: isDarkMode ? '#201e1d' : '#f3f4f6' }}>
+        <div className={`${isSidebarOpen ? 'w-56' : 'w-16'} h-full flex flex-col`}>
           {/* Header Section */}
-          <div className={`px-3 py-3 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-300'} flex items-center`} style={{ height: '57px' }}>
+          <div className={`${isSidebarOpen ? 'px-3' : 'px-0'} py-3 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-300'} flex items-center ${isSidebarOpen ? '' : 'justify-center'}`} style={{ height: '57px' }}>
             {isSidebarOpen ? (
               <div className="flex items-center gap-2 w-full">
                 <button
@@ -821,7 +979,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 >
                   <PanelLeftClose className={`w-5 h-5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
                 </button>
-                <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Creative Strategist</span>
+                <span className={`font-medium whitespace-nowrap ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Creative Strategist</span>
               </div>
             ) : (
               <button
@@ -830,7 +988,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   setIsSidebarOpen(true);
                 }}
                 onMouseDown={(e) => e.stopPropagation()}
-                className={`p-1 mx-auto ${isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-200'} rounded transition-colors`}
+                className={`p-1 ${isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-200'} rounded transition-colors`}
                 data-no-drag
               >
                 <PanelLeft className={`w-5 h-5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
@@ -839,7 +997,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
           </div>
           
           {/* New Chat Button */}
-          <div className={`p-3`}>
+          <div className={`${isSidebarOpen ? 'p-2' : 'flex justify-center py-2'}`}>
             <button 
               onClick={(e) => {
                 e.stopPropagation();
@@ -849,7 +1007,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
               className={`${isSidebarOpen ? 'w-full px-3 py-1.5' : 'w-10 h-10 p-0'} hover:bg-[#c96442]/20 ${isDarkMode ? 'text-gray-200' : 'text-black'} rounded-lg flex items-center ${isSidebarOpen ? 'gap-3' : 'justify-center'} transition-all`}
               data-no-drag
             >
-              <div className="w-7 h-7 bg-[#c96442] rounded-full flex items-center justify-center flex-shrink-0">
+              <div className="w-6 h-6 bg-[#c96442] rounded-full flex items-center justify-center flex-shrink-0">
                 <Plus className="w-4 h-4 text-white" />
               </div>
               {isSidebarOpen && <span className="text-sm leading-7">New chat</span>}
@@ -865,7 +1023,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 </div>
               </div>
             )}
-            <div className={`${isSidebarOpen ? 'px-3' : 'px-3 mt-2'} space-y-2`}>
+            <div className={`${isSidebarOpen ? 'px-3' : 'mt-2'} space-y-2`}>
               {isSidebarOpen ? conversations.map(conv => (
               <div key={conv.id} className="group relative">
                 <div
@@ -874,9 +1032,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     setActiveConversationId(conv.id);
                   }}
                   onMouseDown={(e) => e.stopPropagation()}
-                  className={`p-3 rounded-lg cursor-pointer transition-colors ${
+                  className={`p-3 rounded-lg cursor-pointer transition-all ${
                     activeConversationId === conv.id 
-                      ? 'bg-[#c96442]/20 border border-[#c96442]' 
+                      ? 'bg-[#c96442]/20' 
                       : isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-200'
                   }`}
                   role="button"
@@ -913,7 +1071,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     onMouseDown={(e) => e.stopPropagation()}
                     className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${
                       activeConversationId === conv.id 
-                        ? 'bg-[#c96442]/20 border border-[#c96442]' 
+                        ? 'bg-[#c96442]/20' 
                         : isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-200'
                     }`}
                     data-no-drag
@@ -961,7 +1119,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         </div>
 
         {/* Messages Area - DRAGGABLE but text selectable */}
-        <div ref={messagesContainerRef} className={`flex-1 overflow-y-auto p-6 ${isDarkMode ? '' : 'bg-gray-50'}`} style={{ userSelect: 'text', ...(isDarkMode ? { backgroundColor: '#262625' } : {}) }}>
+        <div ref={messagesContainerRef} className={`flex-1 overflow-y-auto p-4 ${isDarkMode ? '' : 'bg-gray-50'}`} style={{ userSelect: 'text', ...(isDarkMode ? { backgroundColor: '#262625' } : {}) }}>
           {messages.length === 0 && (
             <div className={`text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-500'} mt-12`}>
               <MessageSquare className={`w-12 h-12 mx-auto mb-4 ${isDarkMode ? 'text-gray-600' : 'text-gray-300'}`} />
@@ -976,7 +1134,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 key={message.id} 
                 className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} group`}
               >
-                <div className={`relative max-w-[80%] ${
+                <div className={`relative max-w-[85%] ${
                   message.role === 'user' 
                     ? 'mr-2' 
                     : ''
@@ -1112,7 +1270,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 zIndex: 10,
                 minHeight: '52px',
                 maxHeight: '200px',
-                paddingBottom: '53px'
+                paddingBottom: '80px'
               }}
               rows={1}
             />
@@ -1129,7 +1287,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
             )}
 
             {/* Buttons row nested at the bottom */}
-            <div className="absolute bottom-0 left-0 right-0 flex justify-between items-center" style={{ padding: '13px 11px 11px 11px' }}>
+            <div className="absolute bottom-0 left-0 right-0 flex justify-between items-center" style={{ padding: '20px 11px 11px 11px' }}>
               {/* Left side: Summary and Get Insights buttons */}
               <div className="flex gap-1.5">
                 <button

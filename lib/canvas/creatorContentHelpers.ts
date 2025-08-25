@@ -72,8 +72,9 @@ function generateId(): string {
 /**
  * Poll for scraping completion - exact copy from SocialMediaModal
  */
-const pollForCompletion = async (elementId: string, scrapeId: string, projectId: string) => {
-  const maxAttempts = 60; // 60 seconds timeout
+const pollForCompletion = async (elementId: string, scrapeId: string, projectId: string, platform?: string) => {
+  // YouTube videos need much longer timeout due to transcription
+  const maxAttempts = platform === 'youtube' ? 300 : 120; // 5 minutes for YouTube, 2 minutes for others
   let attempts = 0;
 
   const checkStatus = async () => {
@@ -121,17 +122,22 @@ const pollForCompletion = async (elementId: string, scrapeId: string, projectId:
           const updatedElement = currentElements.find(el => el.id === elementId);
           const updatedMetadata = (updatedElement as any)?.metadata || {};
           
-          // Transform the analysis data to match the expected format in AnalysisPanel
+          // Transform the analysis data to match the expected format in ContentElement
           const transformedAnalysis = {
+            // Keep the original field names for ContentElement display
+            hook_analysis: analysisData.analysis?.hook_analysis || '',
+            body_analysis: analysisData.analysis?.body_analysis || '',
+            cta_analysis: analysisData.analysis?.cta_analysis || '',
+            key_topics: analysisData.analysis?.key_topics || [],
+            engagement_tactics: analysisData.analysis?.engagement_tactics || [],
+            sentiment: analysisData.analysis?.sentiment || 'positive',
+            complexity: analysisData.analysis?.complexity || 'moderate',
+            // Also add the AnalysisPanel format for compatibility
             hook: analysisData.analysis?.hook_analysis || '',
             hookScore: 8, // Default score
             contentStrategy: analysisData.analysis?.body_analysis || '',
             keyInsights: analysisData.analysis?.key_topics || [],
-            improvements: analysisData.analysis?.engagement_tactics || [],
-            sentiment: analysisData.analysis?.sentiment || 'positive',
-            complexity: analysisData.analysis?.complexity || 'moderate',
-            // Also include the raw analysis for compatibility
-            ...analysisData.analysis
+            improvements: analysisData.analysis?.engagement_tactics || []
           };
           
           updateElement(elementId, {
@@ -254,7 +260,7 @@ export async function addCreatorContentToCanvas(
       x: Math.random() * 400 + 100,
       y: Math.random() * 300 + 100,
       width: 320,
-      height: 280,
+      height: 280,  // Standard height for content cards
       title: title,
       url: contentUrl.trim(),
       platform: content.platform || 'instagram',
@@ -293,6 +299,13 @@ export async function addCreatorContentToCanvas(
     if (!response.ok) {
       const errorData = await response.json();
       
+      console.error('[CreatorContent] Scrape API error:', {
+        status: response.status,
+        error: errorData.error,
+        url: contentUrl,
+        projectId
+      });
+      
       // Update element to show error - get fresh store state
       const { updateElement } = useCanvasStore.getState();
       updateElement(newElement.id, {
@@ -302,25 +315,133 @@ export async function addCreatorContentToCanvas(
         }
       });
       
+      // Don't throw for duplicate content - it should be handled gracefully above
       throw new Error(errorData.error || 'Failed to scrape content');
     }
 
     const result = await response.json();
     
-    // Start polling for scrape completion
+    // Handle scraping result
     if (result.success && result.scrapeId) {
       // Update element with scrape ID - get fresh store state
       const { updateElement } = useCanvasStore.getState();
-      updateElement(newElement.id, {
-        metadata: {
-          ...newElement.metadata,
-          scrapeId: result.scrapeId,
-          status: result.status
-        }
-      });
       
-      // Start polling in the background
-      pollForCompletion(newElement.id, result.scrapeId, projectId);
+      // If this is existing/cached content, update the title immediately
+      if (result.cached || result.existing) {
+        updateElement(newElement.id, {
+          title: `Loading existing ${content.platform} content...`,
+          metadata: {
+            ...newElement.metadata,
+            scrapeId: result.scrapeId,
+            status: result.status,
+            isExisting: true
+          }
+        });
+      } else {
+        updateElement(newElement.id, {
+          metadata: {
+            ...newElement.metadata,
+            scrapeId: result.scrapeId,
+            status: result.status
+          }
+        });
+      }
+      
+      // Only start polling if status is processing
+      if (result.status === 'processing') {
+        // Start polling in the background
+        pollForCompletion(newElement.id, result.scrapeId, projectId, content.platform);
+      } else if (result.status === 'completed') {
+        // If already completed (e.g., cached content or YouTube API), fetch the data
+        console.log('[CreatorContent] Content already available, fetching data:', {
+          cached: result.cached,
+          existing: result.existing
+        });
+        
+        try {
+          const statusResponse = await fetch(`/api/content/scrape/${result.scrapeId}/status`);
+          const statusData = await statusResponse.json();
+          
+          if (statusData.processedData) {
+            updateElement(newElement.id, {
+              title: statusData.processedData.title || 'Content loaded',
+              thumbnail: statusData.processedData.thumbnailUrl || newElement.thumbnail,
+              metadata: {
+                ...newElement.metadata,
+                isScraping: false,
+                isAnalyzing: true, // Set to analyzing while we fetch analysis
+                processedData: statusData.processedData,
+                scrapeId: result.scrapeId
+              }
+            });
+            
+            // Now start analysis for immediately completed content
+            console.log('[CreatorContent] Starting analysis for immediately completed content');
+            try {
+              const analyzeResponse = await fetch(`/api/content/analyze/${result.scrapeId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ addToLibrary: true })
+              });
+              
+              if (analyzeResponse.ok) {
+                const analysisData = await analyzeResponse.json();
+                console.log('[CreatorContent] Immediate analysis completed:', analysisData);
+                
+                // Transform the analysis data to match the expected format
+                const transformedAnalysis = {
+                  // Keep the original field names for ContentElement display
+                  hook_analysis: analysisData.analysis?.hook_analysis || '',
+                  body_analysis: analysisData.analysis?.body_analysis || '',
+                  cta_analysis: analysisData.analysis?.cta_analysis || '',
+                  key_topics: analysisData.analysis?.key_topics || [],
+                  engagement_tactics: analysisData.analysis?.engagement_tactics || [],
+                  sentiment: analysisData.analysis?.sentiment || 'positive',
+                  complexity: analysisData.analysis?.complexity || 'moderate',
+                  // Also add the AnalysisPanel format for compatibility
+                  hook: analysisData.analysis?.hook_analysis || '',
+                  hookScore: 8, // Default score
+                  contentStrategy: analysisData.analysis?.body_analysis || '',
+                  keyInsights: analysisData.analysis?.key_topics || [],
+                  improvements: analysisData.analysis?.engagement_tactics || []
+                };
+                
+                updateElement(newElement.id, {
+                  metadata: {
+                    ...newElement.metadata,
+                    isScraping: false,
+                    isAnalyzing: false,
+                    isAnalyzed: true,
+                    analysis: transformedAnalysis,
+                    processedData: statusData.processedData,
+                    scrapeId: result.scrapeId
+                  }
+                });
+              } else {
+                console.error('[CreatorContent] Immediate analysis failed');
+                updateElement(newElement.id, {
+                  metadata: {
+                    ...newElement.metadata,
+                    isAnalyzing: false,
+                    analysisError: 'Failed to analyze content'
+                  }
+                });
+              }
+            } catch (error) {
+              console.error('[CreatorContent] Error analyzing immediately completed content:', error);
+              updateElement(newElement.id, {
+                metadata: {
+                  ...newElement.metadata,
+                  isAnalyzing: false,
+                  analysisError: 'Failed to analyze content'
+                }
+              });
+            }
+          }
+        } catch (error) {
+          console.error('[CreatorContent] Error fetching completed data:', error);
+        }
+      }
     }
 
     return { success: true, elementId: newElement.id };

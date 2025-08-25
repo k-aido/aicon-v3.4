@@ -71,7 +71,7 @@ export const ChatElement: React.FC<ChatElementProps> = React.memo(({
       ref={setElementRef}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      className={`absolute ${
+      className={`absolute canvas-element ${
         isDragging ? 'cursor-grabbing' : 'cursor-grab'
       } pointer-events-auto`}
       style={{

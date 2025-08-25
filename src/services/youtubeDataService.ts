@@ -39,6 +39,15 @@ class YouTubeDataService {
 
   constructor(apiKey?: string) {
     this.apiKey = apiKey || process.env.YOUTUBE_API_KEY || '';
+    
+    console.log('[YouTubeDataService] Constructor called:', {
+      providedApiKey: !!apiKey,
+      envApiKey: !!process.env.YOUTUBE_API_KEY,
+      envApiKeyLength: process.env.YOUTUBE_API_KEY?.length,
+      finalApiKeyLength: this.apiKey.length,
+      isConfigured: !!this.apiKey && this.apiKey !== 'your_youtube_api_key_here'
+    });
+    
     if (!this.apiKey) {
       console.warn('[YouTubeDataService] No YouTube API key provided. Service will have limited functionality.');
     }
@@ -85,24 +94,69 @@ class YouTubeDataService {
       const parts = 'snippet,statistics,contentDetails';
       const url = `${this.baseUrl}/videos?part=${parts}&id=${videoId}&key=${this.apiKey}`;
       
+      console.log('[YouTubeDataService] Fetching video details:', { 
+        videoId, 
+        url: url.replace(this.apiKey, 'REDACTED'),
+        hasApiKey: !!this.apiKey,
+        apiKeyLength: this.apiKey.length
+      });
+      
       const response = await fetch(url);
       
       if (!response.ok) {
-        console.error('[YouTubeDataService] API request failed:', response.status);
-        return null;
+        const errorText = await response.text();
+        console.error('[YouTubeDataService] API request failed:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorText
+        });
+        
+        // Check for common errors
+        if (response.status === 403) {
+          // Parse error for more specific message
+          let errorMessage = 'YouTube API error: ';
+          try {
+            const errorJson = JSON.parse(errorText);
+            const errorReason = errorJson?.error?.errors?.[0]?.reason;
+            
+            if (errorReason === 'quotaExceeded') {
+              errorMessage = 'YouTube API daily quota exceeded. Try again tomorrow or use a different API key.';
+            } else if (errorReason === 'forbidden' || errorReason === 'accessNotConfigured') {
+              errorMessage = 'YouTube Data API v3 is not enabled. Enable it in Google Cloud Console for your project.';
+            } else if (errorReason === 'keyInvalid') {
+              errorMessage = 'Invalid YouTube API key. Check your YOUTUBE_API_KEY in .env.local';
+            } else {
+              errorMessage = `YouTube API access forbidden: ${errorJson?.error?.message || 'Check API key and permissions'}`;
+            }
+          } catch {
+            errorMessage = 'YouTube API access forbidden. Check your API key and ensure YouTube Data API v3 is enabled.';
+          }
+          throw new Error(errorMessage);
+        } else if (response.status === 404) {
+          throw new Error('Video not found or is private/deleted');
+        } else if (response.status === 400) {
+          throw new Error('Invalid YouTube URL or video ID');
+        } else {
+          throw new Error(`YouTube API error: ${response.status} - ${errorText.substring(0, 200)}`);
+        }
       }
 
       const data = await response.json();
       
       if (!data.items || data.items.length === 0) {
         console.error('[YouTubeDataService] No video found with ID:', videoId);
-        return null;
+        throw new Error('Video not found or is private/deleted');
       }
+
+      console.log('[YouTubeDataService] Successfully fetched video details:', {
+        title: data.items[0].snippet.title,
+        duration: data.items[0].contentDetails?.duration
+      });
 
       return data.items[0];
     } catch (error) {
       console.error('[YouTubeDataService] Error fetching video details:', error);
-      return null;
+      throw error; // Re-throw to handle in scrapeYouTube
     }
   }
 
@@ -131,6 +185,12 @@ class YouTubeDataService {
                         thumbnails.high?.url || 
                         thumbnails.medium?.url || 
                         thumbnails.default?.url;
+    
+    console.log('[YouTubeDataService] Thumbnail extraction:', {
+      hasThumnails: !!thumbnails,
+      availableQualities: Object.keys(thumbnails || {}),
+      selectedUrl: thumbnailUrl
+    });
 
     // Extract hashtags and mentions from description
     const description = videoDetails.snippet.description || '';
@@ -140,26 +200,32 @@ class YouTubeDataService {
     // Try to extract chapters from description
     const chapters = this.extractChaptersFromDescription(description, duration);
 
-    // Attempt to fetch transcript
+    // For long-form videos, defer transcript fetching to avoid timeout
     let transcript: string | null = null;
-    try {
-      // First try direct caption fetch
-      transcript = await YouTubeCaptionService.fetchTranscriptDirect(videoDetails.id);
-      
-      if (!transcript) {
-        // Try alternative caption extraction
-        const captionData = {
-          captions: {
-            captionTracks: [{
-              url: `https://www.youtube.com/api/timedtext?v=${videoDetails.id}&lang=en`,
-              languageCode: 'en'
-            }]
-          }
-        };
-        transcript = await YouTubeCaptionService.extractCaptions(captionData);
+    const shouldFetchTranscriptNow = videoType !== 'long-form' || (duration !== undefined && duration < 600); // Only fetch for videos < 10 minutes
+    
+    if (shouldFetchTranscriptNow) {
+      try {
+        // First try direct caption fetch
+        transcript = await YouTubeCaptionService.fetchTranscriptDirect(videoDetails.id);
+        
+        if (!transcript) {
+          // Try alternative caption extraction
+          const captionData = {
+            captions: {
+              captionTracks: [{
+                url: `https://www.youtube.com/api/timedtext?v=${videoDetails.id}&lang=en`,
+                languageCode: 'en'
+              }]
+            }
+          };
+          transcript = await YouTubeCaptionService.extractCaptions(captionData);
+        }
+      } catch (error) {
+        console.error('[YouTubeDataService] Error fetching transcript:', error);
       }
-    } catch (error) {
-      console.error('[YouTubeDataService] Error fetching transcript:', error);
+    } else {
+      console.log('[YouTubeDataService] Deferring transcript fetch for long-form video');
     }
 
     const scrapedContent: ScrapedContent = {
@@ -167,7 +233,7 @@ class YouTubeDataService {
       url: videoUrl,
       title: videoDetails.snippet.title,
       description: description,
-      transcript: transcript,
+      transcript: transcript || undefined,
       viewCount: parseInt(videoDetails.statistics?.viewCount || '0'),
       likeCount: parseInt(videoDetails.statistics?.likeCount || '0'),
       commentCount: parseInt(videoDetails.statistics?.commentCount || '0'),
@@ -184,7 +250,9 @@ class YouTubeDataService {
       isLiveStream: false, // Would need additional API call to determine
       rawData: {
         source: 'youtube-data-api',
-        apiResponse: videoDetails
+        apiResponse: videoDetails,
+        transcriptDeferred: !shouldFetchTranscriptNow,
+        videoId: videoDetails.id
       }
     };
 
@@ -195,32 +263,43 @@ class YouTubeDataService {
    * Main method to scrape YouTube content using official API
    */
   async scrapeYouTube(url: string): Promise<ScrapedContent | null> {
-    console.log('[YouTubeDataService] Starting YouTube scrape via official API');
+    console.log('[YouTubeDataService] Starting YouTube scrape via official API for URL:', url);
 
-    // Extract video ID
-    const videoId = this.extractVideoId(url);
-    if (!videoId) {
-      console.error('[YouTubeDataService] Could not extract video ID from URL:', url);
-      return null;
+    try {
+      // Extract video ID
+      const videoId = this.extractVideoId(url);
+      if (!videoId) {
+        console.error('[YouTubeDataService] Could not extract video ID from URL:', url);
+        throw new Error('Invalid YouTube URL - could not extract video ID');
+      }
+
+      console.log('[YouTubeDataService] Extracted video ID:', videoId);
+
+      // Fetch video details
+      const videoDetails = await this.fetchVideoDetails(videoId);
+      if (!videoDetails) {
+        throw new Error('Failed to fetch video details');
+      }
+
+      // Convert to ScrapedContent format
+      const scrapedContent = await this.convertToScrapedContent(videoDetails, url);
+      
+      console.log('[YouTubeDataService] Scrape completed successfully:', {
+        title: scrapedContent.title,
+        hasTranscript: !!scrapedContent.transcript,
+        videoType: scrapedContent.videoType,
+        duration: scrapedContent.duration
+      });
+
+      return scrapedContent;
+    } catch (error: any) {
+      console.error('[YouTubeDataService] Scrape failed:', {
+        url,
+        error: error.message,
+        stack: error.stack
+      });
+      throw error; // Re-throw to be handled by the API route
     }
-
-    // Fetch video details
-    const videoDetails = await this.fetchVideoDetails(videoId);
-    if (!videoDetails) {
-      return null;
-    }
-
-    // Convert to ScrapedContent format
-    const scrapedContent = await this.convertToScrapedContent(videoDetails, url);
-    
-    console.log('[YouTubeDataService] Scrape completed successfully:', {
-      title: scrapedContent.title,
-      hasTranscript: !!scrapedContent.transcript,
-      videoType: scrapedContent.videoType,
-      duration: scrapedContent.duration
-    });
-
-    return scrapedContent;
   }
 
   /**

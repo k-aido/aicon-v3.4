@@ -74,7 +74,13 @@ export async function GET(
     }
 
     // Get user authentication
-    const userId = await getUserIdFromCookies();
+    let userId = await getUserIdFromCookies();
+    
+    // In demo mode, use the demo user ID
+    if (!userId && process.env.NEXT_PUBLIC_DEMO_MODE === 'true') {
+      userId = process.env.NEXT_PUBLIC_DEMO_USER_ID || '550e8400-e29b-41d4-a716-446655440002';
+    }
+    
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -109,6 +115,38 @@ export async function GET(
       });
     }
 
+    // Handle YouTube API scraping that might be stuck
+    if (scrapeRecord.status === 'processing' && scrapeRecord.scraping_method === 'youtube_api' && !scrapeRecord.apify_run_id) {
+      // Check if it's been processing for too long (more than 30 seconds for YouTube API)
+      const processingTime = Date.now() - new Date(scrapeRecord.updated_at).getTime();
+      if (processingTime > 30000) {
+        // Mark as failed if stuck
+        await supabase
+          .from('content_scrapes')
+          .update({
+            status: 'failed',
+            error_message: 'YouTube API scraping timed out',
+            updated_at: new Date().toISOString(),
+            completed_at: new Date().toISOString()
+          })
+          .eq('id', scrapeId);
+          
+        return NextResponse.json({
+          scrapeId: scrapeRecord.id,
+          status: 'failed',
+          error: 'YouTube API scraping timed out'
+        });
+      }
+      
+      // Still processing, return current status
+      return NextResponse.json({
+        scrapeId: scrapeRecord.id,
+        status: 'processing',
+        message: 'YouTube API scraping in progress...',
+        method: 'youtube_api'
+      });
+    }
+
     // If still processing, check Apify status
     if (scrapeRecord.status === 'processing' && scrapeRecord.apify_run_id) {
       try {
@@ -120,7 +158,7 @@ export async function GET(
         // If Apify run completed successfully
         if (runStatus.status === 'SUCCEEDED') {
           // Get the scraped results
-          const scrapedContent = await apifyService.getRunResults(scrapeRecord.apify_run_id);
+          let scrapedContent = await apifyService.getRunResults(scrapeRecord.apify_run_id);
 
           if (scrapedContent) {
             // Log what we got from the scraper
@@ -196,7 +234,7 @@ export async function GET(
                 // Log what data we have for debugging
                 console.log(`[Status API] YouTube data available:`, {
                   hasUrl: !!scrapedContent.url,
-                  hasVideoId: !!videoId,
+                  hasVideoId: !!scrapedContent.rawData?.videoId,
                   hasCaptions: !!scrapedContent.rawData?.captions,
                   captionTracks: scrapedContent.rawData?.captions?.captionTracks?.length || 0
                 });
@@ -381,7 +419,8 @@ export async function GET(
               hashtags: scrapedContent.hashtags,
               mentions: scrapedContent.mentions,
               topComments: scrapedContent.comments?.slice(0, 10),
-              transcriptionSource: scrapedContent.transcript ? 'scraper' : (transcriptionText ? 'captions' : null)
+              transcriptionSource: scrapedContent.transcript ? 'scraper' : (transcriptionText ? 'captions' : null),
+              transcriptDeferred: scrapedContent.rawData?.transcriptDeferred || false
             };
             
             // Log transcript info

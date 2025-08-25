@@ -58,8 +58,9 @@ export const SocialMediaModal: React.FC<SocialMediaModalProps> = ({ isOpen, onCl
   };
 
   // Poll for scraping completion
-  const pollForCompletion = async (elementId: string, scrapeId: string, projectId: string) => {
-    const maxAttempts = 60; // 60 seconds timeout
+  const pollForCompletion = async (elementId: string, scrapeId: string, projectId: string, platform?: string) => {
+    // YouTube videos need much longer timeout due to transcription
+    const maxAttempts = platform === 'youtube' ? 300 : 120; // 5 minutes for YouTube, 2 minutes for others
     let attempts = 0;
 
     const checkStatus = async () => {
@@ -105,17 +106,28 @@ export const SocialMediaModal: React.FC<SocialMediaModalProps> = ({ isOpen, onCl
             const currentElement = elements.find(el => el.id === elementId);
             const currentMetadata = (currentElement as any)?.metadata || {};
             
-            // Transform the analysis data to match the expected format in AnalysisPanel
+            console.log('[SocialMediaModal] Analysis completed:', {
+              elementId,
+              analysisData,
+              hasAnalysis: !!analysisData.analysis
+            });
+            
+            // Transform the analysis data to match the expected format
             const transformedAnalysis = {
+              // Keep the original field names for ContentElement display
+              hook_analysis: analysisData.analysis?.hook_analysis || '',
+              body_analysis: analysisData.analysis?.body_analysis || '',
+              cta_analysis: analysisData.analysis?.cta_analysis || '',
+              key_topics: analysisData.analysis?.key_topics || [],
+              engagement_tactics: analysisData.analysis?.engagement_tactics || [],
+              sentiment: analysisData.analysis?.sentiment || 'positive',
+              complexity: analysisData.analysis?.complexity || 'moderate',
+              // Also add the AnalysisPanel format for compatibility
               hook: analysisData.analysis?.hook_analysis || '',
               hookScore: 8, // Default score
               contentStrategy: analysisData.analysis?.body_analysis || '',
               keyInsights: analysisData.analysis?.key_topics || [],
-              improvements: analysisData.analysis?.engagement_tactics || [],
-              sentiment: analysisData.analysis?.sentiment || 'positive',
-              complexity: analysisData.analysis?.complexity || 'moderate',
-              // Also include the raw analysis for compatibility
-              ...analysisData.analysis
+              improvements: analysisData.analysis?.engagement_tactics || []
             };
             
             updateElement(elementId, {
@@ -129,10 +141,21 @@ export const SocialMediaModal: React.FC<SocialMediaModalProps> = ({ isOpen, onCl
               }
             });
           } else {
+            const errorData = await analyzeResponse.json().catch(() => ({ error: 'Unknown error' }));
+            console.error('[SocialMediaModal] Analysis failed:', {
+              status: analyzeResponse.status,
+              error: errorData.error,
+              scrapeId
+            });
+            
+            const currentElement = elements.find(el => el.id === elementId);
+            const currentMetadata = (currentElement as any)?.metadata || {};
+            
             updateElement(elementId, {
               metadata: {
+                ...currentMetadata,
                 isAnalyzing: false,
-                analysisError: 'Failed to analyze content'
+                analysisError: errorData.error || 'Failed to analyze content'
               }
             });
           }
@@ -223,7 +246,7 @@ export const SocialMediaModal: React.FC<SocialMediaModalProps> = ({ isOpen, onCl
         x: centerX - 160, // Center the element (width/2)
         y: centerY - 140, // Center the element (height/2)
         width: 320,
-        height: 280,
+        height: 280,  // Standard height for content cards
         title: `Loading ${detectedPlatform} content...`,
         url: url.trim(),
         platform: detectedPlatform,
@@ -266,7 +289,7 @@ export const SocialMediaModal: React.FC<SocialMediaModalProps> = ({ isOpen, onCl
 
       const result = await response.json();
       
-      // Start polling for scrape completion
+      // Handle scraping result
       if (result.success && result.scrapeId) {
         // Update element with scrape ID
         const canvasStore = useCanvasStore.getState();
@@ -278,8 +301,98 @@ export const SocialMediaModal: React.FC<SocialMediaModalProps> = ({ isOpen, onCl
           }
         });
         
-        // Start polling in the background
-        pollForCompletion(newElement.id, result.scrapeId, projectId);
+        // Only start polling if status is processing
+        if (result.status === 'processing') {
+          // Start polling in the background
+          pollForCompletion(newElement.id, result.scrapeId, projectId, detectedPlatform);
+        } else if (result.status === 'completed') {
+          // If already completed (e.g., YouTube API immediate response), fetch the data
+          console.log('[SocialMediaModal] Scraping completed immediately, fetching data');
+          
+          // Fetch the completed data
+          try {
+            const statusResponse = await fetch(`/api/content/scrape/${result.scrapeId}/status`);
+            const statusData = await statusResponse.json();
+            
+            if (statusData.processedData) {
+              canvasStore.updateElement(newElement.id, {
+                title: statusData.processedData.title || 'Content loaded',
+                thumbnail: statusData.processedData.thumbnailUrl || newElement.thumbnail,
+                metadata: {
+                  ...newElement.metadata,
+                  isScraping: false,
+                  isAnalyzing: true, // Set to analyzing while we fetch analysis
+                  processedData: statusData.processedData,
+                  scrapeId: result.scrapeId
+                }
+              });
+              
+              // Now start analysis for immediately completed content
+              console.log('[SocialMediaModal] Starting analysis for immediately completed content');
+              try {
+                const analyzeResponse = await fetch(`/api/content/analyze/${result.scrapeId}`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ addToLibrary: true })
+                });
+                
+                if (analyzeResponse.ok) {
+                  const analysisData = await analyzeResponse.json();
+                  console.log('[SocialMediaModal] Immediate analysis completed:', analysisData);
+                  
+                  // Transform the analysis data to match the expected format
+                  const transformedAnalysis = {
+                    // Keep the original field names for ContentElement display
+                    hook_analysis: analysisData.analysis?.hook_analysis || '',
+                    body_analysis: analysisData.analysis?.body_analysis || '',
+                    cta_analysis: analysisData.analysis?.cta_analysis || '',
+                    key_topics: analysisData.analysis?.key_topics || [],
+                    engagement_tactics: analysisData.analysis?.engagement_tactics || [],
+                    sentiment: analysisData.analysis?.sentiment || 'positive',
+                    complexity: analysisData.analysis?.complexity || 'moderate',
+                    // Also add the AnalysisPanel format for compatibility
+                    hook: analysisData.analysis?.hook_analysis || '',
+                    hookScore: 8, // Default score
+                    contentStrategy: analysisData.analysis?.body_analysis || '',
+                    keyInsights: analysisData.analysis?.key_topics || [],
+                    improvements: analysisData.analysis?.engagement_tactics || []
+                  };
+                  
+                  canvasStore.updateElement(newElement.id, {
+                    metadata: {
+                      ...newElement.metadata,
+                      isAnalyzing: false,
+                      isAnalyzed: true,
+                      analysis: transformedAnalysis,
+                      processedData: statusData.processedData,
+                      scrapeId: result.scrapeId
+                    }
+                  });
+                } else {
+                  console.error('[SocialMediaModal] Immediate analysis failed');
+                  canvasStore.updateElement(newElement.id, {
+                    metadata: {
+                      ...newElement.metadata,
+                      isAnalyzing: false,
+                      analysisError: 'Failed to analyze content'
+                    }
+                  });
+                }
+              } catch (error) {
+                console.error('[SocialMediaModal] Error analyzing immediately completed content:', error);
+                canvasStore.updateElement(newElement.id, {
+                  metadata: {
+                    ...newElement.metadata,
+                    isAnalyzing: false,
+                    analysisError: 'Failed to analyze content'
+                  }
+                });
+              }
+            }
+          } catch (error) {
+            console.error('[SocialMediaModal] Error fetching completed data:', error);
+          }
+        }
       }
 
       // Close modal and reset

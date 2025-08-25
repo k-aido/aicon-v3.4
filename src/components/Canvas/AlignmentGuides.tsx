@@ -20,8 +20,8 @@ interface AlignmentGuidesProps {
 export const AlignmentGuides: React.FC<AlignmentGuidesProps> = ({ guides, viewport }) => {
   const { isDarkMode } = useDarkMode();
   
-  // Guide color based on theme - using a distinct color from connections
-  const guideColor = isDarkMode ? '#9333ea' : '#7c3aed'; // Purple color for guides to distinguish from orange connections
+  // Guide color based on theme - using a subtle gray color
+  const guideColor = isDarkMode ? '#6b7280' : '#9ca3af'; // Gray color for subtle guides
   
   if (guides.length === 0) return null;
 
@@ -32,8 +32,7 @@ export const AlignmentGuides: React.FC<AlignmentGuidesProps> = ({ guides, viewpo
         width: '100%', 
         height: '100%', 
         overflow: 'visible',
-        zIndex: 5, // Lower z-index, behind connections
-        mixBlendMode: 'multiply' // Blend mode to prevent color overlap
+        zIndex: 1 // Behind connections
       }}
     >
       {guides.map((guide, index) => {
@@ -47,8 +46,8 @@ export const AlignmentGuides: React.FC<AlignmentGuidesProps> = ({ guides, viewpo
               y2={guide.end * viewport.zoom + viewport.y}
               stroke={guideColor}
               strokeWidth="1"
-              strokeDasharray="3,3"
-              opacity="0.6"
+              strokeDasharray="2,4"
+              opacity="0.3"
             />
           );
         } else {
@@ -61,8 +60,8 @@ export const AlignmentGuides: React.FC<AlignmentGuidesProps> = ({ guides, viewpo
               y2={guide.position * viewport.zoom + viewport.y}
               stroke={guideColor}
               strokeWidth="1"
-              strokeDasharray="3,3"
-              opacity="0.6"
+              strokeDasharray="2,4"
+              opacity="0.3"
             />
           );
         }

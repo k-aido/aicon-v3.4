@@ -57,6 +57,14 @@ export interface ScrapedContent {
     likes: number;
     timestamp: string;
   }>;
+  // YouTube-specific fields
+  videoType?: 'short' | 'regular' | 'long-form';
+  chapters?: Array<{
+    title: string;
+    startTime: number;
+    endTime?: number;
+  }>;
+  isLiveStream?: boolean;
   rawData?: any;
 }
 
@@ -366,32 +374,62 @@ class ApifyService {
         }
       }
       
-      // Extract video URL from streamingData formats
+      // Extract video URL from multiple possible sources
       let videoUrl = null;
-      if (data.streamingData?.formats && Array.isArray(data.streamingData.formats)) {
+      
+      // First check direct video URL fields
+      if (data.videoUrl || data.video_url) {
+        videoUrl = data.videoUrl || data.video_url;
+        console.log('[ApifyService] Found direct video URL');
+      }
+      // Then check streamingData formats
+      else if (data.streamingData?.formats && Array.isArray(data.streamingData.formats)) {
         console.log('[ApifyService] Processing streamingData formats:', data.streamingData.formats.length, 'formats found');
         
-        // Find the best format with both video and audio
-        const mp4Format = data.streamingData.formats.find((f: any) => 
-          f.mimeType?.includes('video/mp4') && f.url
+        // Find the best format - prefer ones with both video and audio
+        const formats = data.streamingData.formats;
+        
+        // First try to find MP4 format with video and audio
+        let selectedFormat = formats.find((f: any) => 
+          f.mimeType?.includes('video/mp4') && 
+          f.url && 
+          f.hasVideo !== false && 
+          f.hasAudio !== false
         );
         
-        if (mp4Format) {
-          videoUrl = mp4Format.url;
-          console.log('[ApifyService] Found YouTube video URL from streamingData');
-        } else {
-          console.log('[ApifyService] No suitable MP4 format with URL found in streamingData');
-          // Log what formats are available
-          data.streamingData.formats.slice(0, 3).forEach((f: any, i: number) => {
-            console.log(`[ApifyService] Format ${i}:`, {
-              mimeType: f.mimeType,
-              hasUrl: !!f.url,
-              itag: f.itag
-            });
-          });
+        // If not found, try any format with URL
+        if (!selectedFormat) {
+          selectedFormat = formats.find((f: any) => f.url);
         }
-      } else {
-        console.log('[ApifyService] No streamingData.formats found in YouTube data');
+        
+        if (selectedFormat) {
+          videoUrl = selectedFormat.url;
+          console.log('[ApifyService] Found YouTube video URL from format:', {
+            mimeType: selectedFormat.mimeType,
+            quality: selectedFormat.quality,
+            qualityLabel: selectedFormat.qualityLabel
+          });
+        } else {
+          console.log('[ApifyService] No suitable format with URL found in streamingData');
+        }
+      }
+      // Check adaptive formats as fallback
+      else if (data.streamingData?.adaptiveFormats && Array.isArray(data.streamingData.adaptiveFormats)) {
+        console.log('[ApifyService] Checking adaptive formats');
+        const videoFormat = data.streamingData.adaptiveFormats.find((f: any) => 
+          f.mimeType?.includes('video/') && f.url
+        );
+        if (videoFormat) {
+          videoUrl = videoFormat.url;
+          console.log('[ApifyService] Found video URL from adaptive formats');
+        }
+      }
+      
+      // Fallback: construct standard YouTube URL
+      if (!videoUrl && (data.videoId || data.video_id || data.id)) {
+        const vidId = data.videoId || data.video_id || data.id;
+        videoUrl = `https://youtube.com/watch?v=${vidId}`;
+        console.log('[ApifyService] Using standard YouTube URL as fallback');
       }
       
       console.log('[ApifyService] YouTube thumbnail extraction:', {
@@ -411,27 +449,47 @@ class ApifyService {
       // Extract transcript from captions if available
       let transcript = null;
       
-      // Check if captions is a simple string/text (some scrapers return it directly)
+      // Check multiple possible transcript fields
       if (typeof data.captions === 'string' && data.captions.length > 0) {
         transcript = data.captions;
         console.log('[ApifyService] Found caption text directly in data.captions');
       }
-      // Check for caption tracks structure
+      else if (data.subtitles && typeof data.subtitles === 'string') {
+        transcript = data.subtitles;
+        console.log('[ApifyService] Found transcript in subtitles field');
+      }
+      else if (data.transcript && typeof data.transcript === 'string') {
+        transcript = data.transcript;
+        console.log('[ApifyService] Found transcript in transcript field');
+      }
+      else if (data.transcription && typeof data.transcription === 'string') {
+        transcript = data.transcription;
+        console.log('[ApifyService] Found transcript in transcription field');
+      }
+      // Check for structured caption data
       else if (data.captions?.captionTracks && Array.isArray(data.captions.captionTracks)) {
-        // YouTube captions are available but need to be fetched from the caption URL
-        const englishCaptions = data.captions.captionTracks.find((track: any) => 
-          track.language_code === 'en' || track.vss_id === '.en'
+        // Store caption track info for later processing
+        const englishTrack = data.captions.captionTracks.find((track: any) => 
+          track.languageCode === 'en' || 
+          track.language_code === 'en' || 
+          track.vss_id === '.en' ||
+          track.language?.toLowerCase() === 'english'
         );
-        if (englishCaptions) {
-          console.log('[ApifyService] YouTube captions available (would need separate fetch)');
-          // Note: To actually get the captions, we'd need to fetch from englishCaptions.base_url
-          // This would require additional processing
+        if (englishTrack) {
+          console.log('[ApifyService] YouTube captions available, storing URL for processing');
+          // Store the caption URL in a special field for later processing
+          data._captionUrl = englishTrack.url || englishTrack.baseUrl || englishTrack.base_url;
         }
       }
-      // Check for other possible caption fields
-      else if (data.subtitles || data.transcript || data.transcription) {
-        transcript = data.subtitles || data.transcript || data.transcription;
-        console.log('[ApifyService] Found transcript in alternative field');
+      // Check if subtitles is an array (some formats return array of subtitle objects)
+      else if (Array.isArray(data.subtitles) && data.subtitles.length > 0) {
+        const englishSub = data.subtitles.find((sub: any) => 
+          sub.language === 'en' || sub.lang === 'en' || sub.language_code === 'en'
+        );
+        if (englishSub && englishSub.text) {
+          transcript = englishSub.text;
+          console.log('[ApifyService] Found transcript in subtitles array');
+        }
       }
       
       normalized = {
@@ -443,7 +501,7 @@ class ApifyService {
         viewCount: parseInt(data.viewCount || data.view_count || data.views || data.statistics?.viewCount || 0),
         likeCount: parseInt(data.likeCount || data.like_count || data.likes || data.statistics?.likeCount || 0),
         commentCount: parseInt(data.commentCount || data.comment_count || data.comments || data.statistics?.commentCount || 0),
-        duration: data.duration || data.contentDetails?.duration,
+        duration: this.parseDuration(data.duration || data.contentDetails?.duration || data.videoDetails?.lengthSeconds),
         uploadDate: data.uploadDate || data.upload_date || data.publishedAt || data.published_at || data.snippet?.publishedAt,
         authorName: data.channelName || data.channel_name || data.channelTitle || data.channel_title || data.channel?.title || data.channel?.name || data.snippet?.channelTitle,
         authorId: data.channelId || data.channel_id || data.channel?.id || data.snippet?.channelId,
@@ -578,6 +636,79 @@ class ApifyService {
   }
 
   /**
+   * Parse duration from various formats to seconds
+   */
+  private parseDuration(duration: any): number | undefined {
+    if (!duration) return undefined;
+    
+    // If already a number (seconds), return it
+    if (typeof duration === 'number') return duration;
+    if (typeof duration === 'string' && !isNaN(parseInt(duration))) return parseInt(duration);
+    
+    // Parse ISO 8601 duration (PT1H2M10S)
+    if (typeof duration === 'string' && duration.startsWith('PT')) {
+      const match = duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+      if (match) {
+        const hours = parseInt(match[1] || '0');
+        const minutes = parseInt(match[2] || '0');
+        const seconds = parseInt(match[3] || '0');
+        return hours * 3600 + minutes * 60 + seconds;
+      }
+    }
+    
+    return undefined;
+  }
+
+  /**
+   * Extract chapters from YouTube video data
+   */
+  private extractChapters(data: any): Array<{ title: string; startTime: number; endTime?: number }> {
+    const chapters: Array<{ title: string; startTime: number; endTime?: number }> = [];
+    
+    // Check for chapters in video data
+    if (data.chapters && Array.isArray(data.chapters)) {
+      return data.chapters.map((chapter: any, index: number, arr: any[]) => ({
+        title: chapter.title || chapter.name || `Chapter ${index + 1}`,
+        startTime: chapter.startTime || chapter.start_time || 0,
+        endTime: chapter.endTime || chapter.end_time || (arr[index + 1]?.startTime || arr[index + 1]?.start_time)
+      }));
+    }
+    
+    // Try to extract chapters from description (timestamps)
+    if (data.description) {
+      const lines = data.description.split('\n');
+      const timestampRegex = /(\d{1,2}:)?\d{1,2}:\d{2}\s*[-–—]?\s*(.+)/;
+      
+      for (const line of lines) {
+        const match = line.match(timestampRegex);
+        if (match) {
+          const timeStr = match[0].split(/[-–—]/)[0].trim();
+          const title = match[2].trim();
+          const timeParts = timeStr.split(':').map(p => parseInt(p));
+          
+          let seconds = 0;
+          if (timeParts.length === 3) {
+            seconds = timeParts[0] * 3600 + timeParts[1] * 60 + timeParts[2];
+          } else if (timeParts.length === 2) {
+            seconds = timeParts[0] * 60 + timeParts[1];
+          }
+          
+          if (title && seconds >= 0) {
+            chapters.push({ title, startTime: seconds });
+          }
+        }
+      }
+      
+      // Add end times
+      for (let i = 0; i < chapters.length - 1; i++) {
+        chapters[i].endTime = chapters[i + 1].startTime;
+      }
+    }
+    
+    return chapters;
+  }
+
+  /**
    * Validate URL for supported platforms
    */
   static validateUrl(url: string): { isValid: boolean; platform?: 'youtube' | 'instagram' | 'tiktok'; error?: string } {
@@ -585,15 +716,17 @@ class ApifyService {
       const urlObj = new URL(url);
       const hostname = urlObj.hostname.toLowerCase();
 
-      // YouTube validation - support regular videos, shorts, and youtu.be links
+      // YouTube validation - support regular videos, shorts, playlists, and youtu.be links
       if (hostname.includes('youtube.com') || hostname.includes('youtu.be')) {
         // Check for various YouTube URL formats
         const videoIdMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
         const shortsMatch = url.match(/youtube\.com\/shorts\/([a-zA-Z0-9_-]+)/);
+        const playlistMatch = url.match(/youtube\.com\/.*[?&]list=([a-zA-Z0-9_-]+)/);
         const channelMatch = url.match(/youtube\.com\/(@[a-zA-Z0-9_-]+|channel\/[a-zA-Z0-9_-]+|c\/[a-zA-Z0-9_-]+)/);
+        const embedMatch = url.match(/youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/);
         
-        if (!videoIdMatch && !shortsMatch && !channelMatch) {
-          return { isValid: false, error: 'Invalid YouTube URL. Please provide a video, shorts, or channel URL.' };
+        if (!videoIdMatch && !shortsMatch && !playlistMatch && !channelMatch && !embedMatch) {
+          return { isValid: false, error: 'Invalid YouTube URL. Please provide a video, shorts, playlist, or channel URL.' };
         }
         return { isValid: true, platform: 'youtube' };
       }

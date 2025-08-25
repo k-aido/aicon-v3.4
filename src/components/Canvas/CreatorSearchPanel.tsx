@@ -32,7 +32,7 @@ const FILTERS = [
 const PLATFORMS = [
   { id: 'instagram', name: 'Instagram', active: true },
   { id: 'tiktok', name: 'TikTok', active: true },
-  { id: 'youtube', name: 'YouTube', active: false, comingSoon: true }
+  { id: 'youtube', name: 'YouTube', active: true }
 ];
 
 export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
@@ -144,10 +144,10 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
 
     try {
       const searchRequest: CreatorSearchRequest = {
-        platform: selectedPlatform as 'instagram' | 'tiktok',
+        platform: selectedPlatform as 'instagram' | 'tiktok' | 'youtube',
         searchQuery: searchInput.trim(),
         filter: selectedFilter,
-        contentType: 'reels', // Always search for reels
+        contentType: selectedPlatform === 'youtube' ? 'videos' : 'reels', // YouTube uses 'videos'
         userId: '5cedf725-3b56-4764-bbe0-0117a0ba7f49'
       };
 

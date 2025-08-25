@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { ChevronDown, Check } from 'lucide-react';
 import { LLM_MODELS, MODEL_CATEGORIES, getModelsByCategory, LLMModel } from '@/constants/llmModels';
 import { getProviderLogo } from '@/components/icons/AIProviderLogos';
+import { useDarkMode } from '@/contexts/DarkModeContext';
 
 interface ModelSelectorProps {
   selectedModel: string;
@@ -21,6 +22,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const modelsByCategory = getModelsByCategory();
   const currentModel = LLM_MODELS.find(m => m.id === selectedModel) || LLM_MODELS[0];
+  const { isDarkMode } = useDarkMode();
 
   // Calculate dropdown position (drop up)
   useEffect(() => {
@@ -65,7 +67,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
           setIsOpen(!isOpen);
         }}
         onMouseDown={(e) => e.stopPropagation()}
-        className={`w-[136px] h-[25px] flex items-center justify-between gap-2 px-2 py-0 bg-gray-100 rounded-lg text-xs border border-gray-200 outline-none hover:bg-gray-50 focus:border-[#c96442] cursor-pointer ${className}`}
+        className={`h-8 flex items-center justify-between gap-2 px-3 border ${isDarkMode ? 'border-gray-600 hover:bg-gray-700 text-white' : 'border-gray-300 hover:bg-gray-100 text-gray-600'} rounded-lg text-sm outline-none cursor-pointer transition-colors ${className}`}
         data-no-drag
         style={{ pointerEvents: 'auto' }}
       >
@@ -79,16 +81,16 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
               })}
             </>
           )}
-          <span className="text-gray-700 whitespace-nowrap truncate">{currentModel.name}</span>
+          <span className={`whitespace-nowrap truncate ${isDarkMode ? 'text-white' : 'text-gray-700'}`}>{currentModel.name}</span>
         </div>
-        <ChevronDown className={`w-3 h-3 text-gray-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`w-3 h-3 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'} transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {/* Dropdown rendered with portal */}
       {isOpen && typeof document !== 'undefined' && createPortal(
         <div 
           ref={dropdownRef}
-          className="fixed w-[180px] bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden max-h-80 overflow-y-auto"
+          className={`fixed w-[180px] ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-xl border overflow-hidden max-h-80 overflow-y-auto`}
           style={{
             top: `${dropdownPosition.top}px`,
             left: `${dropdownPosition.left}px`,
@@ -99,8 +101,8 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
         >
           {(['low-cost', 'high-reasoning'] as const).map((category) => (
             <div key={category}>
-              <div className="px-3 py-1.5 bg-gray-50 border-b border-gray-200">
-                <h3 className="text-xs font-semibold text-gray-600">
+              <div className={`px-3 py-1.5 ${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'} border-b`}>
+                <h3 className={`text-xs font-semibold ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
                   {MODEL_CATEGORIES[category]}
                 </h3>
               </div>
@@ -108,7 +110,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                 <button
                   key={model.id}
                   onClick={() => handleSelect(model)}
-                  className="w-full px-2 py-1 flex items-center justify-between"
+                  className={`w-full px-2 py-1 flex items-center justify-between ${isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-50'}`}
                 >
                   <div className="flex items-center gap-2 flex-1 min-w-0">
                     {/* Logo */}
@@ -120,7 +122,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                     </div>
                     
                     {/* Model name */}
-                    <span className="text-xs text-gray-700 font-medium whitespace-nowrap">{model.name}</span>
+                    <span className={`text-xs font-medium whitespace-nowrap ${isDarkMode ? 'text-white' : 'text-gray-700'}`}>{model.name}</span>
                   </div>
                   
                   {selectedModel === model.id && (

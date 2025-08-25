@@ -17,9 +17,11 @@ const supabase = createClient(
   }
 );
 
-// Credit cost for scraping and analysis combined
-const SCRAPE_AND_ANALYSIS_CREDITS = 50;
-const YOUTUBE_API_CREDITS = 0; // Free within quota
+// Credit cost for scraping and analysis
+const SCRAPE_CREDITS = {
+  youtube_api: 0, // Free within quota
+  apify: 50       // Original cost
+};
 
 // Helper function to get user ID from cookies
 async function getUserIdFromCookies(): Promise<string | null> {
@@ -75,23 +77,22 @@ export async function POST(request: NextRequest) {
 
     // Determine scraping method and credits needed
     let scrapingMethod: 'youtube_api' | 'apify' = 'apify';
-    let creditsNeeded = SCRAPE_AND_ANALYSIS_CREDITS;
+    let creditsNeeded = SCRAPE_CREDITS.apify;
 
     // For YouTube, prefer free API if available
     if (validation.platform === 'youtube' && preferFreeMethod) {
       const youtubeService = new YouTubeDataService();
       if (youtubeService.isConfigured()) {
         scrapingMethod = 'youtube_api';
-        creditsNeeded = YOUTUBE_API_CREDITS;
-        console.log('[Scrape API] Using YouTube Data API (free method)');
+        creditsNeeded = SCRAPE_CREDITS.youtube_api;
+        console.log('[Scrape API v2] Using YouTube Data API (free method)');
       } else {
-        console.log('[Scrape API] YouTube API not configured, falling back to Apify');
+        console.log('[Scrape API v2] YouTube API not configured, falling back to Apify');
       }
     }
 
-    // Only check credits if using paid method
+    // Get user's account for credit check (only if using paid method)
     if (creditsNeeded > 0) {
-      // Get user's account for credit check
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select('account_id')
@@ -119,7 +120,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           { 
             error: `Insufficient credits. You need ${creditsNeeded} credits but only have ${totalCredits} available.`,
-            creditsNeeded: creditsNeeded,
+            creditsNeeded,
             creditsAvailable: totalCredits
           },
           { status: 402 }
@@ -127,18 +128,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Normalize URL for cache checking (handle reel vs post URLs)
-    let normalizedUrl = url;
-    if (url.includes('instagram.com')) {
-      // Extract the post/reel ID and normalize to post URL format
-      const reelMatch = url.match(/\/reel\/([^\/\?]+)/);
-      const postMatch = url.match(/\/p\/([^\/\?]+)/);
-      const contentId = reelMatch?.[1] || postMatch?.[1];
-      if (contentId) {
-        normalizedUrl = `https://www.instagram.com/p/${contentId}/`;
-      }
-    }
-    
     // Check if URL has been scraped recently (within 24 hours)
     const oneDayAgo = new Date();
     oneDayAgo.setHours(oneDayAgo.getHours() - 24);
@@ -146,25 +135,23 @@ export async function POST(request: NextRequest) {
     const { data: existingScrape } = await supabase
       .from('content_scrapes')
       .select('*')
-      .or(`url.eq.${url},url.eq.${normalizedUrl}`)
+      .eq('url', url)
       .eq('project_id', projectId)
       .eq('status', 'completed')
       .gte('created_at', oneDayAgo.toISOString())
       .single();
 
     if (existingScrape) {
-      console.log('[Scrape API] Using cached scrape:', existingScrape.id);
+      console.log('[Scrape API v2] Using cached scrape:', existingScrape.id);
       return NextResponse.json({
         success: true,
         scrapeId: existingScrape.id,
         status: 'completed',
         cached: true,
+        method: existingScrape.scraping_method || 'unknown',
         message: 'Using recently scraped content'
       });
     }
-
-    // Don't deduct credits here - we'll deduct them after successful completion
-    // Credits will be deducted in the status check endpoint when scraping completes
 
     // Create scrape record
     const { data: scrapeRecord, error: scrapeError } = await supabase
@@ -175,42 +162,17 @@ export async function POST(request: NextRequest) {
         url: url,
         platform: validation.platform,
         status: 'pending',
-        scraping_method: scrapingMethod // Track which method is being used
+        scraping_method: scrapingMethod // Track which method was used
       })
       .select()
       .single();
 
     if (scrapeError || !scrapeRecord) {
-      console.error('[Scrape API] Error creating scrape record:', scrapeError);
+      console.error('[Scrape API v2] Error creating scrape record:', scrapeError);
       return NextResponse.json({ error: 'Failed to create scrape record' }, { status: 500 });
     }
 
-    // Initialize Apify service
-    let apifyService: ApifyService;
-    try {
-      apifyService = new ApifyService();
-    } catch (error) {
-      console.error('[Scrape API] Apify service initialization failed:', error);
-      
-      // Update scrape record with error
-      await supabase
-        .from('content_scrapes')
-        .update({
-          status: 'failed',
-          error_message: 'Apify service not configured. Please add APIFY_API_TOKEN to environment variables.',
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', scrapeRecord.id);
-      
-      return NextResponse.json({
-        success: false,
-        scrapeId: scrapeRecord.id,
-        status: 'failed',
-        error: 'Scraping service not configured'
-      });
-    }
-
-    // Handle YouTube with free API if configured
+    // Handle YouTube with free API
     if (validation.platform === 'youtube' && scrapingMethod === 'youtube_api') {
       try {
         const youtubeService = new YouTubeDataService();
@@ -244,7 +206,7 @@ export async function POST(request: NextRequest) {
             })
             .eq('id', scrapeRecord.id);
 
-          console.log(`[Scrape API] YouTube API scraping completed for ${scrapeRecord.id}`);
+          console.log(`[Scrape API v2] YouTube API scraping completed for ${scrapeRecord.id}`);
 
           return NextResponse.json({
             success: true,
@@ -257,12 +219,12 @@ export async function POST(request: NextRequest) {
           throw new Error('Failed to fetch YouTube data');
         }
       } catch (error: any) {
-        console.error('[Scrape API] YouTube API scraping failed:', error);
+        console.error('[Scrape API v2] YouTube API scraping failed:', error);
         
         // Fall back to Apify
-        console.log('[Scrape API] Falling back to Apify method');
+        console.log('[Scrape API v2] Falling back to Apify method');
         scrapingMethod = 'apify';
-        creditsNeeded = SCRAPE_AND_ANALYSIS_CREDITS;
+        creditsNeeded = SCRAPE_CREDITS.apify;
         
         // Update the scraping method in the record
         await supabase
@@ -274,9 +236,34 @@ export async function POST(request: NextRequest) {
           .eq('id', scrapeRecord.id);
       }
     }
-    
+
     // Use Apify for non-YouTube or as fallback
     if (scrapingMethod === 'apify') {
+      // Initialize Apify service
+      let apifyService: ApifyService;
+      try {
+        apifyService = new ApifyService();
+      } catch (error) {
+        console.error('[Scrape API v2] Apify service initialization failed:', error);
+        
+        // Update scrape record with error
+        await supabase
+          .from('content_scrapes')
+          .update({
+            status: 'failed',
+            error_message: 'Apify service not configured. Please add APIFY_API_TOKEN to environment variables.',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', scrapeRecord.id);
+        
+        return NextResponse.json({
+          success: false,
+          scrapeId: scrapeRecord.id,
+          status: 'failed',
+          error: 'Scraping service not configured'
+        });
+      }
+
       // Start scraping based on platform
       try {
         let runResult: { runId: string };
@@ -295,56 +282,54 @@ export async function POST(request: NextRequest) {
             throw new Error(`Unsupported platform: ${validation.platform}`);
         }
 
-      // Update scrape record with Apify run ID
-      await supabase
-        .from('content_scrapes')
-        .update({
+        // Update scrape record with Apify run ID
+        await supabase
+          .from('content_scrapes')
+          .update({
+            status: 'processing',
+            apify_run_id: runResult.runId,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', scrapeRecord.id);
+
+        console.log(`[Scrape API v2] Started Apify scraping for ${validation.platform}:`, {
+          scrapeId: scrapeRecord.id,
+          runId: runResult.runId,
+          url
+        });
+
+        return NextResponse.json({
+          success: true,
+          scrapeId: scrapeRecord.id,
           status: 'processing',
-          apify_run_id: runResult.runId,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', scrapeRecord.id);
+          method: 'apify',
+          message: 'Scraping started. Check status endpoint for updates.'
+        });
 
-      console.log(`[Scrape API] Started scraping ${validation.platform} content:`, {
-        scrapeId: scrapeRecord.id,
-        runId: runResult.runId,
-        url
-      });
-
-      return NextResponse.json({
-        success: true,
-        scrapeId: scrapeRecord.id,
-        status: 'processing',
-        message: 'Scraping started. Check status endpoint for updates.'
-      });
-
-    } catch (scrapeError: any) {
-        console.error('[Scrape API] Apify scraping failed:', scrapeError);
-      
-      // Update scrape record with error
-      await supabase
-        .from('content_scrapes')
-        .update({
+      } catch (scrapeError: any) {
+        console.error('[Scrape API v2] Apify scraping failed:', scrapeError);
+        
+        // Update scrape record with error
+        await supabase
+          .from('content_scrapes')
+          .update({
+            status: 'failed',
+            error_message: scrapeError.message || 'Failed to start scraping',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', scrapeRecord.id);
+        
+        return NextResponse.json({
+          success: false,
+          scrapeId: scrapeRecord.id,
           status: 'failed',
-          error_message: scrapeError.message || 'Failed to start scraping',
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', scrapeRecord.id);
-      
-      return NextResponse.json({
-        success: false,
-        scrapeId: scrapeRecord.id,
-        status: 'failed',
-        error: scrapeError.message || 'Failed to start scraping'
-      });
+          error: scrapeError.message || 'Failed to start scraping'
+        });
       }
     }
 
   } catch (error: any) {
-    console.error('[Scrape API] Unexpected error:', error);
-    return NextResponse.json(
-      { error: error.message || 'Failed to process scrape request' },
-      { status: 500 }
-    );
+    console.error('[Scrape API v2] Unexpected error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

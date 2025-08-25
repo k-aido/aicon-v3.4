@@ -221,8 +221,8 @@ export const SocialMediaAnalysisPanel: React.FC<SocialMediaAnalysisPanelProps> =
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto">
           <div className="p-4 space-y-4">
-            {/* Debug Info */}
-            <div className="p-2 bg-yellow-900/20 border border-yellow-700/50 rounded text-xs">
+            {/* Debug Info - Hidden */}
+            {/* <div className="p-2 bg-yellow-900/20 border border-yellow-700/50 rounded text-xs">
               <p className="font-mono text-yellow-400">
                 <span className="font-semibold">Debug ID:</span> {element.id}
               </p>
@@ -239,7 +239,7 @@ export const SocialMediaAnalysisPanel: React.FC<SocialMediaAnalysisPanelProps> =
               <p className="font-mono text-yellow-400">
                 <span className="font-semibold">Has Analysis:</span> {analysis ? 'Yes' : 'No'}
               </p>
-            </div>
+            </div> */}
           
             {/* Thumbnail and Title */}
             <div>

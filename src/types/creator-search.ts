@@ -159,7 +159,6 @@ export interface ApifyTikTokVideo {
   id: string;
   text?: string;
   createTime?: number;
-  videoUrl?: string;
   authorMeta?: {
     id: string;
     name?: string;
@@ -198,6 +197,11 @@ export interface ApifyTikTokVideo {
     name?: string;
     title?: string;
   }>;
+  // Additional thumbnail URL fields that might be present
+  coverMediumUrl?: string;
+  coverLargeUrl?: string;
+  coverUrl?: string;
+  thumbnailUrl?: string;
 }
 
 export interface ApifyTikTokProfile {

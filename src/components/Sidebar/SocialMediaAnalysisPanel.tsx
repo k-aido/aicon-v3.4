@@ -8,7 +8,6 @@ import {
 import { formatNumber, formatDuration, formatRelativeTime, formatCalendarDate, calculateEngagementRate } from '@/utils/formatters';
 import { createBrowserClient } from '@/lib/supabase/client';
 import { getProxiedImageUrl, getPlatformPlaceholder } from '@/utils/imageProxy';
-import { HighlightedTranscript } from './HighlightedTranscript';
 // Define types locally since social-media types file doesn't exist
 interface ExtendedContentAnalysis {
   id?: string;
@@ -74,25 +73,6 @@ const PlatformIcon: React.FC<{ platform: string; size?: number }> = ({ platform,
     default:
       return null;
   }
-};
-
-// Helper function to extract transcript sections from analysis
-const getTranscriptSections = (analysis: ExtendedContentAnalysis | null) => {
-  if (!analysis) return [];
-  
-  const sections = [];
-  
-  // For now, we'll use the analysis data to identify sections
-  // In the future, this should come from the backend with actual transcript segments
-  if (analysis.hook_sections) {
-    sections.push(...(analysis.hook_sections as any[]));
-  } else if (analysis.sections) {
-    // If we have pre-defined sections from the backend
-    return analysis.sections as any[];
-  }
-  
-  // Return empty array to trigger the fallback parsing in HighlightedTranscript
-  return [];
 };
 
 
@@ -365,27 +345,67 @@ export const SocialMediaAnalysisPanel: React.FC<SocialMediaAnalysisPanelProps> =
             )}
 
 
-          {/* Highlighted Transcript Section */}
-          {(analysis || contentPiece?.transcript || element.metadata?.processedData?.transcript) && !isProcessing && !isFailed && (
-            <div className="border-l-4 border-purple-500 bg-gray-800/50 rounded-r-lg p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <FileText className="w-5 h-5 text-purple-400" />
-                <h4 className="text-sm font-semibold uppercase tracking-wider text-purple-400">
-                  Content Structure
-                </h4>
-              </div>
-              <div className="max-h-96 overflow-y-auto">
-                <HighlightedTranscript
-                  sections={getTranscriptSections(analysis)}
-                  fullTranscript={
-                    analysis?.transcript || 
-                    contentPiece?.transcript || 
-                    element.metadata?.processedData?.transcript || 
-                    ''
-                  }
-                />
-              </div>
-            </div>
+          {/* AI Analysis Results */}
+          {analysis && !isProcessing && !isFailed && (
+            <>
+              {/* Hook Analysis */}
+              {analysis.hook_analysis && (
+                <div className="border-l-4 border-green-500 bg-gray-800/50 rounded-r-lg p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Target className="w-5 h-5 text-red-400" />
+                    <h4 className="text-sm font-semibold uppercase tracking-wider">Hook</h4>
+                  </div>
+                  <p className="text-xs text-gray-300 mb-3 whitespace-pre-wrap">
+                    {stripMarkdown(typeof analysis.hook_analysis === 'string' ? analysis.hook_analysis : analysis.hook_analysis.primary_hook || 'No hook analysis available')}
+                  </p>
+                </div>
+              )}
+
+              {/* Body Analysis */}
+              {analysis.body_analysis && (
+                <div className="border-l-4 border-yellow-500 bg-gray-800/50 rounded-r-lg p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Folder className="w-5 h-5 text-yellow-400" />
+                    <h4 className="text-sm font-semibold uppercase tracking-wider">Body</h4>
+                  </div>
+                  <p className="text-xs text-gray-300 mb-3 whitespace-pre-wrap">
+                    {stripMarkdown(typeof analysis.body_analysis === 'string' ? analysis.body_analysis : 'No body analysis available')}
+                  </p>
+                </div>
+              )}
+
+              {/* Call to Action */}
+              {analysis.cta_analysis && (
+                <div className="border-l-4 border-red-500 bg-gray-800/50 rounded-r-lg p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Flag className="w-5 h-5 text-red-400" />
+                    <h4 className="text-sm font-semibold uppercase tracking-wider text-red-400">
+                      Call to Action
+                    </h4>
+                  </div>
+                  <p className="text-xs text-gray-300 mb-3 whitespace-pre-wrap">
+                    {stripMarkdown(typeof analysis.cta_analysis === 'string' ? analysis.cta_analysis : analysis.cta_analysis.primary_cta || 'No CTA analysis available')}
+                  </p>
+                </div>
+              )}
+
+              {/* Video Transcript */}
+              {(analysis.transcript || contentPiece?.transcript || element.metadata?.processedData?.transcript) && (
+                <div className="border-l-4 border-purple-500 bg-gray-800/50 rounded-r-lg p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <FileText className="w-5 h-5 text-purple-400" />
+                    <h4 className="text-sm font-semibold uppercase tracking-wider text-purple-400">
+                      Video Transcript
+                    </h4>
+                  </div>
+                  <div className="max-h-96 overflow-y-auto">
+                    <p className="text-xs text-gray-300 whitespace-pre-wrap" style={{ fontFamily: 'Noto Sans, sans-serif', fontWeight: 400 }}>
+                      {analysis.transcript || contentPiece?.transcript || element.metadata?.processedData?.transcript || 'No transcript available for this content.'}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </>
           )}
 
 

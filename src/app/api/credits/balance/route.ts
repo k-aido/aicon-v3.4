@@ -35,7 +35,13 @@ async function getUserIdFromCookies(): Promise<string | null> {
 export async function GET(request: NextRequest) {
   try {
     // Get user authentication
-    const userId = await getUserIdFromCookies();
+    let userId = await getUserIdFromCookies();
+    
+    // In demo mode, use the demo user ID
+    if (!userId && process.env.NEXT_PUBLIC_DEMO_MODE === 'true') {
+      userId = process.env.NEXT_PUBLIC_DEMO_USER_ID || '550e8400-e29b-41d4-a716-446655440002';
+    }
+    
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

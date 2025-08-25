@@ -86,11 +86,11 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({ onAddElement, view
         id: stringId,
         type: 'chat' as const,
         position: { x: x, y: y },
-        dimensions: { width: 600, height: 700 },
+        dimensions: { width: 480, height: 640 },
         x: x,        // Legacy compatibility
         y: y,        // Legacy compatibility
-        width: 600,  // Legacy compatibility
-        height: 700, // Legacy compatibility
+        width: 480,  // Legacy compatibility
+        height: 640, // Legacy compatibility
         title: 'New AI Chat',
         messages: [],
         conversations: [],
@@ -113,11 +113,11 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({ onAddElement, view
         id: stringId,
         type: 'folder' as const,
         position: { x: x, y: y },
-        dimensions: { width: 350, height: 250 },
+        dimensions: { width: 360, height: 240 },
         x: x,
         y: y,
-        width: 350,
-        height: 250,
+        width: 360,
+        height: 240,
         name: 'New Profile Collection',
         description: '',
         color: tool.color,

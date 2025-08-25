@@ -1,9 +1,9 @@
 // Creator search types
 export interface CreatorSearchRequest {
-  platform: 'instagram' | 'tiktok';
+  platform: 'instagram' | 'tiktok' | 'youtube';
   searchQuery: string;
   filter: 'top_likes' | 'top_comments' | 'top_views' | 'most_recent';
-  contentType?: 'all' | 'reels' | 'posts';
+  contentType?: 'all' | 'reels' | 'posts' | 'videos' | 'shorts';
   userId: string;
 }
 

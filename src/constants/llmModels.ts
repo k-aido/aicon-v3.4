@@ -50,12 +50,12 @@ export const LLM_MODELS: LLMModel[] = [
   },
   {
     id: 'claude-opus-4',
-    name: 'Claude Opus 4',
+    name: 'Claude Opus 4.1',
     provider: 'anthropic',
     color: 'text-purple-400',
     model: 'claude-opus-4',
     category: 'high-reasoning',
-    description: 'Premium reasoning tier'
+    description: 'Premium reasoning tier - Latest version'
   }
 ];
 

@@ -89,8 +89,8 @@ const ProfileCollectionContainer: React.FC<ProfileCollectionContainerProps> = ({
       const deltaX = e.clientX - resizeStart.x;
       const deltaY = e.clientY - resizeStart.y;
       
-      const newWidth = Math.max(300, resizeStart.width + deltaX);
-      const newHeight = Math.max(200, resizeStart.height + deltaY);
+      const newWidth = Math.max(360, resizeStart.width + deltaX);
+      const newHeight = Math.max(240, resizeStart.height + deltaY);
       
       onUpdate(element.id, {
         dimensions: { width: newWidth, height: newHeight },
@@ -218,8 +218,8 @@ const ProfileCollectionContainer: React.FC<ProfileCollectionContainerProps> = ({
             </div>
           </div>
         ) : element.contentItems && element.contentItems.length > 0 ? (
-          <div className="p-3 h-full overflow-y-auto">
-            <div className="grid grid-cols-2 gap-3 auto-rows-max">
+          <div className="p-2 h-full overflow-y-auto">
+            <div className="grid grid-cols-2 gap-2 auto-rows-max">
               {element.contentItems.map((item) => (
                 <ProfileContentCard
                   key={item.id}
@@ -230,8 +230,8 @@ const ProfileCollectionContainer: React.FC<ProfileCollectionContainerProps> = ({
               ))}
             </div>
             {/* Add more content button */}
-            <div className="mt-3 pt-3 border-t border-gray-100">
-              <button className="w-full py-2 px-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors flex items-center justify-center gap-2 text-sm text-gray-600">
+            <div className="mt-2 pt-2 border-t border-gray-100">
+              <button className="w-full py-1.5 px-2 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors flex items-center justify-center gap-1 text-xs text-gray-600">
                 <Plus className="w-4 h-4" />
                 Load more content
               </button>

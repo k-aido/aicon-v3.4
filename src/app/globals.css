@@ -44,6 +44,44 @@ body.dragging * {
   cursor: grabbing !important;
 }
 
+/* Performance optimizations for high zoom levels */
+.canvas-high-zoom {
+  /* Force GPU acceleration */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  perspective: 1000;
+  -webkit-perspective: 1000;
+  
+  /* Optimize rendering */
+  will-change: transform;
+  contain: layout style paint;
+}
+
+.canvas-high-zoom .canvas-element {
+  /* Reduce paint operations */
+  will-change: transform;
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+}
+
+/* Disable expensive effects during drag at high zoom */
+.canvas-high-zoom.dragging .canvas-element {
+  /* Disable shadows and transitions during drag */
+  box-shadow: none !important;
+  transition: none !important;
+  filter: none !important;
+}
+
+/* Optimize images at high zoom */
+.canvas-high-zoom img {
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
 /* Resize handle styles */
 .resize-handle {
   pointer-events: auto !important;
@@ -94,4 +132,41 @@ body.dragging * {
 .scrollbar-thin {
   scrollbar-width: thin;
   scrollbar-color: rgb(75 85 99) rgb(31 41 55);
+}
+
+/* Canvas performance optimizations */
+[data-canvas="true"] {
+  /* Optimize rendering performance */
+  will-change: transform;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Optimize canvas background for GPU acceleration */
+.canvas-background {
+  will-change: background-position;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+/* Prevent text selection during canvas drag */
+.canvas-background.cursor-grabbing,
+.canvas-background.cursor-grabbing * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+}
+
+/* Optimize element transforms during drag */
+.dragging [data-element-container] {
+  will-change: transform;
+  pointer-events: none;
+}
+
+/* Reduce repaints on elements */
+[data-element-container] {
+  contain: layout style;
+  transform: translateZ(0);
 }

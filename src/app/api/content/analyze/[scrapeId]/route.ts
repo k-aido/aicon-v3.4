@@ -60,7 +60,13 @@ export async function POST(
     }
 
     // Get user authentication
-    const userId = await getUserIdFromCookies();
+    let userId = await getUserIdFromCookies();
+    
+    // In demo mode, use the demo user ID
+    if (!userId && process.env.NEXT_PUBLIC_DEMO_MODE === 'true') {
+      userId = process.env.NEXT_PUBLIC_DEMO_USER_ID || '550e8400-e29b-41d4-a716-446655440002';
+    }
+    
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -158,12 +164,37 @@ export async function POST(
     const contentData = scrapeRecord.processed_data || {};
     const platform = scrapeRecord.platform;
     
+    // Log the content data structure for debugging
+    console.log('[Analyze API] Content data structure:', {
+      hasTitle: !!contentData.title,
+      hasDescription: !!contentData.description,
+      hasTranscript: !!contentData.transcript,
+      transcriptLength: contentData.transcript?.length || 0,
+      platform: platform,
+      scrapeId: scrapeId,
+      transcriptDeferred: contentData.transcriptDeferred
+    });
+    
+    // For YouTube videos with deferred transcripts, provide a meaningful message
+    if (platform === 'youtube' && contentData.transcriptDeferred) {
+      console.log('[Analyze API] YouTube transcript was deferred during scraping');
+      // Continue with analysis anyway - the AI can work with title, description, and metrics
+    }
+    
     // Perform AI analysis
     let analysisResult;
-    if (openai) {
-      analysisResult = await performAIAnalysis(contentData, platform);
-    } else {
-      analysisResult = createMockAnalysis(contentData, platform);
+    try {
+      if (openai) {
+        analysisResult = await performAIAnalysis(contentData, platform);
+      } else {
+        analysisResult = createMockAnalysis(contentData, platform);
+      }
+    } catch (analysisError: any) {
+      console.error('[Analyze API] Analysis failed:', analysisError);
+      return NextResponse.json(
+        { error: `Analysis failed: ${analysisError.message}` },
+        { status: 500 }
+      );
     }
 
     // For mock scrapes, return analysis directly without storing
@@ -280,11 +311,17 @@ async function performAIAnalysis(contentData: any, platform: string) {
     return createMockAnalysis(contentData, platform);
   }
 
+  // For YouTube videos without transcripts, enhance the prompt
+  const hasTranscript = contentData.transcript && contentData.transcript.length > 0;
+  const transcriptNote = platform === 'youtube' && !hasTranscript 
+    ? '\nNote: Transcript not available. Please analyze based on title, description, and metrics.' 
+    : '';
+
   const prompt = `Analyze this ${platform} content for marketing insights:
 
 Title: ${contentData.title || 'N/A'}
 Description/Caption: ${contentData.description || contentData.caption || 'N/A'}
-Transcript: ${contentData.transcript?.substring(0, 2000) || 'N/A'}
+Transcript: ${contentData.transcript?.substring(0, 2000) || 'Not available'}${transcriptNote}
 Metrics: ${JSON.stringify(contentData.metrics || {})}
 Duration: ${contentData.duration ? `${contentData.duration} seconds` : 'N/A'}
 Hashtags: ${contentData.hashtags?.join(', ') || 'N/A'}

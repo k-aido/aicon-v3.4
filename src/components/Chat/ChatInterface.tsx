@@ -1,7 +1,7 @@
 // PRIMARY CHAT INTERFACE - DO NOT MODIFY
 // Has working conversation sidebar and is the main chat component used on canvas
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Loader2, MessageSquare, Plus, ArrowUp, X, ChevronLeft, ChevronRight, Trash2, AtSign, Copy, Check } from 'lucide-react';
+import { Loader2, MessageSquare, Plus, ArrowUp, X, ChevronLeft, ChevronRight, Trash2, AtSign, Copy, Check, PanelLeftClose, PanelLeft } from 'lucide-react';
 import { ChatElement, Connection, ContentElement, Message, CanvasElement } from '@/types';
 import { useChatStore } from '@/store/chatStore';
 import { createBrowserClient } from '@/lib/supabase/client';
@@ -558,9 +558,57 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       const contentAnalysis = await fetchContentAnalysis(allConnectedContentIds);
       console.log('[ChatInterface] Fetched content analysis for', contentAnalysis.length, 'pieces of content:', contentAnalysis);
       
+      // Helper function to optimize connected content for smaller payload
+      const optimizeConnectedContent = (content: any[]) => {
+        return content.map(item => {
+          if (item.type === 'text') {
+            // For text elements, send a summary if content is too long
+            return {
+              type: 'text',
+              id: item.id,
+              title: item.title,
+              content: item.content?.length > 500 
+                ? item.content.substring(0, 500) + '...' 
+                : item.content,
+              isTruncated: item.content?.length > 500
+            };
+          }
+          
+          // For content elements, send only essential data
+          return {
+            type: 'content',
+            id: item.id,
+            title: item.title,
+            platform: item.platform,
+            url: item.url,
+            creatorHandle: item.creatorHandle || item.creatorUsername || '@unknown',
+            // Only send essential analysis, not full transcripts
+            keyPoints: item.analysis?.keyTopics?.slice(0, 3) || [],
+            hookAnalysis: item.analysis?.hookAnalysis?.substring(0, 200) || '',
+            summary: item.analysis?.summary || 
+                     item.description?.substring(0, 200) || 
+                     item.transcript?.substring(0, 200) || 
+                     'No summary available',
+            metrics: {
+              views: item.metrics?.views || 0,
+              likes: item.metrics?.likes || 0,
+              engagement: item.metrics?.engagement || 0
+            },
+            // Flag to indicate if full analysis is available
+            hasFullAnalysis: !!(item.analysis && Object.keys(item.analysis).length > 0),
+            // Remove heavy data - these are commented out to show what we're NOT sending
+            // transcript: item.transcript,
+            // subtitles: item.subtitles,
+            // fullAnalysis: item.analysis,
+            // rawData: item.processedData,
+          };
+        });
+      };
+
       // Prepare connected text elements first
       const textDataForChat = connectedTextElements.map((textEl: any) => ({
         type: 'text',
+        id: textEl.id,
         title: textEl.title || 'Untitled Text',
         content: textEl.content || '',
         lastModified: textEl.lastModified || textEl.updatedAt || new Date()
@@ -573,6 +621,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         
         return {
           type: 'content',
+          id: content.id,
           title: content.title || 'Untitled Content',
           platform: content.platform,
           url: content.url,
@@ -599,10 +648,16 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       // Combine text elements first, then content elements
       const allConnectedData = [...textDataForChat, ...connectedContentForChat];
       
-      console.log('[ChatInterface] Sending to API with content:', {
+      // Optimize the content before sending
+      const optimizedContent = optimizeConnectedContent(allConnectedData);
+      
+      console.log('[ChatInterface] Sending to API with optimized content:', {
         textElements: textDataForChat.length,
         contentElements: connectedContentForChat.length,
-        total: allConnectedData.length
+        total: optimizedContent.length,
+        originalSize: JSON.stringify(allConnectedData).length,
+        optimizedSize: JSON.stringify(optimizedContent).length,
+        reduction: `${Math.round((1 - JSON.stringify(optimizedContent).length / JSON.stringify(allConnectedData).length) * 100)}%`
       });
 
       // Call real AI API with thread and element IDs for database persistence
@@ -615,7 +670,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
             content: (index === updatedMessages.length - 1 && displayText) ? messageText : m.content 
           })),
           model: selectedModel,
-          connectedContent: allConnectedData, // Pass text and analyzed content for RAG
+          connectedContent: optimizedContent, // Pass optimized content for smaller payload
           threadId: currentActiveConversationId, // Pass thread ID for database persistence
           chatElementId: element.id.toString(), // Pass chat element ID
           chatInterfaceId: chatInterfaceId, // Pass the actual chat interface UUID
@@ -623,7 +678,11 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         })
       });
 
-      if (!response.ok) {
+      // Check if this is a streaming response
+      const contentType = response.headers.get('content-type');
+      const isStreaming = contentType?.includes('text/event-stream');
+
+      if (!response.ok && !isStreaming) {
         const errorData = await response.json();
         
         // Handle insufficient credits specifically
@@ -643,7 +702,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
           }
           
           // Remove the user message from the conversation since it wasn't processed
-          const revertedConversations = workingConversations.map(conv =>
+          // Get fresh conversations from store
+          const currentConvs = getConversations(Number(element.id));
+          const revertedConversations = currentConvs.map(conv =>
             conv.id === currentActiveConversationId
               ? { ...conv, messages: currentMessages } // Revert to original messages
               : conv
@@ -659,61 +720,156 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
       }
 
-      const data = await response.json();
-      
-      if (data.error) {
-        throw new Error(data.error);
-      }
+      let aiContent = '';
+      let usage = {};
+      let newChatInterfaceId: string | null = null;
 
-      // Store usage information if available
-      const usage = data.usage || {};
-      console.log('[ChatInterface] Token usage:', usage);
-      
-      // If we got a new chat interface ID back, store it
-      if (data.chatInterfaceId && !chatInterfaceId) {
-        setChatInterfaceId(data.chatInterfaceId);
-        const localStorageKey = `chat-interface-${elementIdStr}`;
-        localStorage.setItem(localStorageKey, data.chatInterfaceId);
-        console.log('[ChatInterface] Stored new interface ID:', data.chatInterfaceId, 'with key:', localStorageKey);
-      }
-      
-      // Trigger credit update since a chat message was sent successfully
-      window.dispatchEvent(new Event('creditUpdate'));
-
-      const aiMessage = {
-        id: Date.now() + 1,
-        role: 'assistant' as const,
-        content: data.content || 'No response received',
-        timestamp: new Date(),
-        model: selectedModel,
-        usage: usage // Store token usage
-      };
-      
-      const finalMessages = [...updatedMessages, aiMessage];
-      
-      // Add AI message and update title if needed
-      const finalConversations = workingConversations.map(conv => 
-        conv.id === currentActiveConversationId 
-          ? { 
-              ...conv, 
-              messages: finalMessages,
-              lastMessageAt: new Date(),
-              title: conv.title === 'New Chat' ? generateConversationTitle([userMessage]) : conv.title
+      if (isStreaming) {
+        // Handle streaming response
+        if (!response.body) throw new Error('No response body');
+        
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        
+        // Create assistant message immediately
+        const assistantId = Date.now() + 1;
+        const aiMessage = {
+          id: assistantId,
+          role: 'assistant' as const,
+          content: '',
+          timestamp: new Date(),
+          model: selectedModel,
+          usage: {}
+        };
+        
+        // Add assistant message to UI
+        const updatedWithAssistant = [...updatedMessages, aiMessage];
+        // Get fresh conversations from store
+        const currentConversations = getConversations(Number(element.id));
+        setStoreConversations(Number(element.id), 
+          currentConversations.map(conv =>
+            conv.id === currentActiveConversationId
+              ? { ...conv, messages: updatedWithAssistant, lastMessageAt: new Date() }
+              : conv
+          )
+        );
+        
+        // Stream the response
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          
+          const chunk = decoder.decode(value);
+          const lines = chunk.split('\n');
+          
+          for (const line of lines) {
+            if (line.startsWith('data: ') && line !== 'data: [DONE]') {
+              try {
+                const data = JSON.parse(line.slice(6));
+                if (data.content) {
+                  aiContent += data.content;
+                  
+                  // Update the assistant message in real-time
+                  // Get fresh conversations from store to avoid stale data
+                  const currentConversations = getConversations(Number(element.id));
+                  setStoreConversations(Number(element.id), 
+                    currentConversations.map(conv =>
+                      conv.id === currentActiveConversationId
+                        ? {
+                            ...conv,
+                            messages: conv.messages.map(msg =>
+                              msg.id === assistantId
+                                ? { ...msg, content: aiContent }
+                                : msg
+                            )
+                          }
+                        : conv
+                    )
+                  );
+                  
+                  // Scroll to bottom as content streams in
+                  setTimeout(scrollToBottom, 10);
+                }
+                
+                if (data.error) {
+                  throw new Error(data.error);
+                }
+              } catch (e) {
+                // Ignore parsing errors for incomplete chunks
+                console.error('Parse error:', e);
+              }
             }
-          : conv
-      );
-      
-      console.log('[ChatInterface] Setting final conversations:', {
-        elementId: element.id,
-        conversationId: currentActiveConversationId,
-        messageCount: finalMessages.length,
-        finalConversations: finalConversations.map(c => ({ id: c.id, messageCount: c.messages.length }))
-      });
-      
-      setStoreConversations(Number(element.id), finalConversations);
-      
-      // Scroll to bottom after AI response
-      setTimeout(scrollToBottom, 100);
+          }
+        }
+        
+        // Trigger credit update since a chat message was sent successfully
+        window.dispatchEvent(new Event('creditUpdate'));
+      } else {
+        // Handle regular response
+        const data = await response.json();
+        
+        if (data.error) {
+          throw new Error(data.error);
+        }
+
+        // Store usage information if available
+        usage = data.usage || {};
+        console.log('[ChatInterface] Token usage:', usage);
+        
+        aiContent = data.content || 'No response received';
+        newChatInterfaceId = data.chatInterfaceId;
+        
+        // If we got a new chat interface ID back, store it
+        if (newChatInterfaceId && !chatInterfaceId) {
+          setChatInterfaceId(newChatInterfaceId);
+          const localStorageKey = `chat-interface-${elementIdStr}`;
+          localStorage.setItem(localStorageKey, newChatInterfaceId);
+          console.log('[ChatInterface] Stored new interface ID:', newChatInterfaceId, 'with key:', localStorageKey);
+        }
+        
+        // Trigger credit update since a chat message was sent successfully
+        window.dispatchEvent(new Event('creditUpdate'));
+      }
+
+      // For non-streaming responses, update the conversation with the AI message
+      if (!isStreaming) {
+        const aiMessage = {
+          id: Date.now() + 1,
+          role: 'assistant' as const,
+          content: aiContent,
+          timestamp: new Date(),
+          model: selectedModel,
+          usage: usage // Store token usage
+        };
+        
+        const finalMessages = [...updatedMessages, aiMessage];
+        
+        // Add AI message and update title if needed
+        // Get fresh conversations from store
+        const currentConversations = getConversations(Number(element.id));
+        const finalConversations = currentConversations.map(conv => 
+          conv.id === currentActiveConversationId 
+            ? { 
+                ...conv, 
+                messages: finalMessages,
+                lastMessageAt: new Date(),
+                title: conv.title === 'New Chat' ? generateConversationTitle([userMessage]) : conv.title
+              }
+            : conv
+        );
+        
+        console.log('[ChatInterface] Setting final conversations:', {
+          elementId: element.id,
+          conversationId: currentActiveConversationId,
+          messageCount: finalMessages.length,
+          finalConversations: finalConversations.map(c => ({ id: c.id, messageCount: c.messages.length }))
+        });
+        
+        setStoreConversations(Number(element.id), finalConversations);
+        
+        // Scroll to bottom after AI response
+        setTimeout(scrollToBottom, 100);
+      }
     } catch (error) {
       console.error('Error calling AI API:', error);
       let errorContent = error instanceof Error ? error.message : 'Unknown error';
@@ -727,7 +883,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
           timestamp: new Date()
         };
         const finalMessages = [...updatedMessages, errorMessage];
-        const finalConversations = workingConversations.map(conv => 
+        // Get fresh conversations from store
+        const errorConversations = getConversations(Number(element.id));
+        const finalConversations = errorConversations.map(conv => 
           conv.id === currentActiveConversationId 
             ? { 
                 ...conv, 
@@ -802,29 +960,71 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   };
 
   return (
-    <div className={`h-full flex overflow-hidden rounded-lg ${isDarkMode ? 'bg-gray-900' : 'bg-white'}`}>
+    <div className={`h-full flex overflow-hidden rounded-lg ${isDarkMode ? '' : 'bg-white'}`} style={isDarkMode ? { backgroundColor: '#262625' } : {}}>
       {/* Collapsible Conversation Sidebar */}
-      <div className={`${isSidebarOpen ? `w-60 border-r ${isDarkMode ? 'border-gray-700' : 'border-gray-300'}` : 'w-0'} transition-all duration-300 overflow-hidden`} style={{ backgroundColor: isDarkMode ? '#202a37' : '#f3f4f6' }}>
-        <div className="w-60 h-full flex flex-col">
+      <div className={`${isSidebarOpen ? 'w-56' : 'w-16'} transition-all duration-300 overflow-hidden border-r ${isDarkMode ? 'border-gray-700' : 'border-gray-300'}`} style={{ backgroundColor: isDarkMode ? '#201e1d' : '#f3f4f6' }}>
+        <div className={`${isSidebarOpen ? 'w-56' : 'w-16'} h-full flex flex-col`}>
+          {/* Header Section */}
+          <div className={`${isSidebarOpen ? 'px-3' : 'px-0'} py-3 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-300'} flex items-center ${isSidebarOpen ? '' : 'justify-center'}`} style={{ height: '57px' }}>
+            {isSidebarOpen ? (
+              <div className="flex items-center gap-2 w-full">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsSidebarOpen(false);
+                  }}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  className={`p-1 ${isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-200'} rounded transition-colors`}
+                  data-no-drag
+                >
+                  <PanelLeftClose className={`w-5 h-5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
+                </button>
+                <span className={`font-medium whitespace-nowrap ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Creative Strategist</span>
+              </div>
+            ) : (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsSidebarOpen(true);
+                }}
+                onMouseDown={(e) => e.stopPropagation()}
+                className={`p-1 ${isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-200'} rounded transition-colors`}
+                data-no-drag
+              >
+                <PanelLeft className={`w-5 h-5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
+              </button>
+            )}
+          </div>
+          
           {/* New Chat Button */}
-          <div className={`p-3 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-300'}`}>
+          <div className={`${isSidebarOpen ? 'p-2' : 'flex justify-center py-2'}`}>
             <button 
               onClick={(e) => {
                 e.stopPropagation();
                 createNewConversation();
               }}
               onMouseDown={(e) => e.stopPropagation()}
-              className="w-full px-3 py-2 bg-[#c96442] hover:bg-[#b85432] text-white rounded-lg flex items-center justify-center gap-2 transition-colors"
+              className={`${isSidebarOpen ? 'w-full px-3 py-1.5' : 'w-10 h-10 p-0'} hover:bg-[#c96442]/20 ${isDarkMode ? 'text-gray-200' : 'text-black'} rounded-lg flex items-center ${isSidebarOpen ? 'gap-3' : 'justify-center'} transition-all`}
               data-no-drag
             >
-              <Plus className="w-4 h-4" />
-              New Chat
+              <div className="w-6 h-6 bg-[#c96442] rounded-full flex items-center justify-center flex-shrink-0">
+                <Plus className="w-4 h-4 text-white" />
+              </div>
+              {isSidebarOpen && <span className="text-sm leading-7">New chat</span>}
             </button>
           </div>
           
           {/* Conversations List */}
-          <div className="flex-1 overflow-y-auto p-3 space-y-2">
-            {conversations.map(conv => (
+          <div className="flex-1 overflow-y-auto">
+            {isSidebarOpen && (
+              <div className="px-3 pt-3 pb-2">
+                <div className="text-sm text-gray-500">
+                  <span>Previous Convos</span>
+                </div>
+              </div>
+            )}
+            <div className={`${isSidebarOpen ? 'px-3' : 'mt-2'} space-y-2`}>
+              {isSidebarOpen ? conversations.map(conv => (
               <div key={conv.id} className="group relative">
                 <div
                   onClick={(e) => {
@@ -832,9 +1032,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     setActiveConversationId(conv.id);
                   }}
                   onMouseDown={(e) => e.stopPropagation()}
-                  className={`p-3 rounded-lg cursor-pointer transition-colors ${
+                  className={`p-3 rounded-lg cursor-pointer transition-all ${
                     activeConversationId === conv.id 
-                      ? 'bg-[#c96442]/20 border border-[#c96442]' 
+                      ? 'bg-[#c96442]/20' 
                       : isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-200'
                   }`}
                   role="button"
@@ -859,31 +1059,44 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   </button>
                 )}
               </div>
-            ))}
+            )) : (
+              // Collapsed view - show chat bubbles for each conversation
+              conversations.map(conv => (
+                <div key={conv.id} className="flex justify-center">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveConversationId(conv.id);
+                    }}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${
+                      activeConversationId === conv.id 
+                        ? 'bg-[#c96442]/20' 
+                        : isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-200'
+                    }`}
+                    data-no-drag
+                    title={conv.title}
+                  >
+                    <MessageSquare className={`w-5 h-5 ${
+                      activeConversationId === conv.id 
+                        ? 'text-[#c96442]' 
+                        : isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                    }`} />
+                  </button>
+                </div>
+              ))
+            )}
+            </div>
           </div>
         </div>
       </div>
 
       {/* Main Chat Area */}
-      <div className={`flex-1 flex flex-col ${isDarkMode ? 'bg-gray-900' : 'bg-white'} relative`}>
-        {/* Toggle Sidebar Button */}
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setIsSidebarOpen(!isSidebarOpen);
-          }}
-          onMouseDown={(e) => e.stopPropagation()}
-          className={`absolute left-2 top-2 z-10 p-2 ${isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100'} rounded-lg transition-colors`}
-          data-no-drag
-        >
-          {isSidebarOpen ? <ChevronLeft className={`w-5 h-5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} /> : <ChevronRight className={`w-5 h-5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />}
-        </button>
-        
+      <div className={`flex-1 flex flex-col ${isDarkMode ? '' : 'bg-white'} relative`} style={isDarkMode ? { backgroundColor: '#262625' } : {}}>
         {/* Header */}
-        <div className={`${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b px-4 py-3 flex items-center justify-between`} style={{ paddingLeft: '3.5rem' }}>
+        <div className={`${isDarkMode ? 'border-gray-700' : 'bg-white border-gray-200'} border-b px-4 py-3 flex items-center justify-between`} style={{ height: '57px', ...(isDarkMode ? { backgroundColor: '#262625' } : {}) }}>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
-              <MessageSquare className={`w-5 h-5 ${currentModel.provider === 'openai' ? 'text-green-600' : 'text-[#c96442]'}`} />
               <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{activeConversation?.title || 'AI Assistant'}</span>
             </div>
           </div>
@@ -906,7 +1119,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         </div>
 
         {/* Messages Area - DRAGGABLE but text selectable */}
-        <div ref={messagesContainerRef} className={`flex-1 overflow-y-auto p-6 ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'}`} style={{ userSelect: 'text' }}>
+        <div ref={messagesContainerRef} className={`flex-1 overflow-y-auto p-4 ${isDarkMode ? '' : 'bg-gray-50'}`} style={{ userSelect: 'text', ...(isDarkMode ? { backgroundColor: '#262625' } : {}) }}>
           {messages.length === 0 && (
             <div className={`text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-500'} mt-12`}>
               <MessageSquare className={`w-12 h-12 mx-auto mb-4 ${isDarkMode ? 'text-gray-600' : 'text-gray-300'}`} />
@@ -921,7 +1134,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 key={message.id} 
                 className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} group`}
               >
-                <div className={`relative max-w-[80%] ${
+                <div className={`relative max-w-[85%] ${
                   message.role === 'user' 
                     ? 'mr-2' 
                     : ''
@@ -966,7 +1179,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   <div className={`p-4 rounded-2xl ${
                     message.role === 'user' 
                       ? '' 
-                      : isDarkMode ? 'bg-gray-800 border border-gray-700 text-white shadow-sm' : 'bg-white border border-gray-200 text-gray-900 shadow-sm'
+                      : isDarkMode ? 'text-white shadow-sm' : 'bg-white border border-gray-200 text-gray-900 shadow-sm'
                   }`}
                   style={{ 
                     userSelect: 'text', 
@@ -974,7 +1187,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     ...(message.role === 'user' ? {
                       backgroundColor: isDarkMode ? '#4c3634' : '#efd8d2',
                       color: isDarkMode ? '#f3f4f6' : '#374151'
-                    } : {})
+                    } : {
+                      ...(isDarkMode ? { backgroundColor: '#30302d', border: '1px solid #262625' } : {})
+                    })
                   }}
                   >
                     {message.role === 'assistant' ? (
@@ -1003,147 +1218,135 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
         {/* Connected Content Indicator */}
         {(connectedContent.length > 0 || connectedTextElements.length > 0) && (
-          <div className={`border-t px-4 py-2 ${
-            isDarkMode 
-              ? 'border-gray-700 bg-blue-900/20' 
-              : 'border-gray-200 bg-blue-50'
-          }`}>
-            <div className={`flex items-center gap-2 text-xs ${
-              isDarkMode ? 'text-blue-400' : 'text-blue-600'
-            }`}>
-              <div className={`w-2 h-2 rounded-full animate-pulse ${
-                isDarkMode ? 'bg-blue-400' : 'bg-blue-500'
-              }`}></div>
-              <span>
-                {connectedTextElements.length > 0 && (
-                  <>{connectedTextElements.length} text {connectedTextElements.length === 1 ? 'element' : 'elements'}</>
-                )}
-                {connectedTextElements.length > 0 && connectedContent.length > 0 && ' and '}
-                {connectedContent.length > 0 && (
-                  <>{connectedContent.length} content {connectedContent.length === 1 ? 'piece' : 'pieces'}</>
-                )}
-                {' automatically included in context'}
-              </span>
+          <div className="px-4 pb-2">
+            <div className={`${
+              isDarkMode 
+                ? 'bg-blue-900/20 border-blue-800/30' 
+                : 'bg-blue-50 border-blue-200'
+            } border rounded-lg px-3 py-2`}>
+              <div className={`flex items-center gap-2 text-xs ${
+                isDarkMode ? 'text-blue-400' : 'text-blue-600'
+              }`}>
+                <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${
+                  isDarkMode ? 'bg-blue-400' : 'bg-blue-500'
+                }`}></div>
+                <span>
+                  {connectedTextElements.length > 0 && (
+                    <>{connectedTextElements.length} text {connectedTextElements.length === 1 ? 'element' : 'elements'}</>
+                  )}
+                  {connectedTextElements.length > 0 && connectedContent.length > 0 && ' and '}
+                  {connectedContent.length > 0 && (
+                    <>{connectedContent.length} content {connectedContent.length === 1 ? 'piece' : 'pieces'}</>
+                  )}
+                  {' connected as context'}
+                </span>
+              </div>
             </div>
           </div>
         )}
         
         {/* Input Area - Container allows drag */}
-        <div className={`border-t ${isDarkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-gray-50'} p-4`}>
-          <div className="space-y-3">
-            <div className="flex gap-3 relative items-end">
-              <textarea
-                ref={inputRef}
-                value={input}
-                onChange={handleInputChange}
-                onKeyDown={(e) => {
-                  e.stopPropagation();
-                  handleKeyDown(e);
-                }}
-                onClick={(e) => e.stopPropagation()}
-                onMouseDown={(e) => e.stopPropagation()}
-                onFocus={(e) => e.stopPropagation()}
-                placeholder="Type a message..."
-                disabled={isLoading}
-                data-no-drag
-                className={`flex-1 px-4 py-3 ${isDarkMode ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:bg-gray-700' : 'bg-gray-100 border-gray-200 text-gray-900 placeholder-gray-500 focus:bg-white'} rounded-xl border outline-none focus:border-[#c96442] transition-all resize-none overflow-hidden`}
-                style={{ 
-                  pointerEvents: 'auto', 
-                  zIndex: 10,
-                  minHeight: '52px',
-                  maxHeight: '200px'
-                }}
-                rows={1}
-              />
-              
-              {/* Mention Autocomplete */}
-              {showMentionAutocomplete && (
-                <MentionAutocomplete
-                  searchQuery={mentionSearchQuery}
-                  availableContent={connectedContent}
-                  onSelect={handleMentionSelect}
-                  onClose={() => setShowMentionAutocomplete(false)}
-                  position={mentionPosition}
-                />
-              )}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  sendMessage();
-                }}
-                onMouseDown={(e) => e.stopPropagation()}
-                disabled={!input.trim() || isLoading}
-                className="w-[52px] h-[52px] bg-[#c96442] text-white rounded-xl hover:bg-[#b85432] disabled:opacity-50 transition-colors flex items-center justify-center flex-shrink-0"
-                data-no-drag
-              >
-                <ArrowUp className="w-5 h-5" />
-              </button>
-            </div>
+        <div className={`${isDarkMode ? '' : 'bg-gray-50'} px-4 pb-4 pt-2`} style={isDarkMode ? { backgroundColor: '#262625' } : {}}>
+          {/* Single container with nested elements */}
+          <div className={`relative ${isDarkMode ? '' : 'bg-white border-gray-200'} border rounded-xl`} style={isDarkMode ? { backgroundColor: '#30302D', borderColor: '#262625' } : {}}>
+            {/* Text input area */}
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={handleInputChange}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                handleKeyDown(e);
+              }}
+              onClick={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+              onFocus={(e) => e.stopPropagation()}
+              placeholder={messages.length === 0 ? "How can I help you today?" : "Reply to AICON..."}
+              disabled={isLoading}
+              data-no-drag
+              className={`w-full px-4 pt-3 ${isDarkMode ? 'bg-transparent text-white placeholder-gray-400' : 'bg-transparent text-gray-900 placeholder-gray-500'} rounded-xl outline-none resize-none overflow-hidden`}
+              style={{ 
+                pointerEvents: 'auto', 
+                zIndex: 10,
+                minHeight: '52px',
+                maxHeight: '200px',
+                paddingBottom: '80px'
+              }}
+              rows={1}
+            />
             
-            <div className="flex items-center gap-2">
-              <ModelSelector
-                selectedModel={selectedModel}
-                onModelChange={setSelectedModel}
+            {/* Mention Autocomplete */}
+            {showMentionAutocomplete && (
+              <MentionAutocomplete
+                searchQuery={mentionSearchQuery}
+                availableContent={connectedContent}
+                onSelect={handleMentionSelect}
+                onClose={() => setShowMentionAutocomplete(false)}
+                position={mentionPosition}
               />
-              
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  console.log('[ChatInterface] Summarize button clicked. Connected content:', {
-                    count: connectedContent.length,
-                    content: connectedContent.map(c => ({
-                      id: c.id,
-                      title: c.title,
-                      hasScrapeId: !!(c as any).metadata?.scrapeId,
-                      hasAnalysis: !!(c as any).metadata?.analysis
-                    }))
-                  });
-                  setInput('Summarize');
-                  sendMessage('Please provide a comprehensive summary of all connected content in a structured format. Organize the summary by: 1) Main themes and topics covered, 2) Key messages from each piece of content, 3) Overall narrative or story being told, 4) Target audience and tone. Make it digestible and easy to understand.', 'Summarize');
-                }}
-                onMouseDown={(e) => e.stopPropagation()}
-                disabled={connectedContent.length === 0 || isLoading}
-                className={`w-[136px] h-[25px] flex items-center justify-center px-2 py-0 ${isDarkMode ? 'bg-gray-700 text-gray-300 border-gray-600 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-50'} rounded-lg text-xs border disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
-                data-no-drag
-              >
-                Summarize
-              </button>
-              
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setInput('Get Insights');
-                  sendMessage('Analyze all connected content and provide a bullet-point breakdown of what made each piece successful. Focus on: • Hook effectiveness and attention-grabbing techniques • Engagement tactics used • Content structure and pacing • Visual and audio elements that worked well • Call-to-action strategies • Viral or shareable elements • Platform-specific optimizations • Key performance drivers based on metrics (views, likes, comments)', 'Get Insights');
-                }}
-                onMouseDown={(e) => e.stopPropagation()}
-                disabled={connectedContent.length === 0 || isLoading}
-                className={`w-[136px] h-[25px] flex items-center justify-center px-2 py-0 ${isDarkMode ? 'bg-gray-700 text-gray-300 border-gray-600 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-50'} rounded-lg text-xs border disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
-                data-no-drag
-              >
-                Get Insights
-              </button>
-              
-              <div className="relative group">
+            )}
+
+            {/* Buttons row nested at the bottom */}
+            <div className="absolute bottom-0 left-0 right-0 flex justify-between items-center" style={{ padding: '20px 11px 11px 11px' }}>
+              {/* Left side: Summary and Get Insights buttons */}
+              <div className="flex gap-1.5">
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    // Research feature coming soon
+                    console.log('[ChatInterface] Summarize button clicked. Connected content:', {
+                      count: connectedContent.length,
+                      content: connectedContent.map(c => ({
+                        id: c.id,
+                        title: c.title,
+                        hasScrapeId: !!(c as any).metadata?.scrapeId,
+                        hasAnalysis: !!(c as any).metadata?.analysis
+                      }))
+                    });
+                    setInput('Summarize');
+                    sendMessage('Please provide a comprehensive summary of all connected content in a structured format. Organize the summary by: 1) Main themes and topics covered, 2) Key messages from each piece of content, 3) Overall narrative or story being told, 4) Target audience and tone. Make it digestible and easy to understand.', 'Summarize');
                   }}
                   onMouseDown={(e) => e.stopPropagation()}
-                  disabled={true}
-                  className={`w-[136px] h-[25px] flex items-center justify-center px-2 py-0 ${isDarkMode ? 'bg-gray-700 text-gray-500 border-gray-600' : 'bg-gray-100 text-gray-400 border-gray-200'} rounded-lg text-xs border opacity-50 cursor-not-allowed transition-colors`}
+                  disabled={connectedContent.length === 0 || isLoading}
+                  className={`h-8 px-3 border ${isDarkMode ? 'border-gray-600 hover:bg-gray-700 text-gray-300' : 'border-gray-300 hover:bg-gray-100 text-gray-600'} rounded-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center`}
                   data-no-drag
                 >
-                  Research
+                  Summary
                 </button>
-                <span className={`fixed px-2 py-1 text-xs ${isDarkMode ? 'bg-gray-700' : 'bg-gray-800'} text-white rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none`} 
-                  style={{ 
-                    zIndex: 99999,
-                    marginTop: '30px',
-                    marginLeft: '-20px'
-                  }}>
-                  Coming Soon
-                </span>
+                
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setInput('Get Insights');
+                    sendMessage('Analyze all connected content and provide a bullet-point breakdown of what made each piece successful. Focus on: • Hook effectiveness and attention-grabbing techniques • Engagement tactics used • Content structure and pacing • Visual and audio elements that worked well • Call-to-action strategies • Viral or shareable elements • Platform-specific optimizations • Key performance drivers based on metrics (views, likes, comments)', 'Get Insights');
+                  }}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  disabled={connectedContent.length === 0 || isLoading}
+                  className={`h-8 px-3 border ${isDarkMode ? 'border-gray-600 hover:bg-gray-700 text-gray-300' : 'border-gray-300 hover:bg-gray-100 text-gray-600'} rounded-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center`}
+                  data-no-drag
+                >
+                  Get Insights
+                </button>
+              </div>
+
+              {/* Right side: Model selector and send button */}
+              <div className="flex items-center gap-1.5">
+                <ModelSelector
+                  selectedModel={selectedModel}
+                  onModelChange={setSelectedModel}
+                />
+
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    sendMessage();
+                  }}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  disabled={!input.trim() || isLoading}
+                  className="w-8 h-8 bg-[#c96442] text-white rounded-lg hover:bg-[#b85432] disabled:opacity-50 transition-colors flex items-center justify-center flex-shrink-0"
+                  data-no-drag
+                >
+                  <ArrowUp className="w-4 h-4" />
+                </button>
               </div>
             </div>
           </div>

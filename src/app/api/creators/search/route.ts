@@ -66,11 +66,42 @@ function validateTikTokInput(input: string): { isValid: boolean; handle: string;
   return { isValid: true, handle: withoutAt };
 }
 
+// YouTube handle/URL validation
+function validateYouTubeInput(input: string): { isValid: boolean; handle: string; error?: string } {
+  const trimmed = input.trim();
+  
+  // Remove @ if present
+  const withoutAt = trimmed.startsWith('@') ? trimmed.slice(1) : trimmed;
+  
+  // Handle URL format
+  if (withoutAt.includes('youtube.com')) {
+    // YouTube URLs can be youtube.com/@username or youtube.com/c/username or youtube.com/channel/ID
+    const urlMatch = withoutAt.match(/youtube\.com\/(?:@|c\/|channel\/)([^\/?]+)/);
+    if (!urlMatch || !urlMatch[1]) {
+      return { isValid: false, handle: '', error: 'Invalid YouTube URL format' };
+    }
+    const handle = urlMatch[1];
+    // YouTube handles are more flexible
+    if (handle.length < 1 || handle.length > 100) {
+      return { isValid: false, handle: '', error: 'Invalid YouTube handle length' };
+    }
+    return { isValid: true, handle };
+  }
+  
+  // Handle direct username/handle
+  if (withoutAt.length < 1 || withoutAt.length > 100) {
+    return { isValid: false, handle: '', error: 'YouTube handle must be between 1-100 characters' };
+  }
+  
+  return { isValid: true, handle: withoutAt };
+}
+
 // Check if content is cached and still valid
-async function getCachedContent(handle: string, platform: 'instagram' | 'tiktok'): Promise<{ creator: Creator | null; content: CreatorContent[] }> {
+async function getCachedContent(handle: string, platform: 'instagram' | 'tiktok' | 'youtube'): Promise<{ creator: Creator | null; content: CreatorContent[] }> {
   try {
     // Find creator by platform handle
-    const handleField = platform === 'instagram' ? 'instagram_handle' : 'tiktok_handle';
+    const handleField = platform === 'instagram' ? 'instagram_handle' : 
+                       platform === 'tiktok' ? 'tiktok_handle' : 'youtube_handle';
     const { data: creator } = await supabaseAdmin
       .from('creators')
       .select('*')
@@ -231,6 +262,100 @@ async function scrapeInstagramReels(handle: string, filter: string): Promise<{ c
   }
 }
 
+// Scrape YouTube data using YouTube Data API v3
+async function scrapeYouTubeVideos(handle: string, filter: string): Promise<{ content: any[]; channel?: any; error?: string }> {
+  const apiKey = process.env.YOUTUBE_API_KEY;
+  
+  if (!apiKey) {
+    return { content: [], error: 'YouTube API key not configured' };
+  }
+
+  try {
+    // First, search for the channel
+    const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=channel&q=${encodeURIComponent(handle)}&maxResults=1&key=${apiKey}`;
+    const searchResponse = await fetch(searchUrl);
+    
+    if (!searchResponse.ok) {
+      console.error('[Creator Search] YouTube channel search failed:', searchResponse.status);
+      return { content: [], error: 'Failed to find YouTube channel' };
+    }
+    
+    const searchData = await searchResponse.json();
+    if (!searchData.items || searchData.items.length === 0) {
+      return { content: [], error: 'YouTube channel not found' };
+    }
+    
+    const channelId = searchData.items[0].id.channelId;
+    const channelTitle = searchData.items[0].snippet.title;
+    
+    // Get channel details
+    const channelUrl = `https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&id=${channelId}&key=${apiKey}`;
+    const channelResponse = await fetch(channelUrl);
+    const channelData = await channelResponse.json();
+    
+    const channel = channelData.items?.[0];
+    
+    // Get recent videos from the channel
+    let orderBy = 'date'; // Default to most recent
+    if (filter === 'top_views') orderBy = 'viewCount';
+    else if (filter === 'top_likes') orderBy = 'rating';
+    
+    const videosUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=${channelId}&type=video&order=${orderBy}&maxResults=10&key=${apiKey}`;
+    const videosResponse = await fetch(videosUrl);
+    
+    if (!videosResponse.ok) {
+      console.error('[Creator Search] YouTube videos search failed:', videosResponse.status);
+      return { content: [], channel, error: 'Failed to fetch YouTube videos' };
+    }
+    
+    const videosData = await videosResponse.json();
+    const videoIds = videosData.items?.map((item: any) => item.id.videoId).join(',') || '';
+    
+    if (!videoIds) {
+      return { content: [], channel, error: 'No videos found for this channel' };
+    }
+    
+    // Get detailed video statistics
+    const statsUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics,contentDetails&id=${videoIds}&key=${apiKey}`;
+    const statsResponse = await fetch(statsUrl);
+    const statsData = await statsResponse.json();
+    
+    // Return videos in the format expected by content processing
+    const videos = statsData.items?.map((video: any) => ({
+      // Keep original format for compatibility
+      id: video.id,
+      snippet: video.snippet,
+      statistics: video.statistics,
+      contentDetails: video.contentDetails
+    })) || [];
+    
+    // Sort based on filter if needed
+    let sortedVideos = videos;
+    if (filter === 'top_likes') {
+      sortedVideos = videos.sort((a: any, b: any) => 
+        parseInt(b.statistics?.likeCount || '0') - parseInt(a.statistics?.likeCount || '0')
+      );
+    } else if (filter === 'top_comments') {
+      sortedVideos = videos.sort((a: any, b: any) => 
+        parseInt(b.statistics?.commentCount || '0') - parseInt(a.statistics?.commentCount || '0')
+      );
+    } else if (filter === 'top_views') {
+      sortedVideos = videos.sort((a: any, b: any) => 
+        parseInt(b.statistics?.viewCount || '0') - parseInt(a.statistics?.viewCount || '0')
+      );
+    } else if (filter === 'most_recent') {
+      sortedVideos = videos.sort((a: any, b: any) => 
+        new Date(b.snippet?.publishedAt).getTime() - new Date(a.snippet?.publishedAt).getTime()
+      );
+    }
+    
+    return { content: sortedVideos, channel };
+  } catch (error) {
+    console.error('Error scraping YouTube data:', error);
+    return { content: [], error: 'Failed to connect to YouTube API' };
+  }
+}
+
 // Scrape TikTok data using Apify synchronous API
 async function scrapeTikTokVideos(handle: string, filter: string): Promise<{ content: any[]; profile?: any; error?: string }> {
   const apifyToken = process.env.APIFY_API_TOKEN;
@@ -375,9 +500,9 @@ export async function POST(request: NextRequest) {
     const { platform, searchQuery, filter, contentType = 'all', userId } = body;
 
     // Validate request
-    if (!platform || !['instagram', 'tiktok'].includes(platform)) {
+    if (!platform || !['instagram', 'tiktok', 'youtube'].includes(platform)) {
       return NextResponse.json({ 
-        error: 'Invalid platform. Only Instagram and TikTok are supported.' 
+        error: 'Invalid platform. Must be instagram, tiktok, or youtube.' 
       }, { status: 400 });
     }
 
@@ -413,6 +538,13 @@ export async function POST(request: NextRequest) {
       if (!validation.isValid) {
         return NextResponse.json({ 
           error: validation.error || 'Invalid TikTok handle or URL' 
+        }, { status: 400 });
+      }
+    } else if (platform === 'youtube') {
+      validation = validateYouTubeInput(searchQuery);
+      if (!validation.isValid) {
+        return NextResponse.json({ 
+          error: validation.error || 'Invalid YouTube handle or URL' 
         }, { status: 400 });
       }
     } else {
@@ -470,6 +602,11 @@ export async function POST(request: NextRequest) {
       scrapedContent = result.content;
       profileData = result.profile;
       error = result.error;
+    } else if (platform === 'youtube') {
+      const result = await scrapeYouTubeVideos(handle, filter);
+      scrapedContent = result.content;
+      profileData = result.channel;
+      error = result.error;
     } else {
       return NextResponse.json({ 
         error: 'Invalid platform' 
@@ -485,8 +622,8 @@ export async function POST(request: NextRequest) {
     // Process and store the Instagram posts immediately
     if (scrapedContent && scrapedContent.length > 0) {
       try {
-        // Debug: Log sample post structure to understand Apify response format
-        console.log('Sample post from Apify:', JSON.stringify(scrapedContent[0], null, 2));
+        // Debug: Log sample post structure
+        console.log(`[Creator Search] Sample ${platform} post:`, JSON.stringify(scrapedContent[0], null, 2));
         
         // Helper function to safely parse integers
         const safeParseInt = (value: any, fallback: number = 0): number => {
@@ -512,6 +649,21 @@ export async function POST(request: NextRequest) {
           }
         };
         
+        // Parse YouTube duration format (ISO 8601) to seconds
+        const parseDuration = (duration: string | undefined): number => {
+          if (!duration) return 0;
+          
+          // YouTube returns duration in ISO 8601 format: PT4M13S (4 minutes 13 seconds)
+          const match = duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+          if (!match) return 0;
+          
+          const hours = parseInt(match[1] || '0', 10);
+          const minutes = parseInt(match[2] || '0', 10);
+          const seconds = parseInt(match[3] || '0', 10);
+          
+          return hours * 3600 + minutes * 60 + seconds;
+        };
+        
         // Create or update creator record
         let creatorRecord = creator;
         if (!creatorRecord) {
@@ -520,7 +672,9 @@ export async function POST(request: NextRequest) {
             username: handle,
             profile_url: platform === 'instagram' 
               ? `https://www.instagram.com/${handle}` 
-              : `https://www.tiktok.com/@${handle}`,
+              : platform === 'tiktok'
+              ? `https://www.tiktok.com/@${handle}`
+              : `https://www.youtube.com/@${handle}`,
             last_scraped_at: new Date().toISOString()
           };
 
@@ -541,6 +695,17 @@ export async function POST(request: NextRequest) {
             creatorData.metadata = {
               biography: profileData?.signature || '',
               profile_image_url: profileData?.avatarLarger || profileData?.avatarMedium || ''
+            };
+          } else if (platform === 'youtube') {
+            creatorData.youtube_handle = handle;
+            // For YouTube, we get channel info from the first video's snippet
+            const firstVideo = scrapedContent[0];
+            creatorData.display_name = firstVideo?.snippet?.channelTitle || handle;
+            creatorData.metadata = {
+              channel_id: firstVideo?.snippet?.channelId || '',
+              description: '', // YouTube API doesn't provide channel description in video data
+              profile_image_url: '', // Would need separate channel API call for this
+              // YouTube doesn't return subscriber count in video data
             };
           }
 
@@ -656,6 +821,52 @@ export async function POST(request: NextRequest) {
                 video_meta: video.videoMeta,
                 share_count: video.shareCount,
                 collect_count: video.collectCount,
+                originalData: video // Store original for debugging
+              }
+            };
+          } else if (platform === 'youtube') {
+            // YouTube content processing
+            const video = post as any; // YouTube video data from API
+            
+            // Debug: Log first video structure
+            if (scrapedContent.indexOf(post) === 0) {
+              console.log('[Creator Search] YouTube video data:', {
+                id: video.id,
+                snippet: video.snippet,
+                statistics: video.statistics,
+                contentDetails: video.contentDetails
+              });
+            }
+            
+            return {
+              creator_id: creatorRecord!.id,
+              platform: 'youtube',
+              content_url: `https://www.youtube.com/watch?v=${video.id}`,
+              thumbnail_url: video.snippet?.thumbnails?.high?.url || 
+                           video.snippet?.thumbnails?.medium?.url || 
+                           video.snippet?.thumbnails?.default?.url || 
+                           '',
+              video_url: `https://www.youtube.com/watch?v=${video.id}`,
+              caption: video.snippet?.title || '',
+              likes: safeParseInt(video.statistics?.likeCount),
+              comments: safeParseInt(video.statistics?.commentCount),
+              views: safeParseInt(video.statistics?.viewCount),
+              posted_date: video.snippet?.publishedAt ? new Date(video.snippet.publishedAt).toISOString() : null,
+              duration_seconds: parseDuration(video.contentDetails?.duration),
+              cached_until: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // Cache for 30 days
+              raw_data: {
+                media_type: 'video',
+                video_id: video.id,
+                channel_id: video.snippet?.channelId,
+                channel_title: video.snippet?.channelTitle,
+                description: video.snippet?.description,
+                tags: video.snippet?.tags || [],
+                category_id: video.snippet?.categoryId,
+                live_broadcast_content: video.snippet?.liveBroadcastContent,
+                duration: video.contentDetails?.duration,
+                dimension: video.contentDetails?.dimension,
+                definition: video.contentDetails?.definition,
+                has_custom_thumbnail: video.snippet?.thumbnails?.maxres ? true : false,
                 originalData: video // Store original for debugging
               }
             };

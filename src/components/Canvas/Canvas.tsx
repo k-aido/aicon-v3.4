@@ -4,6 +4,7 @@ import { ContentElement as ContentElementType } from '@/types';
 import { useCanvasDrag } from '@/hooks/useCanvasDrag';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { useCanvasAlignment } from '@/hooks/useCanvasAlignment';
+import { useViewportOptimization, useRenderQuality } from '@/hooks/useViewportOptimization';
 import { ConnectionLine } from './ConnectionLine';
 import { ContentElement } from './ContentElement';
 import { ChatElement } from './ChatElement';
@@ -17,6 +18,7 @@ import {
   simpleToComplexElement,
   complexToSimpleElement
 } from '@/utils/typeAdapters';
+import { throttle } from '@/utils/performance';
 import { useDarkMode, darkModeColors } from '@/contexts/DarkModeContext';
 import CreditCounter from '../CreditCounter/CreditCounter';
 import { DarkModeToggle } from '../DarkModeToggle';
@@ -68,6 +70,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
   const [lastClickedElementId, setLastClickedElementId] = useState<number | null>(null);
   const [isDraggingElement, setIsDraggingElement] = useState(false);
   const [isResizingElement, setIsResizingElement] = useState(false);
+  const [canvasSize, setCanvasSize] = useState({ width: 1200, height: 800 });
   
   // Alignment system - enabled when dragging or resizing
   const { checkAlignment, clearGuides, activeGuides } = useCanvasAlignment({
@@ -75,7 +78,35 @@ const CanvasComponent: React.FC<CanvasProps> = ({
     snapThreshold: 10,
     enabled: isDraggingElement || isResizingElement
   });
+
+  // Canvas drag handling with state
+  const [isCanvasDragging, setIsCanvasDragging] = useState(false);
+
+  // Viewport optimization hooks
+  const visibleElements = useViewportOptimization(
+    elements,
+    viewport,
+    canvasSize.width,
+    canvasSize.height,
+    200 // Extra padding
+  );
+
+  const renderQuality = useRenderQuality(viewport, isCanvasDragging || isDraggingElement);
   
+  // Track canvas size for viewport optimization
+  useEffect(() => {
+    const updateCanvasSize = () => {
+      if (canvasRef.current) {
+        const rect = canvasRef.current.getBoundingClientRect();
+        setCanvasSize({ width: rect.width, height: rect.height });
+      }
+    };
+
+    updateCanvasSize();
+    window.addEventListener('resize', updateCanvasSize);
+    return () => window.removeEventListener('resize', updateCanvasSize);
+  }, []);
+
   // Focus canvas on mount and handle keyboard events
   useEffect(() => {
     if (canvasRef.current) {
@@ -104,14 +135,20 @@ const CanvasComponent: React.FC<CanvasProps> = ({
   }, [connecting, setConnecting]);
 
   // Canvas drag handling
-  const { isDragging, handleMouseDown } = useCanvasDrag({
+  const { isDragging: isDraggingCanvas, handleMouseDown } = useCanvasDrag({
     onDragMove: (position) => setViewport({ ...viewport, ...position }),
     onDragEnd: () => {
+      setIsCanvasDragging(false);
       // Clear selection when clicking on empty canvas
       setSelectedElement(null);
       setSelectedElementIds([]);
     }
   });
+  
+  // Update isCanvasDragging when isDraggingCanvas changes
+  useEffect(() => {
+    setIsCanvasDragging(isDraggingCanvas);
+  }, [isDraggingCanvas]);
 
   // URL detection and smart clipboard functionality
   const detectUrlType = (url: string): string | null => {
@@ -166,7 +203,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
     if (shouldZoom) {
       e.preventDefault();
       const delta = e.deltaY > 0 ? 0.9 : 1.1;
-      const newZoom = Math.max(0.25, Math.min(3, viewport.zoom * delta));
+      const newZoom = Math.max(0.25, Math.min(1, viewport.zoom * delta)); // Max 200% (1 * 200% = 200%)
       setViewport({ ...viewport, zoom: newZoom });
     }
     // If over content elements without modifier key, allow normal scroll behavior
@@ -192,13 +229,27 @@ const CanvasComponent: React.FC<CanvasProps> = ({
   // Get viewport center position
   const getViewportCenter = () => {
     const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect) return { x: 0, y: 0 };
+    if (!rect) return { x: 100, y: 100 };
     
     // Calculate the center of the visible viewport in canvas coordinates
     const centerX = (rect.width / 2 - viewport.x) / viewport.zoom;
     const centerY = (rect.height / 2 - viewport.y) / viewport.zoom;
     
-    return { x: centerX, y: centerY };
+    console.log('[Canvas] Viewport center calculation:', {
+      rectWidth: rect.width,
+      rectHeight: rect.height,
+      viewportX: viewport.x,
+      viewportY: viewport.y,
+      viewportZoom: viewport.zoom,
+      centerX,
+      centerY
+    });
+    
+    // Ensure elements are created in a visible area
+    return { 
+      x: isFinite(centerX) ? centerX : 100, 
+      y: isFinite(centerY) ? centerY : 100 
+    };
   };
 
   // Handle drop
@@ -301,6 +352,20 @@ const CanvasComponent: React.FC<CanvasProps> = ({
     }
   };
 
+  // Create throttled position update function for better performance at high zoom
+  const throttledPositionUpdate = useMemo(
+    () => throttle((id: string | number, position: { x?: number; y?: number }) => {
+      setElements(prevElements => 
+        prevElements.map(el => 
+          String(el.id) === String(id) 
+            ? { ...el, ...position }
+            : el
+        )
+      );
+    }, 16), // 16ms = ~60fps
+    [setElements]
+  );
+
   // Handle element updates with alignment support
   const handleElementUpdate = useCallback((id: string | number, updates: Partial<CanvasElement>) => {
     console.log('🔧 [Canvas] handleElementUpdate called:', { id, idType: typeof id, updates });
@@ -328,6 +393,12 @@ const CanvasComponent: React.FC<CanvasProps> = ({
       }
       if (alignmentResult.snappedY !== undefined) {
         updates.y = alignmentResult.snappedY;
+      }
+      
+      // Use throttled update for position changes during drag
+      if (isDraggingElement && viewport.zoom > 0.75) {
+        throttledPositionUpdate(id, { x: updates.x, y: updates.y });
+        return;
       }
     }
     
@@ -649,7 +720,7 @@ const CanvasComponent: React.FC<CanvasProps> = ({
     
     const scaleX = availableWidth / contentWidth;
     const scaleY = availableHeight / contentHeight;
-    const newZoom = Math.min(scaleX, scaleY, 1); // Don't zoom in beyond 100%
+    const newZoom = Math.min(scaleX, scaleY, 0.5); // Don't zoom in beyond our new 100% (0.5)
     
     const centerX = (minX + maxX) / 2;
     const centerY = (minY + maxY) / 2;
@@ -660,9 +731,9 @@ const CanvasComponent: React.FC<CanvasProps> = ({
     setViewport({ x: newX, y: newY, zoom: newZoom });
   }, [elements]);
 
-  // Reset zoom to 100%
+  // Reset zoom to 100% (which is 0.5 in our recalibrated system)
   const handleResetZoom = useCallback(() => {
-    setViewport({ x: 0, y: 0, zoom: 1 });
+    setViewport({ x: 0, y: 0, zoom: 0.5 });
   }, [setViewport]);
 
   // Connection preview path
@@ -728,23 +799,67 @@ const CanvasComponent: React.FC<CanvasProps> = ({
       <div 
         className={`absolute inset-0 canvas-background ${
           connecting !== null ? 'cursor-crosshair' : 
-          isDragging ? 'cursor-grabbing' : 'cursor-grab'
+          isCanvasDragging ? 'cursor-grabbing' : 'cursor-grab'
         }`}
         onMouseDown={handleCanvasClick}
         style={{
-          // Keep dots visible until very low zoom levels
-          opacity: viewport.zoom < 0.25 ? 0 : viewport.zoom < 0.4 ? (viewport.zoom - 0.25) * 6.67 : 1,
-          // Use consistent dot appearance with dark mode support
-          backgroundImage: viewport.zoom < 0.25 
-            ? 'none'
-            : `radial-gradient(circle, ${isDarkMode ? '#4a4a48' : '#d4d4d8'} 1px, transparent 1px)`,
-          // Scale grid size with zoom, with larger spacing when zoomed out
-          backgroundSize: viewport.zoom < 0.5 
-            ? '40px 40px'  // Fixed larger grid when zoomed out
-            : `${20 * Math.max(0.1, viewport.zoom)}px ${20 * Math.max(0.1, viewport.zoom)}px`, // Scale with zoom when zoomed in
-          backgroundPosition: `${isFinite(viewport.x) ? viewport.x : 0}px ${isFinite(viewport.y) ? viewport.y : 0}px`,
-          backgroundColor: isDarkMode ? darkModeColors.dark : darkModeColors.light,
-          transition: 'opacity 0.15s ease-out, background-color 0.2s ease-out'
+          // Figma-style multi-level grid system
+          ...(() => {
+            const baseGrid = 8; // Base grid matching what was at 140%
+            let gridSize = baseGrid;
+            let dotOpacity = 1;
+            let dotSize = 1;
+            
+            // Recalibrated zoom levels - 0.5 is now our "100%" reference
+            if (viewport.zoom < 0.25) {
+              // Very zoomed out (50% in UI)
+              gridSize = 32;
+              dotOpacity = 0.5;
+              dotSize = 0.8;
+            } else if (viewport.zoom < 0.4) {
+              // Zoomed out (60-80% in UI)
+              gridSize = 16;
+              dotOpacity = 0.8;
+              dotSize = 1;
+            } else if (viewport.zoom < 0.6) {
+              // Normal range (80-120% in UI) - this is our sweet spot
+              gridSize = 8; // Same as what was at 140%
+              dotOpacity = 1;
+              dotSize = 1.2;
+            } else if (viewport.zoom < 0.8) {
+              // Slightly zoomed in (120-160% in UI)
+              gridSize = 6;
+              dotOpacity = 1;
+              dotSize = 1;
+            } else {
+              // Zoomed in (160-200% in UI)
+              gridSize = 4;
+              dotOpacity = 0.9;
+              dotSize = 0.8;
+            }
+            
+            const scaledGrid = gridSize / viewport.zoom;
+            
+            return {
+              backgroundImage: `radial-gradient(circle, ${
+                isDarkMode 
+                  ? `rgba(255, 255, 255, ${0.15 * dotOpacity})` 
+                  : `rgba(0, 0, 0, ${0.15 * dotOpacity})`
+              } ${dotSize}px, transparent ${dotSize}px)`,
+              backgroundSize: `${scaledGrid}px ${scaledGrid}px`,
+              backgroundPosition: `${(viewport.x % scaledGrid)}px ${(viewport.y % scaledGrid)}px`,
+              backgroundColor: isDarkMode ? darkModeColors.dark : darkModeColors.light,
+              // Performance optimizations - no transitions during drag
+              transition: isCanvasDragging ? 'none' : 'background-color 0.2s ease-out',
+              // GPU acceleration
+              willChange: isCanvasDragging ? 'background-position' : 'auto',
+              backfaceVisibility: 'hidden',
+              transform: 'translateZ(0)', // Force GPU acceleration
+              // Disable expensive effects when dragging or at high zoom
+              filter: (isCanvasDragging || viewport.zoom > 1.5) ? 'none' : undefined,
+              imageRendering: viewport.zoom > 1.5 ? 'pixelated' : 'auto' // Sharper dots at high zoom
+            };
+          })()
         }}
       />
       
@@ -758,13 +873,36 @@ const CanvasComponent: React.FC<CanvasProps> = ({
         style={{
           transform: `translate(${isFinite(viewport.x) ? viewport.x : 0}px, ${isFinite(viewport.y) ? viewport.y : 0}px) scale(${Math.max(0.1, viewport.zoom)})`,
           transformOrigin: '0 0',
-          zIndex: 10 // Ensure elements and connections are above guides
+          zIndex: 10, // Ensure elements and connections are above guides
+          willChange: renderQuality.willChange,
+          backfaceVisibility: 'hidden', // Prevent flicker
+          perspective: 1000, // Enable hardware acceleration
+          imageRendering: renderQuality.imageRendering as React.CSSProperties['imageRendering'],
+          // GPU optimization for high zoom levels
+          ...(viewport.zoom > 0.75 ? {
+            transform3d: 'translateZ(0)',
+            WebkitTransform3d: 'translateZ(0)',
+            contain: 'layout style paint',
+            pointerEvents: isDraggingElement ? 'none' : 'auto'
+          } : {}),
+          // Use large fixed dimensions to allow elements to be placed anywhere
+          position: 'absolute',
+          width: '20000px',
+          height: '20000px',
+          left: '0',
+          top: '0'
         }}
-        className="absolute inset-0 pointer-events-none"
+        className={`pointer-events-none ${viewport.zoom > 0.75 ? 'canvas-high-zoom' : ''} ${isDraggingElement ? 'dragging' : ''}`}
       >
         
         {/* Connection Lines SVG */}
-        <svg className="absolute inset-0 pointer-events-none" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
+        <svg className="absolute pointer-events-none" style={{ 
+          width: '20000px', 
+          height: '20000px', 
+          overflow: 'visible',
+          left: '0',
+          top: '0'
+        }}>
           <defs>
             <linearGradient id="connectionGradient" x1="0%" y1="0%" x2="100%" y2="0%">
               <stop offset="0%" stopColor="#c96442" stopOpacity="0.3" />
@@ -828,8 +966,8 @@ const CanvasComponent: React.FC<CanvasProps> = ({
         </svg>
 
         
-        {/* Render Elements */}
-        {elements.map((element) => {
+        {/* Render Elements - Only visible ones for performance */}
+        {visibleElements.map((element) => {
           const uniqueKey = `${element.type}-${element.id}-${element.x || 0}-${element.y || 0}`;
           
           if (element.type === 'content') {
@@ -969,10 +1107,10 @@ const CanvasComponent: React.FC<CanvasProps> = ({
             backgroundColor: isDarkMode ? '#202a37' : '#ffffff'
           }}>
           <span className={`px-2 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-            {Math.round(viewport.zoom * 100)}%
+            {Math.round(viewport.zoom * 200)}%
           </span>
           <button 
-            onClick={() => setViewport({ ...viewport, zoom: Math.min(3, viewport.zoom * 1.2) })}
+            onClick={() => setViewport({ ...viewport, zoom: Math.min(1, viewport.zoom * 1.2) })}
             className={`p-1 rounded outline-none focus:outline-none transition-colors ${
               isDarkMode ? 'hover:bg-gray-700 text-gray-300' : 'hover:bg-gray-100 text-gray-700'
             }`}

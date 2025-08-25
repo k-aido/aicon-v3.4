@@ -111,12 +111,76 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
     setShowContextMenu(true);
   };
 
-  // Analyze content by calling the API (DEPRECATED - using Apify flow now)
+  // Analyze content by calling the API
   const analyzeContent = async (url: string) => {
-    // This function is deprecated - elements should use the Apify scraping flow
-    // which handles both scraping and analysis through SocialMediaModal
-    console.warn('[ContentElement] analyzeContent called but should use Apify flow instead');
-    return;
+    const metadata = (element as any).metadata;
+    
+    // If we have a scrapeId, we can analyze directly
+    if (metadata?.scrapeId) {
+      setIsAnalyzing(true);
+      setAnalysisError(null);
+      
+      try {
+        console.log('[ContentElement] Starting analysis for scrapeId:', metadata.scrapeId);
+        const response = await fetch(`/api/content/analyze/${metadata.scrapeId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ addToLibrary: true })
+        });
+        
+        if (response.ok) {
+          const analysisData = await response.json();
+          console.log('[ContentElement] Analysis completed:', analysisData);
+          
+          // Transform the analysis data to match the expected format
+          const transformedAnalysis = {
+            // Keep the original field names for ContentElement display
+            hook_analysis: analysisData.analysis?.hook_analysis || '',
+            body_analysis: analysisData.analysis?.body_analysis || '',
+            cta_analysis: analysisData.analysis?.cta_analysis || '',
+            key_topics: analysisData.analysis?.key_topics || [],
+            engagement_tactics: analysisData.analysis?.engagement_tactics || [],
+            sentiment: analysisData.analysis?.sentiment || 'positive',
+            complexity: analysisData.analysis?.complexity || 'moderate',
+            // Also add the AnalysisPanel format for compatibility
+            hook: analysisData.analysis?.hook_analysis || '',
+            hookScore: 8, // Default score
+            contentStrategy: analysisData.analysis?.body_analysis || '',
+            keyInsights: analysisData.analysis?.key_topics || [],
+            improvements: analysisData.analysis?.engagement_tactics || []
+          };
+          
+          onUpdate(element.id, {
+            metadata: {
+              ...metadata,
+              isAnalyzing: false,
+              isAnalyzed: true,
+              analysis: transformedAnalysis,
+              analysisError: null
+            }
+          } as any);
+        } else {
+          const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+          throw new Error(errorData.error || 'Failed to analyze content');
+        }
+      } catch (error: any) {
+        console.error('[ContentElement] Analysis error:', error);
+        setIsAnalyzing(false);
+        setAnalysisError(error.message || 'Failed to analyze content');
+        
+        onUpdate(element.id, {
+          ...element,
+          metadata: {
+            ...metadata,
+            isAnalyzing: false,
+            analysisError: error.message || 'Failed to analyze content'
+          }
+        } as any);
+      }
+    } else {
+      console.warn('[ContentElement] No scrapeId available for analysis');
+      setAnalysisError('Content must be scraped before analysis');
+    }
   };
 
   const handleReanalysis = () => {
@@ -130,6 +194,23 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
     if (metadata) {
       setIsAnalyzing(!!metadata.isAnalyzing);
       setAnalysisError(metadata.analysisError || null);
+      
+      // Debug YouTube analysis data
+      if (element.platform === 'youtube') {
+        console.log('[ContentElement] YouTube element state:', {
+          elementId: element.id,
+          hasMetadata: !!metadata,
+          hasAnalysis: !!metadata.analysis,
+          isAnalyzed: metadata.isAnalyzed,
+          analysisKeys: Object.keys(metadata.analysis || {}),
+          analysis: metadata.analysis,
+          hookAnalysis: metadata.analysis?.hook_analysis,
+          bodyAnalysis: metadata.analysis?.body_analysis,
+          ctaAnalysis: metadata.analysis?.cta_analysis,
+          height: element.height,
+          width: element.width
+        });
+      }
     }
   }, [(element as any).metadata]);
 
@@ -219,7 +300,7 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
         onResizeStart={onResizeStart}
         onResizeEnd={onResizeEnd}
         showHandle={selected || isHovered}
-        className={`bg-gray-800 rounded-lg shadow-lg ${
+        className={`bg-gray-800 rounded-lg shadow-lg canvas-element ${
           selected ? 'ring-2 ring-[#c96442] shadow-xl' : ''
         } ${connecting !== null && String(connecting) === String(element.id) ? 'ring-2 ring-[#c96442]' : ''}`}
       >
@@ -301,10 +382,12 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
           
           
           {/* Thumbnail */}
-          <div className={`bg-gray-900 rounded-lg overflow-hidden mb-3 relative transition-all duration-200 ${
+          <div className={`bg-gray-900 rounded-lg overflow-hidden mb-3 relative transition-all duration-200 flex-shrink-0 ${
             isHovered ? 'ring-2 ring-blue-500/50 cursor-pointer' : ''
           }`}
-          style={{ height: `${Math.max(element.height - 100, 80)}px` }}>
+          style={{ 
+            height: `${Math.max(element.height - 100, 80)}px`
+          }}>
             {(element as any).metadata?.scrapingError ? (
               <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center">
                 <AlertCircle className="w-8 h-8 text-red-500 mb-2" />
@@ -342,9 +425,18 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
               </div>
             ) : (
               <img 
-                src={getProxiedImageUrl(
-                  (element as any).metadata?.processedData?.thumbnailUrl || element.thumbnail
-                )} 
+                src={(() => {
+                  const thumbnailUrl = (element as any).metadata?.processedData?.thumbnailUrl || element.thumbnail;
+                  if (element.platform === 'youtube') {
+                    console.log('[ContentElement] YouTube thumbnail:', {
+                      elementId: element.id,
+                      metadataThumbnail: (element as any).metadata?.processedData?.thumbnailUrl,
+                      elementThumbnail: element.thumbnail,
+                      finalUrl: thumbnailUrl
+                    });
+                  }
+                  return getProxiedImageUrl(thumbnailUrl);
+                })()}
                 alt={(element as any).metadata?.processedData?.title || element.title}
                 className="w-full h-full object-cover"
                 style={{ objectFit: 'cover' }}
@@ -377,9 +469,10 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
           </div>
           
           {/* Title */}
-          <h3 className="text-white text-sm font-medium line-clamp-2">
+          <h3 className="text-white text-sm font-medium line-clamp-2 mb-2">
             {(element as any).metadata?.processedData?.title || element.title}
           </h3>
+          
         </div>
       </SimpleResize>
 

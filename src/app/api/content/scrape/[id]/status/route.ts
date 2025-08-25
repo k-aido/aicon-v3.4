@@ -5,6 +5,7 @@ import ApifyService from '@/services/apifyService';
 import TranscriptionService from '@/services/transcriptionService';
 import YouTubeTranscriptionService from '@/services/youtubeTranscriptionService';
 import YouTubeCaptionService from '@/services/youtubeCaptionService';
+import YouTubePostProcessor from '@/services/youtubePostProcessor';
 
 // Credit cost for scraping and analysis combined
 const SCRAPE_AND_ANALYSIS_CREDITS = 50;
@@ -73,7 +74,13 @@ export async function GET(
     }
 
     // Get user authentication
-    const userId = await getUserIdFromCookies();
+    let userId = await getUserIdFromCookies();
+    
+    // In demo mode, use the demo user ID
+    if (!userId && process.env.NEXT_PUBLIC_DEMO_MODE === 'true') {
+      userId = process.env.NEXT_PUBLIC_DEMO_USER_ID || '550e8400-e29b-41d4-a716-446655440002';
+    }
+    
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -108,6 +115,38 @@ export async function GET(
       });
     }
 
+    // Handle YouTube API scraping that might be stuck
+    if (scrapeRecord.status === 'processing' && scrapeRecord.scraping_method === 'youtube_api' && !scrapeRecord.apify_run_id) {
+      // Check if it's been processing for too long (more than 30 seconds for YouTube API)
+      const processingTime = Date.now() - new Date(scrapeRecord.updated_at).getTime();
+      if (processingTime > 30000) {
+        // Mark as failed if stuck
+        await supabase
+          .from('content_scrapes')
+          .update({
+            status: 'failed',
+            error_message: 'YouTube API scraping timed out',
+            updated_at: new Date().toISOString(),
+            completed_at: new Date().toISOString()
+          })
+          .eq('id', scrapeId);
+          
+        return NextResponse.json({
+          scrapeId: scrapeRecord.id,
+          status: 'failed',
+          error: 'YouTube API scraping timed out'
+        });
+      }
+      
+      // Still processing, return current status
+      return NextResponse.json({
+        scrapeId: scrapeRecord.id,
+        status: 'processing',
+        message: 'YouTube API scraping in progress...',
+        method: 'youtube_api'
+      });
+    }
+
     // If still processing, check Apify status
     if (scrapeRecord.status === 'processing' && scrapeRecord.apify_run_id) {
       try {
@@ -119,7 +158,7 @@ export async function GET(
         // If Apify run completed successfully
         if (runStatus.status === 'SUCCEEDED') {
           // Get the scraped results
-          const scrapedContent = await apifyService.getRunResults(scrapeRecord.apify_run_id);
+          let scrapedContent = await apifyService.getRunResults(scrapeRecord.apify_run_id);
 
           if (scrapedContent) {
             // Log what we got from the scraper
@@ -145,56 +184,49 @@ export async function GET(
               platform: scrapedContent.platform
             });
             
-            // Handle YouTube separately - only if we don't already have a transcript
+            // Handle YouTube content with the post-processor
             if (scrapedContent.platform === 'youtube' && !transcriptionText) {
-              console.log(`[Status API] YouTube content detected, attempting transcription for ${scrapeId}`);
+              console.log(`[Status API] YouTube content detected, using post-processor for ${scrapeId}`);
+              console.log(`[Status API] Video type: ${scrapedContent.videoType || 'unknown'}, Duration: ${scrapedContent.duration || 'unknown'} seconds`);
               
-              const videoId = scrapedContent.rawData?.id || scrapedContent.rawData?.videoId;
-              
-              // Try multiple approaches for YouTube transcription
-              
-              // Approach 1: Try to get captions from scraped data
-              if (!transcriptionText && scrapedContent.rawData?.captions) {
-                console.log(`[Status API] Attempting to extract YouTube captions from scraped data`);
-                try {
-                  transcriptionText = await YouTubeCaptionService.extractCaptions(scrapedContent.rawData);
-                  if (transcriptionText) {
-                    console.log(`[Status API] YouTube captions extracted, length: ${transcriptionText.length} characters`);
-                  }
-                } catch (error) {
-                  console.error(`[Status API] Caption extraction error:`, error);
-                }
-              }
-              
-              // Approach 2: Try direct transcript fetch if we have video ID
-              if (!transcriptionText && videoId) {
-                console.log(`[Status API] Attempting direct YouTube transcript fetch for video: ${videoId}`);
-                try {
-                  transcriptionText = await YouTubeCaptionService.fetchTranscriptDirect(videoId);
-                  if (transcriptionText) {
-                    console.log(`[Status API] YouTube transcript fetched directly, length: ${transcriptionText.length} characters`);
-                  }
-                } catch (error) {
-                  console.error(`[Status API] Direct transcript fetch error:`, error);
-                }
-              }
-              
-              // Approach 3: Try audio download and transcription (may fail due to ytdl-core issues)
-              if (!transcriptionText && scrapedContent.url) {
-                console.log(`[Status API] Attempting YouTube audio download and transcription`);
-                try {
-                  const youtubeService = new YouTubeTranscriptionService();
-                  transcriptionText = await youtubeService.transcribeYouTubeVideo(
-                    scrapedContent.url,
-                    videoId
-                  );
+              try {
+                const postProcessor = new YouTubePostProcessor();
+                
+                // Check if this is a long-form video
+                if (scrapedContent.videoType === 'long-form') {
+                  console.log(`[Status API] Processing as long-form video`);
+                  const processedContent = await postProcessor.processLongFormVideo(scrapedContent, {
+                    preferCaptions: true,
+                    maxChunkSize: 3000
+                  });
+                  
+                  // Update scraped content with processed data
+                  scrapedContent = processedContent;
+                  transcriptionText = processedContent.transcript || null;
                   
                   if (transcriptionText) {
-                    console.log(`[Status API] YouTube audio transcription successful, length: ${transcriptionText.length} characters`);
+                    console.log(`[Status API] Long-form YouTube transcript extracted, length: ${transcriptionText.length} characters`);
+                    console.log(`[Status API] Transcript chunked: ${processedContent.rawData?.isChunked || false}`);
+                    console.log(`[Status API] Number of chunks: ${processedContent.rawData?.transcriptChunks?.length || 0}`);
                   }
-                } catch (error) {
-                  console.error(`[Status API] YouTube audio transcription error:`, error);
+                } else {
+                  // Regular processing for short/regular videos
+                  const processedContent = await postProcessor.processYouTubeContent(scrapedContent, {
+                    preferCaptions: true,
+                    transcribeIfNoCaptions: true,
+                    maxTranscriptionDuration: 600 // 10 minutes
+                  });
+                  
+                  scrapedContent = processedContent;
+                  transcriptionText = processedContent.transcript || null;
+                  
+                  if (transcriptionText) {
+                    console.log(`[Status API] YouTube transcript extracted via post-processor, length: ${transcriptionText.length} characters`);
+                    console.log(`[Status API] Transcript source: ${processedContent.rawData?.transcriptSource || 'unknown'}`);
+                  }
                 }
+              } catch (error) {
+                console.error(`[Status API] YouTube post-processing error:`, error);
               }
               
               if (!transcriptionText) {
@@ -202,7 +234,7 @@ export async function GET(
                 // Log what data we have for debugging
                 console.log(`[Status API] YouTube data available:`, {
                   hasUrl: !!scrapedContent.url,
-                  hasVideoId: !!videoId,
+                  hasVideoId: !!scrapedContent.rawData?.videoId,
                   hasCaptions: !!scrapedContent.rawData?.captions,
                   captionTracks: scrapedContent.rawData?.captions?.captionTracks?.length || 0
                 });
@@ -387,7 +419,8 @@ export async function GET(
               hashtags: scrapedContent.hashtags,
               mentions: scrapedContent.mentions,
               topComments: scrapedContent.comments?.slice(0, 10),
-              transcriptionSource: scrapedContent.transcript ? 'scraper' : (transcriptionText ? 'captions' : null)
+              transcriptionSource: scrapedContent.transcript ? 'scraper' : (transcriptionText ? 'captions' : null),
+              transcriptDeferred: scrapedContent.rawData?.transcriptDeferred || false
             };
             
             // Log transcript info

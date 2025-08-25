@@ -174,8 +174,8 @@ export function createTextElement(params: {
     type: 'text',
     position: { x: params.x, y: params.y },
     dimensions: { 
-      width: params.width || 400, 
-      height: params.height || 300 
+      width: params.width || 320, 
+      height: params.height || 240 
     },
     title: params.title || 'Text Info',
     content: params.content || '',

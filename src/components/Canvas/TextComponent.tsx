@@ -129,7 +129,7 @@ export const TextComponent: React.FC<TextComponentProps> = React.memo(({
       ref={setElementRef}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      className="absolute pointer-events-auto"
+      className="absolute canvas-element pointer-events-auto"
       style={{
         transform: `translate(${localPosition.x}px, ${localPosition.y}px)`,
         willChange: isDragging ? 'transform' : 'auto'
@@ -157,7 +157,7 @@ export const TextComponent: React.FC<TextComponentProps> = React.memo(({
         <div className="h-full flex flex-col">
           {/* Header - Primary drag handle */}
           <div 
-            className={`text-white px-4 py-3 rounded-t-lg flex items-center gap-2 relative ${
+            className={`text-white px-3 py-2 rounded-t-lg flex items-center gap-2 relative ${
               isDragging ? 'cursor-grabbing' : 'cursor-grab'
             } select-none`}
             style={{ backgroundColor: '#202a37' }}
@@ -192,12 +192,12 @@ export const TextComponent: React.FC<TextComponentProps> = React.memo(({
           </div>
 
           {/* Content - Not draggable */}
-          <div className={`flex-1 p-4 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-b-lg`} onMouseDown={(e) => e.stopPropagation()}>
+          <div className={`flex-1 p-6 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-b-lg`} onMouseDown={(e) => e.stopPropagation()}>
             <textarea
               value={localContent}
               onChange={handleContentChange}
               placeholder="Enter your text here..."
-              className={`w-full h-full resize-none outline-none ${isDarkMode ? 'bg-gray-800 text-white placeholder-gray-500' : 'bg-white text-gray-900 placeholder-gray-400'} pointer-events-auto`}
+              className={`w-full h-full resize-none outline-none text-sm leading-relaxed ${isDarkMode ? 'bg-gray-800 text-white placeholder-gray-500' : 'bg-white text-gray-900 placeholder-gray-400'} pointer-events-auto`}
               onClick={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
               onFocus={(e) => e.stopPropagation()}

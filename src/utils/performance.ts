@@ -1,152 +1,91 @@
 /**
- * Performance optimization utilities
+ * Performance utility functions for canvas optimization
  */
 
 /**
- * Throttle function execution to limit calls within a timeframe
+ * Throttle function execution to improve performance
+ * @param func Function to throttle
+ * @param delay Delay in milliseconds
  */
 export function throttle<T extends (...args: any[]) => any>(
   func: T,
-  limit: number
+  delay: number
 ): (...args: Parameters<T>) => void {
-  let inThrottle = false;
-  let lastArgs: Parameters<T> | null = null;
-  let lastResult: ReturnType<T> | undefined;
-  
-  return function executedFunction(...args: Parameters<T>) {
-    lastArgs = args;
-    
-    if (!inThrottle) {
-      lastResult = func(...lastArgs);
-      inThrottle = true;
-      
-      setTimeout(() => {
-        inThrottle = false;
-        if (lastArgs) {
-          lastResult = func(...lastArgs);
-        }
-      }, limit);
-    }
-    
-    return lastResult;
-  };
-}
+  let lastCall = 0;
+  let timeout: NodeJS.Timeout | null = null;
 
-/**
- * RequestAnimationFrame-based throttle for smooth animations
- */
-export function rafThrottle<T extends (...args: any[]) => any>(
-  func: T
-): (...args: Parameters<T>) => void {
-  let rafId: number | null = null;
-  let lastArgs: Parameters<T> | null = null;
-  
-  return function executedFunction(...args: Parameters<T>) {
-    lastArgs = args;
+  return (...args: Parameters<T>) => {
+    const now = Date.now();
     
-    if (rafId === null) {
-      rafId = requestAnimationFrame(() => {
-        if (lastArgs) {
-          func(...lastArgs);
-        }
-        rafId = null;
-      });
+    if (now - lastCall >= delay) {
+      lastCall = now;
+      func(...args);
+    } else if (!timeout) {
+      // Schedule a trailing call
+      timeout = setTimeout(() => {
+        lastCall = Date.now();
+        func(...args);
+        timeout = null;
+      }, delay - (now - lastCall));
     }
   };
 }
 
 /**
- * Measure performance of a function
+ * Debounce function execution
+ * @param func Function to debounce
+ * @param delay Delay in milliseconds
  */
-export function measurePerformance<T extends (...args: any[]) => any>(
+export function debounce<T extends (...args: any[]) => any>(
   func: T,
-  label: string
-): T {
-  return ((...args: Parameters<T>) => {
-    const start = performance.now();
-    const result = func(...args);
-    const end = performance.now();
-    
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`[Performance] ${label}: ${(end - start).toFixed(2)}ms`);
-    }
-    
-    return result;
-  }) as T;
-}
+  delay: number
+): (...args: Parameters<T>) => void {
+  let timeout: NodeJS.Timeout;
 
-/**
- * Create a memoized selector with shallow comparison
- */
-export function createSelector<T, R>(
-  selector: (state: T) => R,
-  equalityFn?: (a: R, b: R) => boolean
-): (state: T) => R {
-  let lastState: T | undefined;
-  let lastResult: R | undefined;
-  
-  return (state: T) => {
-    if (state === lastState) {
-      return lastResult!;
-    }
-    
-    const result = selector(state);
-    
-    if (lastResult !== undefined && equalityFn) {
-      if (equalityFn(result, lastResult)) {
-        return lastResult;
-      }
-    }
-    
-    lastState = state;
-    lastResult = result;
-    return result;
+  return (...args: Parameters<T>) => {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func(...args), delay);
   };
 }
 
 /**
- * Batch multiple state updates for better performance
+ * Check if we should use reduced motion based on user preferences
  */
-export class UpdateBatcher<T> {
-  private updates: T[] = [];
-  private timeoutId: NodeJS.Timeout | null = null;
+export function prefersReducedMotion(): boolean {
+  if (typeof window === 'undefined') return false;
   
-  constructor(
-    private callback: (updates: T[]) => void,
-    private delay: number = 0
-  ) {}
-  
-  add(update: T) {
-    this.updates.push(update);
-    
-    if (this.timeoutId) {
-      clearTimeout(this.timeoutId);
-    }
-    
-    if (this.delay === 0) {
-      requestAnimationFrame(() => this.flush());
-    } else {
-      this.timeoutId = setTimeout(() => this.flush(), this.delay);
-    }
+  const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+  return mediaQuery.matches;
+}
+
+/**
+ * Get optimal render settings based on device capabilities
+ */
+export function getOptimalRenderSettings() {
+  if (typeof window === 'undefined') {
+    return {
+      useWebGL: false,
+      maxFPS: 60,
+      reducedMotion: false
+    };
   }
-  
-  flush() {
-    if (this.updates.length > 0) {
-      this.callback(this.updates);
-      this.updates = [];
-    }
-    
-    if (this.timeoutId) {
-      clearTimeout(this.timeoutId);
-      this.timeoutId = null;
-    }
-  }
-  
-  clear() {
-    this.updates = [];
-    if (this.timeoutId) {
-      clearTimeout(this.timeoutId);
-      this.timeoutId = null;
-    }
-  }
+
+  // Check for reduced motion preference
+  const reducedMotion = prefersReducedMotion();
+
+  // Check WebGL support
+  const canvas = document.createElement('canvas');
+  const useWebGL = !!(
+    canvas.getContext('webgl') || 
+    canvas.getContext('experimental-webgl')
+  );
+
+  // Determine max FPS based on device
+  const maxFPS = reducedMotion ? 30 : 60;
+
+  return {
+    useWebGL,
+    maxFPS,
+    reducedMotion
+  };
 }

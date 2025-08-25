@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Instagram, Youtube, Video, Heart, MessageCircle, Eye, Play, ExternalLink, MoreVertical, Loader, CheckCircle, AlertCircle } from 'lucide-react';
+import { TikTokDarkIcon } from '../icons/PngIcons';
 import type { CreatorContentElementType } from '../../../lib/canvas/creatorContentHelpers';
 import { formatMetric, getTimeAgo } from '../../../lib/canvas/creatorContentHelpers';
 // import { ConnectionPoint } from './ConnectionPoint'; // TODO: Implement connections
@@ -26,7 +27,7 @@ const PlatformIcon: React.FC<{ platform: string }> = ({ platform }) => {
     case 'instagram':
       return <Instagram className="w-4 h-4 text-pink-500" />;
     case 'tiktok':
-      return <Video className="w-4 h-4 text-white" />;
+      return <TikTokDarkIcon className="w-4 h-4" size={16} />;
     default:
       return null;
   }

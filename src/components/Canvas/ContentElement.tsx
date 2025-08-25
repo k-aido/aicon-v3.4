@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Youtube, Instagram, Video, ExternalLink, X, Loader2, AlertCircle, Maximize2 } from 'lucide-react';
+import { TikTokDarkIcon } from '../icons/PngIcons';
 import { ContentElement as ContentElementType, Connection, Platform } from '@/types';
 import { ConnectionPoint } from './ConnectionPoint';
 import { useElementDrag } from '@/hooks/useElementDrag';
@@ -30,7 +31,7 @@ const PlatformIcon: React.FC<{ platform: string }> = ({ platform }) => {
     case 'instagram':
       return <Instagram className="w-5 h-5 text-pink-500" />;
     case 'tiktok':
-      return <Video className="w-5 h-5 text-white" />;
+      return <TikTokDarkIcon className="w-5 h-5" size={20} />;
     default:
       return null;
   }
@@ -259,33 +260,37 @@ export const ContentElement: React.FC<ContentElementProps> = React.memo(({
                 <ExternalLink className="w-4 h-4 text-gray-400" />
               </button>
               <button 
-                onClick={async (e) => {
+                onClick={(e) => {
                   e.stopPropagation();
                   console.log('🗑️ [ContentElement] Delete button clicked:', { elementId: element.id });
                   
-                  // Cleanup database if element has scraping data
+                  // Delete immediately for instant feedback
+                  onDelete(element.id);
+                  
+                  // Cleanup database in background if element has scraping data
                   const metadata = (element as any).metadata;
                   if (metadata?.scrapeId) {
-                    try {
-                      // Get project ID from URL
-                      const projectId = window.location.pathname.split('/canvas/')[1];
-                      
-                      console.log('[ContentElement] Cleaning up content data:', metadata.scrapeId);
-                      await fetch('/api/content/cleanup', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          scrapeId: metadata.scrapeId,
-                          projectId
-                        })
-                      });
-                    } catch (error) {
-                      console.error('[ContentElement] Failed to cleanup content:', error);
-                      // Continue with deletion even if cleanup fails
-                    }
+                    // Run cleanup asynchronously without blocking the UI
+                    (async () => {
+                      try {
+                        // Get project ID from URL
+                        const projectId = window.location.pathname.split('/canvas/')[1];
+                        
+                        console.log('[ContentElement] Cleaning up content data in background:', metadata.scrapeId);
+                        await fetch('/api/content/cleanup', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            scrapeId: metadata.scrapeId,
+                            projectId
+                          })
+                        });
+                      } catch (error) {
+                        console.error('[ContentElement] Failed to cleanup content:', error);
+                        // Cleanup failure doesn't affect the UI deletion
+                      }
+                    })();
                   }
-                  
-                  onDelete(element.id);
                 }}
                 className="p-1 hover:bg-gray-700 rounded transition-colors outline-none focus:outline-none"
               >

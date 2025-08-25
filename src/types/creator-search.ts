@@ -1,6 +1,6 @@
 // Creator search types
 export interface CreatorSearchRequest {
-  platform: 'instagram';
+  platform: 'instagram' | 'tiktok';
   searchQuery: string;
   filter: 'top_likes' | 'top_comments' | 'top_views' | 'most_recent';
   contentType?: 'all' | 'reels' | 'posts';
@@ -153,4 +153,75 @@ export interface ApifyInstagramProfile {
   followsCount?: number;
   postsCount?: number;
   posts: ApifyInstagramPost[];
+}
+
+export interface ApifyTikTokVideo {
+  id: string;
+  text?: string;
+  createTime?: number;
+  videoUrl?: string;
+  authorMeta?: {
+    id: string;
+    name?: string;
+    nickName?: string;
+    verified?: boolean;
+    signature?: string;
+    avatar?: string;
+  };
+  musicMeta?: {
+    musicId?: string;
+    musicName?: string;
+    musicAuthor?: string;
+    musicOriginal?: boolean;
+  };
+  covers?: {
+    default?: string;
+    origin?: string;
+    dynamic?: string;
+  };
+  webVideoUrl?: string;
+  videoUrl?: string;
+  videoUrlNoWaterMark?: string;
+  videoApiUrlNoWaterMark?: string;
+  videoMeta?: {
+    width?: number;
+    height?: number;
+    duration?: number;
+  };
+  diggCount?: number;
+  shareCount?: number;
+  playCount?: number;
+  commentCount?: number;
+  collectCount?: number;
+  hashtags?: Array<{
+    id?: string;
+    name?: string;
+    title?: string;
+  }>;
+}
+
+export interface ApifyTikTokProfile {
+  user?: {
+    id: string;
+    uniqueId: string;
+    nickname?: string;
+    avatarLarger?: string;
+    avatarMedium?: string;
+    avatarThumb?: string;
+    signature?: string;
+    verified?: boolean;
+    bioLink?: {
+      link?: string;
+      risk?: number;
+    };
+  };
+  stats?: {
+    followingCount?: number;
+    followerCount?: number;
+    heartCount?: number;
+    videoCount?: number;
+    diggCount?: number;
+    heart?: number;
+  };
+  videos?: ApifyTikTokVideo[];
 }

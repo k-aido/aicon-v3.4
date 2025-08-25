@@ -6,12 +6,15 @@ export function getProxiedImageUrl(url: string | undefined): string {
     return 'https://via.placeholder.com/300x200?text=No+Image';
   }
 
-  // Check if the URL needs proxying (Instagram CDN, Facebook CDN, etc.)
+  // Check if the URL needs proxying (Instagram CDN, Facebook CDN, TikTok CDN, etc.)
   const needsProxy = 
     url.includes('cdninstagram.com') ||
     url.includes('fbcdn.net') ||
     url.includes('scontent') ||
-    url.includes('instagram.com');
+    url.includes('instagram.com') ||
+    url.includes('tiktokcdn.com') ||
+    url.includes('tiktokcdn-us.com') ||
+    url.includes('tiktok.com');
 
   if (needsProxy) {
     // Use our proxy endpoint

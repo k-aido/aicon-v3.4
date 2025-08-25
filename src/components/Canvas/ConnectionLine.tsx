@@ -99,11 +99,12 @@ export const ConnectionLine: React.FC<ConnectionLineProps> = React.memo(({
       {/* Animated connection line */}
       <path
         d={pathData.path}
-        stroke="#1e8bff"
+        stroke="#E1622B"
         strokeWidth="2"
         fill="none"
         className="connection-line"
-        strokeOpacity="0.6"
+        strokeOpacity="0.8"
+        style={{ isolation: 'isolate' }}
       />
       
       {/* Flowing dots */}

@@ -725,14 +725,17 @@ const CanvasComponent: React.FC<CanvasProps> = ({
         }}
       />
       
-      {/* Alignment Guides - rendered before elements for proper layering */}
-      <AlignmentGuides guides={activeGuides} viewport={viewport} />
+      {/* Alignment Guides - disabled but keeping the container for future use */}
+      {/* <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 2 }}>
+        <AlignmentGuides guides={activeGuides} viewport={viewport} />
+      </div> */}
       
       {/* Canvas Elements */}
       <div 
         style={{
           transform: `translate(${isFinite(viewport.x) ? viewport.x : 0}px, ${isFinite(viewport.y) ? viewport.y : 0}px) scale(${Math.max(0.1, viewport.zoom)})`,
-          transformOrigin: '0 0'
+          transformOrigin: '0 0',
+          zIndex: 10 // Ensure elements and connections are above guides
         }}
         className="absolute inset-0 pointer-events-none"
       >

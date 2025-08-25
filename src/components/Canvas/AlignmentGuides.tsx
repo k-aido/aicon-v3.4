@@ -18,20 +18,26 @@ interface AlignmentGuidesProps {
 }
 
 export const AlignmentGuides: React.FC<AlignmentGuidesProps> = ({ guides, viewport }) => {
+  // Alignment guides disabled - return null to hide visual guides
+  // The snap-to-grid functionality still works in the background
+  return null;
+  
+  /* Original implementation commented out
   const { isDarkMode } = useDarkMode();
   
-  // Guide color based on theme
-  const guideColor = isDarkMode ? '#60a5fa' : '#3b82f6'; // Blue color for guides
+  // Guide color based on theme - using a subtle gray color
+  const guideColor = isDarkMode ? '#6b7280' : '#9ca3af'; // Gray color for subtle guides
   
   if (guides.length === 0) return null;
 
   return (
     <svg 
-      className="absolute inset-0 pointer-events-none z-50" 
+      className="absolute inset-0 pointer-events-none" 
       style={{ 
         width: '100%', 
         height: '100%', 
-        overflow: 'visible' 
+        overflow: 'visible',
+        zIndex: 1 // Behind connections
       }}
     >
       {guides.map((guide, index) => {
@@ -44,9 +50,9 @@ export const AlignmentGuides: React.FC<AlignmentGuidesProps> = ({ guides, viewpo
               x2={guide.position * viewport.zoom + viewport.x}
               y2={guide.end * viewport.zoom + viewport.y}
               stroke={guideColor}
-              strokeWidth="2"
-              strokeDasharray="5,5"
-              opacity="0.8"
+              strokeWidth="1"
+              strokeDasharray="2,4"
+              opacity="0.3"
             />
           );
         } else {
@@ -58,9 +64,9 @@ export const AlignmentGuides: React.FC<AlignmentGuidesProps> = ({ guides, viewpo
               x2={guide.end * viewport.zoom + viewport.x}
               y2={guide.position * viewport.zoom + viewport.y}
               stroke={guideColor}
-              strokeWidth="2"
-              strokeDasharray="5,5"
-              opacity="0.8"
+              strokeWidth="1"
+              strokeDasharray="2,4"
+              opacity="0.3"
             />
           );
         }

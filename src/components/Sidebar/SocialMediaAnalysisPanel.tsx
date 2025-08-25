@@ -12,6 +12,15 @@ import { getProxiedImageUrl, getPlatformPlaceholder } from '@/utils/imageProxy';
 interface ExtendedContentAnalysis {
   id?: string;
   platform?: string;
+  // New fields for transcript segments
+  hook_transcript?: string;
+  body_transcript?: string;
+  cta_transcript?: string;
+  // Existing analysis fields
+  hook_analysis?: string | { primary_hook?: string; transcript_segment?: string };
+  body_analysis?: string | { transcript_segment?: string };
+  cta_analysis?: string | { primary_cta?: string; transcript_segment?: string };
+  transcript?: string;
   [key: string]: any;
 }
 
@@ -221,8 +230,8 @@ export const SocialMediaAnalysisPanel: React.FC<SocialMediaAnalysisPanelProps> =
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto">
           <div className="p-4 space-y-4">
-            {/* Debug Info */}
-            <div className="p-2 bg-yellow-900/20 border border-yellow-700/50 rounded text-xs">
+            {/* Debug Info - Hidden */}
+            {/* <div className="p-2 bg-yellow-900/20 border border-yellow-700/50 rounded text-xs">
               <p className="font-mono text-yellow-400">
                 <span className="font-semibold">Debug ID:</span> {element.id}
               </p>
@@ -239,7 +248,7 @@ export const SocialMediaAnalysisPanel: React.FC<SocialMediaAnalysisPanelProps> =
               <p className="font-mono text-yellow-400">
                 <span className="font-semibold">Has Analysis:</span> {analysis ? 'Yes' : 'No'}
               </p>
-            </div>
+            </div> */}
           
             {/* Thumbnail and Title */}
             <div>
@@ -348,34 +357,38 @@ export const SocialMediaAnalysisPanel: React.FC<SocialMediaAnalysisPanelProps> =
           {/* AI Analysis Results */}
           {analysis && !isProcessing && !isFailed && (
             <>
-              {/* Hook Analysis */}
-              {analysis.hook_analysis && (
+              {/* Hook Section */}
+              {(analysis.hook_transcript || analysis.hook_analysis) && (
                 <div className="border-l-4 border-green-500 bg-gray-800/50 rounded-r-lg p-4">
                   <div className="flex items-center gap-2 mb-3">
                     <Target className="w-5 h-5 text-red-400" />
                     <h4 className="text-sm font-semibold uppercase tracking-wider">Hook</h4>
                   </div>
                   <p className="text-xs text-gray-300 mb-3 whitespace-pre-wrap">
-                    {stripMarkdown(typeof analysis.hook_analysis === 'string' ? analysis.hook_analysis : analysis.hook_analysis.primary_hook || 'No hook analysis available')}
+                    {analysis.hook_transcript || 
+                     (typeof analysis.hook_analysis === 'object' && analysis.hook_analysis?.transcript_segment) ||
+                     stripMarkdown(typeof analysis.hook_analysis === 'string' ? analysis.hook_analysis : analysis.hook_analysis?.primary_hook || 'No hook identified')}
                   </p>
                 </div>
               )}
 
-              {/* Body Analysis */}
-              {analysis.body_analysis && (
+              {/* Body Section */}
+              {(analysis.body_transcript || analysis.body_analysis) && (
                 <div className="border-l-4 border-yellow-500 bg-gray-800/50 rounded-r-lg p-4">
                   <div className="flex items-center gap-2 mb-3">
                     <Folder className="w-5 h-5 text-yellow-400" />
                     <h4 className="text-sm font-semibold uppercase tracking-wider">Body</h4>
                   </div>
                   <p className="text-xs text-gray-300 mb-3 whitespace-pre-wrap">
-                    {stripMarkdown(typeof analysis.body_analysis === 'string' ? analysis.body_analysis : 'No body analysis available')}
+                    {analysis.body_transcript || 
+                     (typeof analysis.body_analysis === 'object' && analysis.body_analysis?.transcript_segment) ||
+                     stripMarkdown(typeof analysis.body_analysis === 'string' ? analysis.body_analysis : 'No body content identified')}
                   </p>
                 </div>
               )}
 
-              {/* Call to Action */}
-              {analysis.cta_analysis && (
+              {/* Call to Action Section */}
+              {(analysis.cta_transcript || analysis.cta_analysis) && (
                 <div className="border-l-4 border-red-500 bg-gray-800/50 rounded-r-lg p-4">
                   <div className="flex items-center gap-2 mb-3">
                     <Flag className="w-5 h-5 text-red-400" />
@@ -384,7 +397,9 @@ export const SocialMediaAnalysisPanel: React.FC<SocialMediaAnalysisPanelProps> =
                     </h4>
                   </div>
                   <p className="text-xs text-gray-300 mb-3 whitespace-pre-wrap">
-                    {stripMarkdown(typeof analysis.cta_analysis === 'string' ? analysis.cta_analysis : analysis.cta_analysis.primary_cta || 'No CTA analysis available')}
+                    {analysis.cta_transcript || 
+                     (typeof analysis.cta_analysis === 'object' && analysis.cta_analysis?.transcript_segment) ||
+                     stripMarkdown(typeof analysis.cta_analysis === 'string' ? analysis.cta_analysis : analysis.cta_analysis?.primary_cta || 'No call to action identified')}
                   </p>
                 </div>
               )}

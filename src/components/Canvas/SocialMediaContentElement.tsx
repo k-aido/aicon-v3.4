@@ -1,6 +1,7 @@
 // @ts-nocheck
 import React, { useState, useEffect } from 'react';
 import { Instagram, Youtube, Music2, Loader2, AlertCircle, RefreshCw, CheckCircle, Clock, Globe } from 'lucide-react';
+import { TikTokDarkIcon } from '../icons/PngIcons';
 import { useCanvasStore } from '@/store/canvasStore';
 import { supabase } from '@/lib/supabase/client';
 import type { SocialMediaJob } from '@/types/social-media';
@@ -38,7 +39,7 @@ interface SocialMediaContentElementProps {
 const platformIcons = {
   youtube: Youtube,
   instagram: Instagram,
-  tiktok: Music2,
+  tiktok: TikTokDarkIcon,
 };
 
 const platformColors = {

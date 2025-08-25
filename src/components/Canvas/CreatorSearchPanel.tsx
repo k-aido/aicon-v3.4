@@ -31,8 +31,8 @@ const FILTERS = [
 
 const PLATFORMS = [
   { id: 'instagram', name: 'Instagram', active: true },
-  { id: 'youtube', name: 'YouTube', active: false, comingSoon: true },
-  { id: 'tiktok', name: 'TikTok', active: false, comingSoon: true }
+  { id: 'tiktok', name: 'TikTok', active: true },
+  { id: 'youtube', name: 'YouTube', active: false, comingSoon: true }
 ];
 
 export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
@@ -144,7 +144,7 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
 
     try {
       const searchRequest: CreatorSearchRequest = {
-        platform: 'instagram',
+        platform: selectedPlatform as 'instagram' | 'tiktok',
         searchQuery: searchInput.trim(),
         filter: selectedFilter,
         contentType: 'reels', // Always search for reels
@@ -269,7 +269,10 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
     return count.toString();
   };
 
-  const isSearchDisabled = !searchInput.trim() || selectedPlatform !== 'instagram' || searchState.status === 'searching';
+  const isSearchDisabled = !searchInput.trim() || 
+    !selectedPlatform || 
+    !PLATFORMS.find(p => p.id === selectedPlatform)?.active || 
+    searchState.status === 'searching';
 
   // Render skeleton cards during loading
   const renderSkeletonCards = () => (
@@ -355,20 +358,32 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
 
             {/* Search Input */}
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-300 mb-2">Instagram Handle or URL</label>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                {selectedPlatform === 'instagram' 
+                  ? 'Instagram Handle or URL' 
+                  : selectedPlatform === 'tiktok'
+                  ? 'TikTok Handle or URL'
+                  : 'Handle or URL'}
+              </label>
               <div className="relative">
                 <input
                   type="text"
                   value={searchInput}
                   onChange={(e) => setSearchInput(e.target.value)}
-                  placeholder="@username or instagram.com/username"
-                  disabled={selectedPlatform !== 'instagram'}
+                  placeholder={
+                    selectedPlatform === 'instagram' 
+                      ? '@username or instagram.com/username'
+                      : selectedPlatform === 'tiktok'
+                      ? '@username or tiktok.com/@username'
+                      : 'Select a platform to search'
+                  }
+                  disabled={!selectedPlatform || !PLATFORMS.find(p => p.id === selectedPlatform)?.active}
                   className="w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
                   onKeyDown={(e) => e.key === 'Enter' && !isSearchDisabled && handleSearch()}
                 />
-                {selectedPlatform !== 'instagram' && (
+                {selectedPlatform && !PLATFORMS.find(p => p.id === selectedPlatform)?.active && (
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-gray-500 text-sm">Select Instagram to search</span>
+                    <span className="text-gray-500 text-sm">Platform coming soon</span>
                   </div>
                 )}
               </div>
@@ -509,7 +524,7 @@ export const CreatorSearchPanel: React.FC<CreatorSearchPanelProps> = ({
                       {/* Content Info */}
                       <div className="p-3">
                         <p className="text-white text-xs font-medium truncate mb-2">
-                          @{searchInput.replace('@', '').replace(/.*instagram\.com\//, '')}
+                          @{searchInput.replace('@', '').replace(/.*(?:instagram|tiktok)\.com\/@?/, '')}
                         </p>
                         
                         {/* Caption Preview */}
